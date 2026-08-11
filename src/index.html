@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXIOM-9 — Map Generator</title>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <img class="logo" src="{{LOGO}}" alt="Axiom-9 logo">
+      <h1 class="spaced-title">MAP GENERATOR</h1>
+    </div>
+    <div class="status">
+      <div><span class="dot"></span>SYSTEEM ACTIEF</div>
+      <div>SEED: <b id="statSeed">—</b></div>
+      <div>VELDEN GEDEKT: <b id="statCells">529</b> / 529</div>
+    </div>
+  </header>
+
+  <div class="tab-bar" role="tablist">
+    <button class="tab-btn active" id="tabBtnMap" data-tab="map" role="tab" aria-selected="true">Kaart maken</button>
+    <button class="tab-btn" id="tabBtnSimulate" data-tab="simulate" role="tab" aria-selected="false">Simulatie</button>
+    <button class="tab-btn" id="tabBtnWalk" data-tab="walk" role="tab" aria-selected="false">Stap voor stap</button>
+  </div>
+
+  <div id="tabMap" class="tab-panel" role="tabpanel">
+
+  <div class="grid-layout">
+
+    <div class="panel">
+      <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
+      <div class="board-outer">
+        <div id="board"></div>
+      </div>
+    </div>
+
+    <div class="right-col">
+
+    <div class="panel">
+      <h2>Geselecteerde tegel</h2>
+      <div class="controls">
+        <div class="selected-tile-box" id="selectedBox">Geen selectie — klik een tegel op het bord of in het register</div>
+        <div class="rotate-row">
+          <button id="btnRotL" disabled>↺ 90° links</button>
+          <button id="btnRotR" disabled>90° rechts ↻</button>
+        </div>
+        <p class="hint">Sleep een tegel over een andere om ze te verwisselen. Groen kader = mag, rood = mag niet.</p>
+        <p class="hint">Op een hoek mag geen enkele doorgang het bord af wijzen — daardoor passen tegel 1 en 16 alleen op A en P. De starttegel (#8) ligt altijd binnenin op G/H/I/L/M/N.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Besturing</h2>
+      <div class="controls">
+        <div class="field">
+          <label for="seedInput">Seed</label>
+          <div class="seed-row">
+            <input type="text" id="seedInput" placeholder="bijv. terra-nova-07" value="axiom-9">
+            <button id="btnDice" class="small" title="Willekeurige seed">🎲</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="btnShuffle" class="primary">Genereer indeling</button>
+          <button id="btnReset" class="ghost">Herstel origineel</button>
+        </div>
+
+        <div id="layoutCode" hidden></div>
+
+        <div class="field">
+          <label>Delen</label>
+          <button id="btnDownload" class="small">⇩ Download deze pagina (met wijzigingen)</button>
+          <p class="hint" style="margin-top:6px;">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
+        </div>
+
+        <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
+
+        <div class="legend" id="legend">
+          <div class="legend-row" data-key="walk"><span class="swatch" style="background:var(--walk)"></span>Loopbaar vakje</div>
+          <div class="legend-row" data-key="quest"><span class="swatch" style="background:var(--quest)"></span>Opdrachtvakje (2.x)</div>
+          <div class="legend-row" data-key="start"><span class="swatch" style="background:var(--start)"></span>Startpositie (3.x)</div>
+          <div class="legend-row" data-key="empty"><span class="swatch" style="background:var(--slot-empty)"></span>Onbenutte sjabloonplek</div>
+          <div class="legend-row" data-key="seamopen"><span class="swatch" style="background:var(--amber); box-shadow:0 0 6px var(--amber);"></span>Naad open — tegels sluiten aan</div>
+          <div class="legend-row" data-key="seambroken"><span class="swatch" style="background:var(--danger); box-shadow:0 0 6px var(--danger);"></span>Naad geblokkeerd — doorgang eindigt in een muur</div>
+          <div class="legend-row" data-key="letters"><span class="swatch" style="background:var(--amber);"></span>Positieletters (A–T)</div>
+        </div>
+      </div>
+    </div>
+
+    </div>
+
+  </div>
+
+  <div id="connStatus" style="display:none;"></div>
+
+  <div class="panel" style="margin-top:22px;">
+    <h2>Opdrachten <span class="count" id="countQuests"></span></h2>
+    <p class="hint" style="margin-bottom:10px;">Namen zijn puur thematisch (voor op de fysieke opdrachtkaarten) — de speelregel blijft dat een opdracht telt zodra je op het vakje staat. Hernoemen kan in <code>10-rules.js</code> (<code>QUEST_NAMES</code>).</p>
+    <div id="questRegister"></div>
+  </div>
+
+  <div class="register-grid">
+    <div class="panel palette-strip">
+      <h2>Kamers <span class="count" id="countRooms"></span></h2>
+      <div id="paletteRooms" class="palette-list"></div>
+    </div>
+    <div class="panel palette-strip">
+      <h2>Gangen <span class="count" id="countCorridors"></span></h2>
+      <div id="paletteCorridors" class="palette-list"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <div id="tabSimulate" class="tab-panel" role="tabpanel" hidden>
+    <div class="panel">
+      <h2>Simulatie</h2>
+      <div class="controls">
+        <div class="field">
+          <label for="simCount">Aantal potjes</label>
+          <div class="seed-row">
+            <input type="number" id="simCount" min="100" max="20000" step="100" value="2000">
+            <button id="btnSimulate" class="primary">Draai simulatie</button>
+          </div>
+        </div>
+        <p class="hint">Speelt potjes na met 2×D6 (exact aantal stappen, geen U-turn, bezette vakjes blokkeren) op de indeling van het tabblad "Kaart maken". Elke speler heeft een eigen geschud stapeltje opdrachten 1–9; wie als eerste 6 opdrachten voltooit wint.</p>
+        <div id="simStatus" class="reach-status"></div>
+        <div id="simResults"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tabWalk" class="tab-panel" role="tabpanel" hidden>
+    <div class="panel">
+      <h2>Stap voor stap — 1 speler</h2>
+      <div class="controls">
+        <div class="walk-controls">
+          <div class="field">
+            <label for="walkStart">Startpositie</label>
+            <select id="walkStart"></select>
+          </div>
+          <div class="field">
+            <label for="walkSpeed">Tempo — <span id="walkSpeedLabel">normaal</span></label>
+            <input type="range" id="walkSpeed" min="0" max="4" step="1" value="2">
+          </div>
+          <div class="btn-row">
+            <button id="btnWalkStart" class="primary">Simulatie starten</button>
+            <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
+          </div>
+        </div>
+        <p class="hint">Speelt één potje met één speler op de indeling van het tabblad "Kaart maken". Het tempo kun je tijdens het lopen aanpassen.</p>
+
+        <div class="walk-hud">
+          <div class="walk-dice" id="walkDice"></div>
+          <div class="walk-meta" id="walkMeta"></div>
+        </div>
+
+        <div id="walkStatus" class="reach-status"></div>
+
+        <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
+        <div class="board-outer">
+          <div id="walkBoard"></div>
+        </div>
+
+        <div class="walk-legend">
+          <span class="walk-key"><i class="walk-swatch pawn"></i>pion</span>
+          <span class="walk-key"><i class="walk-swatch target"></i>huidig doel</span>
+          <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt</span>
+          <span class="walk-key"><i class="walk-swatch done"></i>voltooide opdracht</span>
+          <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
+        </div>
+
+        <div id="walkLog" class="walk-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
+
+  <div id="editorOverlay" class="editor-overlay" hidden>
+    <div class="editor-panel">
+      <div class="editor-head">
+        <h2 id="editorTitle">Tegel bewerken</h2>
+        <button id="editorClose" class="small ghost">Sluiten ✕</button>
+      </div>
+      <div class="editor-body">
+        <div>
+          <div id="editorGrid" class="editor-grid"></div>
+          <p class="hint" style="margin-top:10px;">Klik een vakje aan om het met het gekozen gereedschap te zetten.</p>
+        </div>
+        <div class="editor-side">
+          <div class="field">
+            <label>Gereedschap</label>
+            <div class="tool-list" id="toolList">
+              <button class="tool active" data-tool="walk"><span class="swatch" style="background:var(--walk)"></span>Loopbaar vakje</button>
+              <button class="tool" id="toolQuest" data-tool="quest"><span class="swatch" style="background:var(--quest)"></span>Opdrachtvakje</button>
+              <button class="tool" data-tool="erase"><span class="swatch" style="background:var(--slot-empty); border:1px solid var(--line);"></span>Wissen</button>
+            </div>
+          </div>
+          <div class="field" id="labelField" hidden>
+            <label for="labelSelect">Nummer</label>
+            <select id="labelSelect"></select>
+          </div>
+          <div class="btn-row">
+            <button id="editorRevert" class="small ghost">Wijzigingen terugdraaien</button>
+          </div>
+          <p class="hint">Een zijde telt als doorgang zodra beide deurvakjes gevuld zijn. Wijzig je dat, dan passen de regels en de generator zich automatisch aan.</p>
+          <div class="field editor-checklist-field">
+            <label>Controlelijst</label>
+            <ul id="editorChecklist" class="checklist"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+{{JS}}
+</script>
+</body>
+</html>

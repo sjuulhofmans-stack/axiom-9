@@ -1,0 +1,154 @@
+// ---------- plaatsingsregels ----------
+const START_TILE = 8;
+const EDGE_CELLS = {
+  N: [[0,3],[0,4]],
+  S: [[7,3],[7,4]],
+  W: [[3,0],[4,0]],
+  E: [[3,7],[4,7]],
+};
+const OPPOSITE = {N:'S', S:'N', E:'W', W:'E'};
+
+// ---------- rotatie ----------
+// tileRotation houdt per tegel 0/90/180/270 bij. De generator werkt altijd met de ONGEDRAAIDE
+// brondata (OPEN_EDGES_RAW) en zet alle rotaties op 0; handmatig draaien doe je daarna zelf.
+const tileRotation = {};
+for (let tid=1; tid<=20; tid++) tileRotation[tid] = 0;
+function resetRotations(){ for (let tid=1; tid<=20; tid++) tileRotation[tid] = 0; }
+function rotateCW(r, c){ return [c, 7-r]; } // 90° rechtsom binnen het 8x8 raster
+function getDisplayValue(tid, dr, dc){
+  const steps = ((tileRotation[tid] || 0) / 90) % 4;
+  let r = dr, c = dc;
+  for (let i=0; i<(4-steps)%4; i++){ const [nr,nc] = rotateCW(r,c); r = nr; c = nc; }
+  return tileLookup[tid].get(r+'_'+c);
+}
+// open zijde volgens de HUIDIGE stand (inclusief rotatie)
+function effectiveOpenEdge(tid, dir){
+  return EDGE_CELLS[dir].every(([dr,dc]) => getDisplayValue(tid, dr, dc) !== undefined);
+}
+// open zijde volgens de ongedraaide brondata — hierop baseert de generator zich
+let OPEN_EDGES_RAW = {};
+let OPEN_EDGES_STATIC = OPEN_EDGES_RAW;
+function recomputeOpenEdges(){
+  OPEN_EDGES_RAW = {};
+  for (let tid=1; tid<=20; tid++){
+    const info = {};
+    for (const dir of Object.keys(EDGE_CELLS)){
+      info[dir] = EDGE_CELLS[dir].every(([dr,dc]) => tileLookup[tid].get(dr+'_'+dc) !== undefined);
+    }
+    OPEN_EDGES_RAW[tid] = info;
+  }
+  OPEN_EDGES_STATIC = OPEN_EDGES_RAW;
+}
+recomputeOpenEdges();
+function openDegree(tid){ return Object.values(OPEN_EDGES_RAW[tid]).filter(Boolean).length; }
+// gangkruisingen met 4 aansluitingen horen binnenin het bord (G,H,I,L,M,N)
+let DEG4_TILES = [];
+
+const CORNER_SLOTS = [0, TILE_COLS-1, (TILE_ROWS-1)*TILE_COLS, TILE_ROWS*TILE_COLS-1]; // A, E, P, T
+const INNER_SLOTS = [];
+for (let r=1; r<TILE_ROWS-1; r++) for (let c=1; c<TILE_COLS-1; c++) INNER_SLOTS.push(r*TILE_COLS+c); // G,H,I,L,M,N
+const OTHER_SLOTS = Array.from({length:20},(_,i)=>i).filter(i => !CORNER_SLOTS.includes(i) && !INNER_SLOTS.includes(i));
+
+// welke windrichtingen wijzen vanaf een positie het bord af
+function offBoardDirs(slotIdx){
+  const row = Math.floor(slotIdx/TILE_COLS), col = slotIdx % TILE_COLS;
+  const dirs = [];
+  if (row === 0) dirs.push('N');
+  if (row === TILE_ROWS-1) dirs.push('S');
+  if (col === 0) dirs.push('W');
+  if (col === TILE_COLS-1) dirs.push('E');
+  return dirs;
+}
+
+// 10 tegels zijn kamers, de rest zijn gangen
+const ROOM_NAMES = {
+  2: 'Cafetaria',
+  3: 'Wapens',
+  4: 'Motor 1',
+  5: 'Beveiliging',
+  7: 'Serverruimte',
+  8: 'Hibernatie',
+  14: 'Ziekenboeg',
+  17: 'Kernreactor',
+  18: 'Navigatie',
+  20: 'Motor 2',
+};
+
+// naam per opdrachtvakje (2.1-2.9) — puur thematisch, geen invloed op de regels;
+// hernoemen doe je hier net als bij ROOM_NAMES
+const QUEST_NAMES = {
+  '2.1': 'Stroomstoring',
+  '2.2': 'Vrachtinspectie',
+  '2.3': 'Noodsignaal',
+  '2.4': 'Filterwissel',
+  '2.5': 'Beveiligingsronde',
+  '2.6': 'Medische voorraad',
+  '2.7': 'Reactorcontrole',
+  '2.8': 'Navigatiekaarten',
+  '2.9': 'Motorkalibratie',
+};
+// vindt de tegel-id waar een 2.x/3.x-label momenteel op staat (onafhankelijk van rotatie)
+function findLabelTile(label){
+  for (let tid = 1; tid <= 20; tid++){
+    for (const v of tileLookup[tid].values()) if (v === label) return tid;
+  }
+  return null;
+}
+
+function letterForSlot(idx){ return String.fromCharCode(65+idx); }
+function slotCategory(idx){
+  if (CORNER_SLOTS.includes(idx)) return 'corner';
+  if (INNER_SLOTS.includes(idx)) return 'inner';
+  return 'other';
+}
+function canTileGoInSlot(tid, slotIdx){
+  const cat = slotCategory(slotIdx);
+  // op een hoek mag geen enkele doorgang het bord af wijzen
+  if (cat === 'corner'){
+    for (const dir of offBoardDirs(slotIdx)) if (OPEN_EDGES_STATIC[tid][dir]) return false;
+  }
+  // starttegel hoort binnenin
+  if (tid === START_TILE) return cat === 'inner';
+  return true;
+}
+let ALLOWED_TILES = [];
+let FORCED_TILES = new Set();
+// alle afgeleide regels opnieuw berekenen (nodig nadat de tegel-editor iets heeft gewijzigd)
+function recomputeTileMeta(){
+  recomputeOpenEdges();
+  DEG4_TILES = Array.from({length:20},(_,i)=>i+1).filter(t => openDegree(t) === 4);
+  ALLOWED_TILES = [];
+  for (let s=0; s<20; s++){
+    ALLOWED_TILES[s] = Array.from({length:20},(_,i)=>i+1).filter(t => canTileGoInSlot(t, s));
+  }
+  FORCED_TILES = new Set();
+  for (const s of CORNER_SLOTS) if (ALLOWED_TILES[s].length === 1) FORCED_TILES.add(ALLOWED_TILES[s][0]);
+}
+recomputeTileMeta();
+function isCornerTile(tid){ return FORCED_TILES.has(tid); }
+
+// zelfde regels, maar getoetst aan de HUIDIGE stand van de tegel (dus inclusief handmatige rotatie)
+function canTileGoInSlotNow(tid, slotIdx){
+  const cat = slotCategory(slotIdx);
+  if (cat === 'corner'){
+    for (const dir of offBoardDirs(slotIdx)) if (effectiveOpenEdge(tid, dir)) return false;
+  }
+  if (tid === START_TILE) return cat === 'inner';
+  return true;
+}
+
+const boardEl = document.getElementById('board');
+const paletteRoomsEl = document.getElementById('paletteRooms');
+const paletteCorrEl  = document.getElementById('paletteCorridors');
+const seedInput = document.getElementById('seedInput');
+const layoutCodeEl = document.getElementById('layoutCode');
+const statSeed = document.getElementById('statSeed');
+const statCells = document.getElementById('statCells');
+const swapHint = document.getElementById('swapHint');
+
+function cellType(v){
+  if (v === 1) return 'walk';
+  if (typeof v === 'string' && v.startsWith('2.')) return 'quest';
+  if (typeof v === 'string' && v.startsWith('3.')) return 'start';
+  return '';
+}
