@@ -35,7 +35,7 @@ src/
     80-controls.js    knoppen: seed, dobbelsteen, herstel, draaien, download, legenda
     90-editor.js      tegel-editor (vakjes aan/uit klikken)
     95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren)
-    96-walk.js        stap-voor-stap: 1 speler zichtbaar over het bord, eigen tabblad
+    96-walk.js        stap-voor-stap: 1-4 spelers zichtbaar over het bord, eigen tabblad
 build.py              plakt alles tot dist/axiom9.html
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
 ```
@@ -58,7 +58,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pion, tempo)     | `96-walk.js`          |
+| iets aan "stap voor stap" (pionnen, tempo, aantal spelers) | `96-walk.js` |
 
 ## Spelregels die in de code zitten
 
@@ -97,6 +97,13 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   en vervalt de rest. Elke speler heeft een eigen geschud stapeltje opdrachten
   1–9 (labels `2.1`–`2.9`); wie als eerste 6 opdrachten voltooit wint. Draait
   altijd op de indeling die op dat moment in de tool staat.
+- Stap voor stap (`96-walk.js`) speelt hetzelfde potje met **1 t/m 4 zichtbare
+  spelers** en roept daarvoor dezelfde `resolveMove()` aan als de batch — dus
+  dezelfde U-turn- en blokkeerregels. Bij meerdere spelers is de "bezette
+  vakjes"-set de posities van de andere pionnen, krijgt iedereen een eigen
+  startvakje (willekeurig verdeeld) en wordt de beurtvolgorde geloot, precies
+  zoals in `simulateOneGame()`. Wijkt hier iets af, dan liegt het tabblad over
+  de batch-cijfers — houd de twee dus gelijk.
 
 ## Controleren of het nog werkt
 
@@ -113,10 +120,13 @@ Check minimaal:
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
-8. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
-   de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
-   Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
+8. Tabblad "Stap voor stap" → "Simulatie starten" → de pionnen lopen zichtbaar,
+   de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y".
+   Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pionnen
    echt stilzetten (geen achtergrondlus die doorloopt).
+9. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
+   ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
+   standenbalk telt mee en "Startpositie" is alleen te kiezen bij 1 speler.
 
 ## Nog te doen
 

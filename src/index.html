@@ -136,9 +136,18 @@
 
   <div id="tabWalk" class="tab-panel" role="tabpanel" hidden>
     <div class="panel">
-      <h2>Stap voor stap — 1 speler</h2>
+      <h2>Stap voor stap</h2>
       <div class="controls">
         <div class="walk-controls">
+          <div class="field">
+            <label for="walkPlayers">Aantal spelers</label>
+            <select id="walkPlayers">
+              <option value="1">1 speler</option>
+              <option value="2">2 spelers</option>
+              <option value="3">3 spelers</option>
+              <option value="4" selected>4 spelers</option>
+            </select>
+          </div>
           <div class="field">
             <label for="walkStart">Startpositie</label>
             <select id="walkStart"></select>
@@ -152,12 +161,14 @@
             <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
           </div>
         </div>
-        <p class="hint">Speelt één potje met één speler op de indeling van het tabblad "Kaart maken". Het tempo kun je tijdens het lopen aanpassen.</p>
+        <p class="hint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
 
         <div class="walk-hud">
           <div class="walk-dice" id="walkDice"></div>
           <div class="walk-meta" id="walkMeta"></div>
         </div>
+
+        <div class="walk-score" id="walkScore"></div>
 
         <div id="walkStatus" class="reach-status"></div>
 
@@ -167,10 +178,10 @@
         </div>
 
         <div class="walk-legend">
-          <span class="walk-key"><i class="walk-swatch pawn"></i>pion</span>
-          <span class="walk-key"><i class="walk-swatch target"></i>huidig doel</span>
-          <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt</span>
-          <span class="walk-key"><i class="walk-swatch done"></i>voltooide opdracht</span>
+          <span class="walk-key"><i class="walk-swatch pawn p1"></i><i class="walk-swatch pawn p2"></i><i class="walk-swatch pawn p3"></i><i class="walk-swatch pawn p4"></i>pionnen (speler 1–4)</span>
+          <span class="walk-key"><i class="walk-swatch target"></i>doel van wie aan zet is</span>
+          <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt (kleur van wie aan zet is)</span>
+          <span class="walk-key"><i class="walk-swatch done"></i>al voltooid door wie aan zet is</span>
           <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
         </div>
 

@@ -262,6 +262,36 @@
   }
   .walk-meta b{color:var(--text);}
   .walk-meta .goal{color:var(--quest);}
+  .walk-active-name{color:var(--pc) !important;}
+
+  /* stand van alle spelers; --pc is per rij de spelerskleur */
+  .walk-score{
+    display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;
+  }
+  .walk-score:empty{display:none;}
+  .walk-player{
+    display:flex; align-items:center; gap:8px; flex:1 1 210px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
+    border-radius:4px; padding:7px 10px;
+  }
+  .walk-player.active{
+    border-color:var(--pc); background:rgba(255,255,255,.04); color:var(--text);
+    box-shadow:0 0 0 1px var(--pc) inset;
+  }
+  .walk-player-dot{
+    width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
+    box-shadow:0 0 6px var(--pc);
+  }
+  .walk-player-name{color:var(--text); white-space:nowrap;}
+  .walk-player-name .sub{color:var(--text-dim);}
+  .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
+  .walk-player-goal .hit{color:var(--start);}
+  .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
+  .walk-standing{
+    display:inline-flex; align-items:center; gap:5px; margin-left:10px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+  }
 
   #walkBoard{
     --cell: 19px;
@@ -271,9 +301,11 @@
     gap:1px; margin:0 auto; width:max-content;
   }
   #walkBoard .cell{cursor:default;}
+  /* --pc wordt per cel inline gezet op de kleur van de speler die er loopt/staat; de
+     8-cijferige hex-suffix is de doorzichtigheid, zodat het bord eronder zichtbaar blijft. */
   .cell.walk-trail{
-    background:rgba(255,181,69,.42) !important;
-    box-shadow:inset 0 0 0 1px rgba(255,181,69,.7) !important;
+    background:color-mix(in srgb, var(--pc, var(--amber)) 42%, transparent) !important;
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--pc, var(--amber)) 70%, transparent) !important;
     z-index:2; position:relative;
   }
   /* voltooide opdracht: een "opgebruikt" opdrachtvakje. Bewust NIET groen — dat is de kleur
@@ -285,16 +317,21 @@
   }
   .cell.walk-target{
     background:var(--quest) !important;
-    box-shadow:0 0 0 2px #fff, 0 0 11px var(--quest-glow) !important;
+    box-shadow:0 0 0 2px var(--pc, #fff), 0 0 11px var(--quest-glow) !important;
     z-index:4; position:relative;
     animation:walkPulse 1.3s ease-in-out infinite;
   }
   @keyframes walkPulse{0%,100%{opacity:1;} 50%{opacity:.55;}}
   .cell.walk-pawn{
-    background:#ff4fd8 !important;
-    box-shadow:0 0 0 2px #fff, 0 0 12px rgba(255,79,216,.95) !important;
+    background:var(--pawn, #ff4fd8) !important;
+    box-shadow:0 0 0 1px rgba(0,0,0,.55), 0 0 9px var(--pawn, #ff4fd8) !important;
     border-radius:50% !important;
     z-index:6; position:relative;
+  }
+  /* wie aan zet is krijgt een witte ring, zodat je 'm tussen vier pionnen terugvindt */
+  .cell.walk-pawn.walk-pawn-active{
+    box-shadow:0 0 0 2px #fff, 0 0 12px var(--pawn, #ff4fd8) !important;
+    z-index:7;
   }
 
   .walk-legend{
@@ -303,9 +340,18 @@
   }
   .walk-key{display:flex; align-items:center; gap:6px;}
   .walk-swatch{width:11px; height:11px; border-radius:2px; display:inline-block;}
-  .walk-swatch.pawn{background:#ff4fd8; border-radius:50%;}
+  .walk-swatch.pawn{border-radius:50%; margin-right:-3px;}
+  .walk-swatch.pawn.p1{background:#ff4fd8;}
+  .walk-swatch.pawn.p2{background:#ffd23d;}
+  .walk-swatch.pawn.p3{background:#7c5cff;}
+  .walk-swatch.pawn.p4{background:#ff7a45; margin-right:3px;}
   .walk-swatch.target{background:var(--quest);}
-  .walk-swatch.trail{background:rgba(255,181,69,.42); box-shadow:inset 0 0 0 1px rgba(255,181,69,.7);}
+  /* het spoor krijgt de kleur van wie aan zet is, dus toont de legenda alle vier de kleuren */
+  .walk-swatch.trail{
+    width:26px;
+    background:linear-gradient(90deg,#ff4fd86b 0 25%,#ffd23d6b 25% 50%,#7c5cff6b 50% 75%,#ff7a456b 75% 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);
+  }
   .walk-swatch.done{background:#1d4a5e; box-shadow:inset 0 0 0 2px var(--quest);}
   .walk-swatch.start{background:var(--start);}
 
@@ -318,6 +364,10 @@
   .walk-log div{border-bottom:1px solid rgba(255,255,255,.04); padding:2px 0;}
   .walk-log b{color:var(--amber);}
   .walk-log .hit{color:var(--start);}
+  .walk-log-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--pc); display:inline-block;
+    margin-right:7px; vertical-align:middle; flex:none;
+  }
 
   /* ---------- tegel-editor ---------- */
   .editor-overlay{
