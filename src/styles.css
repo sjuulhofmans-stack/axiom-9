@@ -264,6 +264,19 @@
   .walk-meta .goal{color:var(--quest);}
   .walk-active-name{color:var(--pc) !important;}
 
+  .walk-paused-flag{
+    margin-left:auto; font-family:var(--font-mono); font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--amber);
+    border:1px solid var(--amber-dim); border-radius:3px; padding:5px 9px;
+    animation:walkPulse 1.6s ease-in-out infinite;
+  }
+  .walk-paused-flag[hidden]{display:none;}
+  /* tijdens een pauze horen de lopende CSS-animaties ook stil te staan, anders lijkt het
+     bord door te draaien terwijl er niets meer gebeurt */
+  #tabWalk.walk-is-paused .walk-die.rolling,
+  #tabWalk.walk-is-paused .cell.walk-target{animation-play-state:paused;}
+  #tabWalk.walk-is-paused .walk-paused-flag{animation-play-state:running;}
+
   /* stand van alle spelers; --pc is per rij de spelerskleur */
   .walk-score{
     display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;

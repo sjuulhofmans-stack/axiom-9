@@ -31,16 +31,48 @@ const walkMetaEl = document.getElementById('walkMeta');
 const walkScoreEl = document.getElementById('walkScore');
 const walkStatusEl = document.getElementById('walkStatus');
 const walkLogEl = document.getElementById('walkLog');
+const walkPanelEl = document.getElementById('tabWalk');
+const walkPausedFlagEl = document.getElementById('walkPausedFlag');
 const btnWalkStart = document.getElementById('btnWalkStart');
+const btnWalkPause = document.getElementById('btnWalkPause');
 const btnWalkStop = document.getElementById('btnWalkStop');
 
 let walkCellEls = null;      // [R][C] -> div, pas opgebouwd bij het eerste gebruik
 let walkRunId = 0;           // elke nieuwe run verhoogt dit; een lopende run stopt zodra hij afwijkt
 let walkRunning = false;
+let walkPaused = false;
+let walkPauseWaiters = [];   // resolvers van de stappen die nu op "hervat" staan te wachten
 let walkPaintedPawns = [];   // cellen waar nu een pion op staat, zodat we ze gericht kunnen wissen
 
 function walkSpeed(){ return WALK_SPEEDS[parseInt(walkSpeedEl.value, 10)] || WALK_SPEEDS[2]; }
 function walkSleep(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+// De lus wacht op precies twee dingen: de tempo-vertraging en (als er gepauzeerd is) de
+// pauze-poort. Alles wat wacht loopt via walkTick(), zodat er geen plek in de lus overblijft
+// die tijdens een pauze tóch doorloopt.
+function walkPauseGate(){
+  if (!walkPaused) return Promise.resolve();
+  return new Promise(res => walkPauseWaiters.push(res));
+}
+async function walkTick(ms){
+  await walkSleep(ms);
+  await walkPauseGate();
+}
+function setWalkPaused(on){
+  walkPaused = on && walkRunning;
+  if (!walkPaused){
+    // iedereen die vasthing loslaten; wie inmiddels tot een gestopte run behoort,
+    // valt daarna vanzelf op zijn eigen runId-controle af
+    const waiters = walkPauseWaiters;
+    walkPauseWaiters = [];
+    for (const res of waiters) res();
+  }
+  if (btnWalkPause) btnWalkPause.textContent = walkPaused ? '▶ Hervatten' : '⏸ Pauze';
+  if (walkPausedFlagEl) walkPausedFlagEl.hidden = !walkPaused;
+  // CSS-animaties (rollende dobbelsteen, kloppend doelvakje) horen ook stil te staan
+  if (walkPanelEl) walkPanelEl.classList.toggle('walk-is-paused', walkPaused);
+}
+
 function walkPlayerCount(){
   const n = parseInt(walkPlayersSel ? walkPlayersSel.value : '1', 10);
   return Number.isFinite(n) ? Math.max(1, Math.min(WALK_MAX_PLAYERS, n)) : 1;
@@ -158,9 +190,11 @@ function walkLog(html, cls, player){
 // ---------- besturing ----------
 function setWalkRunning(on){
   walkRunning = on;
+  if (!on) setWalkPaused(false);   // een gestopte run mag niet gepauzeerd blijven hangen
   if (!btnWalkStart) return;
   btnWalkStart.disabled = on;
   btnWalkStop.disabled = !on;
+  if (btnWalkPause) btnWalkPause.disabled = !on;
   if (walkPlayersSel) walkPlayersSel.disabled = on;
   syncWalkStartEnabled();
 }
@@ -204,6 +238,7 @@ async function runWalkSimulation(){
   const runId = ++walkRunId;
   const aborted = () => runId !== walkRunId;
   setWalkRunning(true);
+  setWalkPaused(false);        // een nieuwe run begint nooit gepauzeerd
   walkLogEl.innerHTML = '';
   walkStatusEl.innerHTML = '';
 
@@ -283,21 +318,19 @@ async function runWalkSimulation(){
       renderWalkScore(players, pIdx);
       renderWalkMeta({ player, turn });
 
-      // dobbelen — even laten rollen zodat je het ziet gebeuren
-      const speed = walkSpeed();
-      if (speed.rollMs > 0){
-        const shakeUntil = Date.now() + speed.rollMs;
-        while (Date.now() < shakeUntil){
-          if (aborted()) return;
-          renderWalkDice(1 + Math.floor(Math.random()*6), 1 + Math.floor(Math.random()*6), true);
-          await walkSleep(90);
-        }
+      // dobbelen — even laten rollen zodat je het ziet gebeuren. Geteld in stappen en niet
+      // op de klok, anders is de worp na een pauze meteen "uitgerold".
+      const shakeSteps = Math.round(walkSpeed().rollMs / 90);
+      for (let i = 0; i < shakeSteps; i++){
+        if (aborted()) return;
+        renderWalkDice(1 + Math.floor(Math.random()*6), 1 + Math.floor(Math.random()*6), true);
+        await walkTick(90);
       }
       const d1 = simRollD6(rand), d2 = simRollD6(rand);
       renderWalkDice(d1, d2, false);
       const roll = d1 + d2;
       if (aborted()) return;
-      await walkSleep(Math.min(500, walkSpeed().rollMs));
+      await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
 
       // andere pionnen blokkeren, precies zoals in de batch-simulatie
@@ -315,7 +348,7 @@ async function runWalkSimulation(){
         player.pos = move.path[i];
         paintWalkPawns(graph, players, pIdx);
         renderWalkMeta({ player, turn, stepsLeft: move.path.length - 1 - i });
-        await walkSleep(walkSpeed().stepMs);
+        await walkTick(walkSpeed().stepMs);
       }
 
       if (move.bankedQuest){
@@ -349,6 +382,7 @@ async function runWalkSimulation(){
 }
 
 if (btnWalkStart) btnWalkStart.addEventListener('click', runWalkSimulation);
+if (btnWalkPause) btnWalkPause.addEventListener('click', () => setWalkPaused(!walkPaused));
 if (btnWalkStop) btnWalkStop.addEventListener('click', stopWalkSimulation);
 if (walkPlayersSel) walkPlayersSel.addEventListener('change', syncWalkStartEnabled);
 if (walkSpeedEl){

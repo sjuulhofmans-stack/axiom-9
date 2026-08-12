@@ -58,7 +58,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pionnen, tempo, aantal spelers) | `96-walk.js` |
+| iets aan "stap voor stap" (pionnen, tempo, pauze, aantal spelers) | `96-walk.js` |
 
 ## Spelregels die in de code zitten
 
@@ -123,7 +123,9 @@ Check minimaal:
 8. Tabblad "Stap voor stap" → "Simulatie starten" → de pionnen lopen zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pionnen
-   echt stilzetten (geen achtergrondlus die doorloopt).
+   echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
+   (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
+   stoppen vanuit pauze mag niet blijven hangen.
 9. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
    ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
    standenbalk telt mee en "Startpositie" is alleen te kiezen bij 1 speler.
