@@ -140,19 +140,34 @@ Check minimaal:
    echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
    (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
    stoppen vanuit pauze mag niet blijven hangen.
-9. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
+9. In "Welke energie-actie wint?" moeten de drie acties binnen ongeveer 2
+   procentpunt van elkaar liggen (rond 31-32% elk) en de speler die nooit
+   uitgeeft rond de 6%. Loopt één actie weg, dan is de balans stuk — stel
+   `ENERGY_JUMP_RANGE` bij en draai de sweep uit het codecommentaar opnieuw.
+10. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
    ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
    standenbalk telt mee en "Startpositie" is alleen te kiezen bij 1 speler.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
-  gemiddeld 1,5 per beurt, en de voorraad stapelt tot `ENERGY_MAX` = 10.
-  **Uitgeven bestaat nog niet**, dus energie verandert op dit moment niets aan
-  het spelverloop — het wordt alleen opgebouwd en gemeten. Zonder uitgeven zit
-  een speler na ~7 eigen beurten aan het plafond en gaat ~77% van alle gerolde
-  energie verloren; dat cijfer is de maatstaf voor wat een actie mag kosten.
-  Komt het uitgeven erbij, dan is de afgesproken standaard: inzetten zodra je
-  het kunt betalen (`ENERGY_SPEND_WHEN_AFFORDABLE`), maximaal één keer per beurt.
+  gemiddeld 1,5 per beurt, en de voorraad stapelt tot `ENERGY_MAX` = 10. Energie
+  die je deze beurt rolt mag je meteen inzetten. Er is **maximaal één actie per
+  beurt**, uit drie (`ENERGY_ACTIONS`):
+  - **3 Stuwstoot** — gooi met 3 loopstenen in plaats van 2 (+3,5 stappen).
+  - **6 Herprioritering** — wissel je opdracht met de volgende in je stapel,
+    maar alleen als die dichterbij ligt (scheelt gemeten 7,6 stappen lopen).
+  - **10 Noodtransport** — verplaats je tot `ENERGY_JUMP_RANGE` vakjes vrij:
+    geen dobbelsteen, bezette vakjes tellen niet. Gebruik dit **vóór** de zet,
+    zodat de opdracht binnen bereik van de stenen komt; alleen erná springen
+    maakt de actie flink zwakker (26,5% winst tegen 32,4%).
+  - Elke speler krijgt per potje één strategie uit `ENERGY_STRATEGIES`, geloot
+    over de startposities, zodat één batch een zuiver toernooi tussen de acties
+    is. Zie de tabel "Welke energie-actie wint?" in het simulatiepaneel.
+  - `ENERGY_JUMP_RANGE` = 13 is **gemeten, niet gegokt** — de sweep staat in het
+    commentaar bij de constante. Verzet je 'm, draai die sweep opnieuw.
+  - Niet doen: een actie "negeer de geen-U-turn-regel" geven. Gemeten waardeloos —
+    met die regel bereik je op elk aantal stappen exact dezelfde vakjes als
+    zonder (verhouding 1,000 over 180 startposities).
   Let op: de energiesteen trekt elke beurt een getal uit dezelfde `rand`-stroom,
   dus dezelfde seed geeft een ander verloop dan vóór deze toevoeging.
 

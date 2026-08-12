@@ -29,13 +29,101 @@ const SIM_HISTOGRAM_BINS = 12;
 // twee kanten 1, twee kanten 2 en één kant 3 — gemiddeld 1,5 energie per beurt. Wat je hebt
 // stapelt tot ENERGY_MAX; alles daarboven gaat verloren.
 //
-// UITGEVEN ZIT ER BEWUST NOG NIET IN. Energie verandert op dit moment dus niets aan het
-// spelverloop: het wordt alleen opgebouwd en gemeten, zodat je aan de cijfers kunt zien wat
-// een actie later mag kosten. Als het uitgeven erbij komt, is de afspraak: een speler zet in
-// zodra hij het kan betalen (ENERGY_SPEND_WHEN_AFFORDABLE), maximaal één keer per beurt.
+// Energie wordt uitgegeven aan één van drie acties, maximaal één per beurt. Een speler mag
+// energie die hij deze beurt rolt meteen inzetten (op 7 staan, 3 rollen, direct 10 uitgeven).
+//
+// De drie acties zitten bewust op drie verschillende assen — hoe ver je komt, waar je heen
+// moet, en waar je staat — zodat de keuze van de situatie afhangt en niet van een rekensom:
+//
+//   3  Stuwstoot        gooi met 3 loopstenen in plaats van 2      (+3,5 stappen)
+//   6  Herprioritering  wissel je opdracht met de volgende in je   (scheelt gemeten 7,6
+//                       stapel, alleen als die dichterbij ligt      stappen lopen)
+//  10  Noodtransport    verplaats na je zet nog tot 10 vakjes vrij  (10 stappen, gegarandeerd)
+//
+// Een eerder ontwerp gaf de 6-actie "negeer de geen-U-turn-regel". Dat is gemeten en levert
+// niets op: met die regel bereik je op elk aantal stappen exact dezelfde vakjes als zonder
+// (verhouding 1,000 over 180 startposities), want het bord heeft genoeg lussen om stappen te
+// verspillen zonder om te keren. Niet opnieuw voorstellen dus.
 const ENERGY_DIE_FACES = [0, 1, 1, 2, 2, 3];
 const ENERGY_MAX = 10;
-const ENERGY_SPEND_WHEN_AFFORDABLE = true;   // beleid voor straks; nu nog ongebruikt
+// Afstemknop: het bereik van het Noodtransport. Bewust `let`, zodat je 'm vanuit de console
+// kunt doorrekenen zonder te herbouwen. 13 is niet gegokt maar gemeten — winst% van
+// (Stuwstoot / Herprioritering / Noodtransport) over 5000 potjes per stand, zelfde
+// toevalsstroom per bereik:
+//   10 → 32,4 / 33,9 / 27,1   het transport is duidelijk te zwak
+//   12 → 32,1 / 31,1 / 30,5
+//   13 → 32,4 / 29,3 / 33,2   de duurste actie wipt er net overheen
+//   14 → 30,1 / 29,6 / 34,1
+//   16 → 29,0 / 29,1 / 36,6   het transport begint te overheersen
+// Op 10 stappen is de actie 1,0 stap per energie waard tegen 1,17 voor de Stuwstoot; pas
+// rond 13 haalt hij de andere twee in. Verzet je dit getal, draai de sweep opnieuw.
+let ENERGY_JUMP_RANGE = 13;
+
+const ENERGY_ACTIONS = {
+  boost:   { cost: 3,  name: 'Stuwstoot',       hint: 'gooi met 3 loopstenen' },
+  reorder: { cost: 6,  name: 'Herprioritering', hint: 'wissel om met de volgende opdracht' },
+  jump:    { cost: 10, name: 'Noodtransport',   hint: `verplaats tot ${ENERGY_JUMP_RANGE} vakjes vrij` },
+  none:    { cost: 0,  name: 'Geen energie',    hint: 'spaart maar geeft nooit uit' },
+};
+// Elke speler krijgt er per potje één; ze worden geloot over de startposities zodat de
+// strategie nooit samenvalt met een bepaalde startpositie. Zo is één batch een toernooi.
+const ENERGY_STRATEGIES = ['boost', 'reorder', 'jump', 'none'];
+
+// Vrije verplaatsing van maximaal `range` vakjes: geen dobbelsteen, geen geen-U-turn-regel,
+// bezette vakjes tellen niet mee. Gaat recht op het doel af als dat binnen bereik ligt en
+// kiest anders het bereikbare vakje dat het dichtst bij het doel ligt.
+function resolveEnergyJump(graph, fromKey, range, targetKey){
+  // 1. alles binnen bereik verzamelen. Dit moet compleet zijn vóór de tweede BFS, want die
+  //    overschrijft de gedeelde afstandsbuffer.
+  const stampFrom = simBfsDistances(graph, fromKey);
+  const near = new Map();
+  for (let k = 0; k < graph.N; k++){
+    const d = simDistLookup(stampFrom, k);
+    if (d >= 0 && d <= range) near.set(k, d);
+  }
+  // 2. doel binnen bereik? dan er meteen heen — anders zo dicht mogelijk erbij
+  let dest = null;
+  if (near.has(targetKey)){
+    dest = targetKey;
+  } else {
+    const stampTarget = simBfsDistances(graph, targetKey);
+    let best = Infinity;
+    for (const k of near.keys()){
+      const d = simDistLookup(stampTarget, k);
+      if (d >= 0 && d < best){ best = d; dest = k; }
+    }
+  }
+  if (dest === null || dest === fromKey) return null;
+  // 3. pad terugzoeken via de afstanden uit stap 1 (voor de drukte-heatmap en de animatie)
+  const path = [dest];
+  let cur = dest;
+  while (cur !== fromKey){
+    const d = near.get(cur);
+    const neigh = graph.adjKey[cur];
+    let prev = -1;
+    for (let j = 0; j < neigh.length; j++) if (near.get(neigh[j]) === d - 1){ prev = neigh[j]; break; }
+    if (prev === -1) break;
+    path.push(prev);
+    cur = prev;
+  }
+  path.reverse();
+  return { key: dest, path, banked: dest === targetKey };
+}
+
+// Herprioritering loont alleen als de volgende opdracht in je stapel dichterbij ligt dan de
+// huidige; anders houd je de energie in je zak. Geeft het nieuwe doellabel terug, of null.
+function energyReorderTarget(graph, player, fromKey){
+  const curLabel = player.order[player.nextIdx];
+  const altLabel = player.order[player.nextIdx + 1];
+  if (altLabel === undefined) return null;
+  const stamp = simBfsDistances(graph, fromKey);
+  const dCur = simDistLookup(stamp, graph.questCells[curLabel]);
+  const dAlt = simDistLookup(stamp, graph.questCells[altLabel]);
+  if (dCur < 0 || dAlt < 0 || dAlt >= dCur) return null;
+  player.order[player.nextIdx] = altLabel;
+  player.order[player.nextIdx + 1] = curLabel;
+  return altLabel;
+}
 
 function simRollEnergy(rand){
   return ENERGY_DIE_FACES[Math.floor(rand() * ENERGY_DIE_FACES.length)];
@@ -260,11 +348,16 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     completed: 0,
     turnsOnTarget: 0,
     energy: 0,
+    strategy: 'none',
+    actionUses: 0,
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
   const turnOrder = simShuffle([0, 1, 2, 3], rand);
   for (let s = 0; s < turnOrder.length; s++) players[turnOrder[s]].seat = s;
+  // strategieën loten, zodat "welke actie wint" niet vervuild wordt door de startpositie
+  const strategies = simShuffle(ENERGY_STRATEGIES, rand);
+  for (let i = 0; i < players.length; i++) players[i].strategy = strategies[i];
 
   const finishTarget = simFinishTarget(players.length);
   let finished = 0;
@@ -275,22 +368,55 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
-      const roll = simRollD6(rand) + simRollD6(rand);
 
-      // energiesteen rolt elke beurt mee. Het niveau wordt geteld NA het bijschrijven: dat is
-      // wat deze speler deze beurt zou kunnen inzetten zodra uitgeven bestaat.
+      // 1. energiesteen rolt mee. Het niveau wordt geteld NA het bijschrijven, want dat is wat
+      //    deze speler deze beurt kan inzetten.
       const energyRoll = simRollEnergy(rand);
       const energyGain = simGainEnergy(player, energyRoll);
       extra.energyRolled += energyRoll;
       extra.energyWasted += energyGain.wasted;
       extra.energyLevels[player.energy]++;
 
-      const occupied = new Set();
-      for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
-      const targetLabel = player.order[player.nextIdx];
+      // 2. Herprioritering gaat vóór de zet: het verandert waar je heen moet
+      let targetLabel = player.order[player.nextIdx];
+      if (player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
+        const swapped = energyReorderTarget(graph, player, player.pos);
+        if (swapped !== null){
+          targetLabel = swapped;
+          player.energy -= ENERGY_ACTIONS.reorder.cost;
+          player.actionUses++;
+        }
+      }
       const targetKey = graph.questCells[targetLabel];
 
-      const move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+      // 3. loopstenen, met de Stuwstoot als derde steen
+      let roll = simRollD6(rand) + simRollD6(rand);
+      if (player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
+        roll += simRollD6(rand);
+        player.energy -= ENERGY_ACTIONS.boost.cost;
+        player.actionUses++;
+      }
+
+      const occupied = new Set();
+      for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
+
+      // 4. Noodtransport mag TUSSENTIJDS, dus vóór de zet: dan brengt de sprong de opdracht
+      //    binnen bereik van de stenen en kan de zet 'm alsnog pakken. Alleen ná de zet
+      //    springen maakt de actie veel zwakker — dat is gemeten (26,7% winst tegen 32,4%
+      //    voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
+      let move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+      if (!move.bankedQuest && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
+        const jump = resolveEnergyJump(graph, player.pos, ENERGY_JUMP_RANGE, targetKey);
+        if (jump){
+          player.energy -= ENERGY_ACTIONS.jump.cost;
+          player.actionUses++;
+          for (let p = 0; p < jump.path.length; p++) heatmap[jump.path[p]]++;
+          // de sprong kan de opdracht zelf al pakken; anders loop je vanaf daar verder
+          move = jump.banked
+            ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
+            : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
+        }
+      }
       player.pos = move.key;
       player.turnsOnTarget++;
       extra.totalTurns++;
@@ -479,7 +605,7 @@ function renderHeatmap(graph, heatmap){
     </div>`;
 }
 
-function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs }){
+function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, strategyStats, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs }){
   const played = n - stuckCount;
 
   const startPcts = SIM_START_LABELS.map(lbl => played ? (startWins[lbl] / played * 100) : 0);
@@ -582,8 +708,29 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? (c / energyTurns * 100).toFixed(1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
   }).join('');
 
+  // Welke actie wint? Elk potje heeft precies één speler per strategie, willekeurig over de
+  // startposities verdeeld, dus dit is een zuiver onderling toernooi.
+  const stratRows = ENERGY_STRATEGIES.map(id => {
+    const s = strategyStats[id];
+    const act = ENERGY_ACTIONS[id];
+    const winPct = s.games ? (s.wins / s.games * 100) : 0;
+    const moe = simMarginOfError(s.wins, s.games);
+    const top2Pct = s.games ? (s.top2 / s.games * 100) : 0;
+    const avgRank = s.games ? (s.rankSum / s.games) : 0;
+    const usesPerGame = s.games ? (s.uses / s.games) : 0;
+    const cost = act.cost ? `${act.cost} energie` : '—';
+    return `<tr><td>${act.name} <span class="sub">(${cost})</span></td>` +
+      `<td class="num">${winPct.toFixed(1)}% ± ${moe.toFixed(1)}</td>` +
+      `<td class="num">${top2Pct.toFixed(1)}%</td>` +
+      `<td class="num">${avgRank.toFixed(2)}</td>` +
+      `<td class="num">${usesPerGame.toFixed(1)}</td></tr>`;
+  }).join('');
+  html += `<h3 class="sim-subhead">Welke energie-actie wint?</h3>`;
+  html += `<table class="sim-table"><thead><tr><th>Strategie</th><th>Winst% (±95%-marge)</th><th>Top 2</th><th>Gem. plaats</th><th>Keer ingezet</th></tr></thead><tbody>${stratRows}</tbody></table>`;
+  html += `<p class="hint">Elk potje zit één speler per strategie, geloot over de startposities. Een speler zet zijn actie in zodra hij 'm kan betalen — Herprioritering alleen als de volgende opdracht daadwerkelijk dichterbij ligt, en Noodtransport alleen als de gewone zet de opdracht nog niet pakte. Bij vier gelijkwaardige strategieën staat iedereen op 25% winst en gemiddelde plaats 2,50; wie daar significant boven zit, is te sterk.</p>`;
+
   html += `<h3 class="sim-subhead">Energie</h3>`;
-  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Er wordt nog niets uitgegeven, dus dit is een nulmeting: energie verandert op dit moment niets aan het spelverloop.</p>`;
+  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
   html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
   html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
   html += `<div class="sim-hist">${energyBars}</div>`;
@@ -641,6 +788,8 @@ function runSimulationBatch(){
       }
       const questStats = {};
       for (const lbl of SIM_QUEST_LABELS) questStats[lbl] = { turns: 0, count: 0 };
+      const strategyStats = {};
+      for (const id of ENERGY_STRATEGIES) strategyStats[id] = { games: 0, wins: 0, top2: 0, rankSum: 0, uses: 0 };
       const seatWins = [0, 0, 0, 0];
       const gameLengths = [];
       const heatmap = new Int32Array(graph.N);
@@ -654,7 +803,15 @@ function runSimulationBatch(){
       for (let i = 0; i < n; i++){
         const result = simulateOneGame(graph, rand, heatmap, questStats, extra);
         if (result.stuck){ stuckCount++; continue; }
-        for (const p of result.players) startRanks[p.startLabel][p.rank - 1]++;
+        for (const p of result.players){
+          startRanks[p.startLabel][p.rank - 1]++;
+          const st = strategyStats[p.strategy];
+          st.games++;
+          st.rankSum += p.rank;
+          st.uses += p.actionUses;
+          if (p.rank === 1) st.wins++;
+          if (p.rank <= 2) st.top2++;
+        }
         const winner = result.players.find(p => p.rank === 1);
         startWins[winner.startLabel]++;
         startTurnsSum[winner.startLabel] += winner.finishTurn;
@@ -663,7 +820,7 @@ function runSimulationBatch(){
       }
 
       const elapsedMs = performance.now() - t0;
-      renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs });
+      renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, strategyStats, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs });
     } catch (err){
       simStatusEl.innerHTML = `<span class="bad">✕ Simulatie mislukt: ${err.message}</span>`;
     }

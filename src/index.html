@@ -153,6 +153,16 @@
             <select id="walkStart"></select>
           </div>
           <div class="field">
+            <label for="walkEnergyMode">Energie-inzet</label>
+            <select id="walkEnergyMode">
+              <option value="mix" selected>elke speler een andere</option>
+              <option value="boost">alleen Stuwstoot (3)</option>
+              <option value="reorder">alleen Herprioritering (6)</option>
+              <option value="jump">alleen Noodtransport (10)</option>
+              <option value="none">niemand geeft uit</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="walkSpeed">Tempo — <span id="walkSpeedLabel">normaal</span></label>
             <input type="range" id="walkSpeed" min="0" max="4" step="1" value="2">
           </div>

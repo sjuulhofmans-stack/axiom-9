@@ -28,6 +28,7 @@ const walkBoardEl = document.getElementById('walkBoard');
 const walkStartSel = document.getElementById('walkStart');
 const walkPlayersSel = document.getElementById('walkPlayers');
 const walkStartHintEl = document.getElementById('walkStartHint');
+const walkEnergyModeEl = document.getElementById('walkEnergyMode');
 const walkSpeedEl = document.getElementById('walkSpeed');
 const walkSpeedLabelEl = document.getElementById('walkSpeedLabel');
 const walkDiceEl = document.getElementById('walkDice');
@@ -147,13 +148,15 @@ function paintWalkPawns(graph, players, activeIdx){
 }
 
 // ---------- HUD ----------
-// twee loopstenen plus de energiesteen; `e` is de energiekant (0 = niks)
-function renderWalkDice(a, b, e, rolling){
+// twee loopstenen plus de energiesteen; `e` is de energiekant (0 = niks). `boost` is de
+// derde loopsteen van de Stuwstoot, of null als die actie niet is ingezet.
+function renderWalkDice(a, b, e, rolling, boost){
   const cls = 'walk-die' + (rolling ? ' rolling' : '');
-  const sum = rolling ? '' : `<span class="walk-die-sum">= ${a + b} stappen</span>`;
+  const third = boost ? `<span class="${cls} boost" title="Stuwstoot">${boost}</span>` : '';
+  const sum = rolling ? '' : `<span class="walk-die-sum">= ${a + b + (boost || 0)} stappen</span>`;
   const energy = rolling ? '' : `<span class="walk-die-sum energy">+${e} energie</span>`;
   walkDiceEl.innerHTML =
-    `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${sum}` +
+    `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${third}${sum}` +
     `<span class="${cls} energy">${e === 0 && !rolling ? '–' : e}</span>${energy}`;
 }
 
@@ -179,6 +182,16 @@ function walkRankLabel(rank){ return rank ? `${rank}e` : '—'; }
 
 // wat de energiesteen deze beurt opleverde; meldt ook wanneer het plafond energie opslokt,
 // want dat is precies het cijfer waar de kosten van een toekomstige actie op afgestemd worden
+function walkRollText(d1, d2, d3, roll){
+  return d3 ? `${d1}+${d2}+${d3}=${roll}` : `${d1}+${d2}=${roll}`;
+}
+// welke energie-actie deze beurt is ingezet
+function walkActionNote(id){
+  if (!id) return '';
+  const act = ENERGY_ACTIONS[id];
+  return ` <span class="action">▸ ${act.name} (−${act.cost})</span>`;
+}
+
 function walkEnergyNote(roll, gain, player){
   if (roll === 0) return ` <span class="energy">⚡0</span>`;
   if (gain.gained === 0) return ` <span class="energy">⚡vol — ${roll} verloren</span>`;
@@ -202,6 +215,7 @@ function renderWalkScore(players, activeIdx){
     return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-dot"></span>` +
       `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
+      `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>` +
       `<span class="walk-player-goal">${goal}</span>` +
       `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
       `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
@@ -227,6 +241,7 @@ function setWalkRunning(on){
   btnWalkStop.disabled = !on;
   if (btnWalkPause) btnWalkPause.disabled = !on;
   if (walkPlayersSel) walkPlayersSel.disabled = on;
+  if (walkEnergyModeEl) walkEnergyModeEl.disabled = on;
   syncWalkStartEnabled();
 }
 
@@ -314,6 +329,11 @@ async function runWalkSimulation(){
     nextIdx: 0,
     completed: 0,
     energy: 0,
+    // "mix" geeft speler 1 t/m 4 elk een andere strategie, zodat je ze naast elkaar ziet
+    strategy: walkEnergyModeEl && walkEnergyModeEl.value !== 'mix'
+      ? walkEnergyModeEl.value
+      : ENERGY_STRATEGIES[i % ENERGY_STRATEGIES.length],
+    actionUses: 0,
     rank: 0,                // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     doneCells: [],          // opdrachtvakjes die DEZE speler al gehad heeft
   }));
@@ -322,7 +342,7 @@ async function runWalkSimulation(){
   const finishTarget = simFinishTarget(playerCount);
 
   for (const p of players){
-    walkLog(`${p.name} start op <b>${p.startLabel}</b> · stapel: ${p.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, p);
+    walkLog(`${p.name} start op <b>${p.startLabel}</b> · energie: <b>${ENERGY_ACTIONS[p.strategy].name}</b> · stapel: ${p.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, p);
   }
   if (playerCount > 1){
     walkLog(`Beurtvolgorde: ${turnOrder.map(i => players[i].name).join(' → ')}.`);
@@ -348,7 +368,25 @@ async function runWalkSimulation(){
       if (player.rank) continue;   // binnen: speelt niet meer mee
       turn++;
 
-      const targetLabel = player.deck[player.nextIdx];
+      // energiesteen eerst, zodat wat je deze beurt rolt meteen inzetbaar is — zelfde
+      // volgorde als simulateOneGame(), anders lopen tabblad en batch uiteen
+      const energyRoll = simRollEnergy(rand);
+      const energyGain = simGainEnergy(player, energyRoll);
+
+      // Herprioritering vóór de zet: het verandert waar je heen moet
+      let targetLabel = player.deck[player.nextIdx];
+      let usedAction = null;
+      if (player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
+        // energyReorderTarget() werkt op `order`; het tabblad noemt dat `deck`
+        const shim = { order: player.deck, nextIdx: player.nextIdx };
+        const swapped = energyReorderTarget(graph, shim, player.pos);
+        if (swapped !== null){
+          targetLabel = swapped;
+          player.energy -= ENERGY_ACTIONS.reorder.cost;
+          player.actionUses++;
+          usedAction = 'reorder';
+        }
+      }
       const targetKey = graph.questCells[targetLabel];
 
       // bord klaarzetten voor deze beurt: eigen voortgang, eigen doel, alle pionnen
@@ -372,12 +410,17 @@ async function runWalkSimulation(){
                        ENERGY_DIE_FACES[Math.floor(Math.random()*ENERGY_DIE_FACES.length)], true);
         await walkTick(90);
       }
+      // loopstenen, met de Stuwstoot als derde steen
       const d1 = simRollD6(rand), d2 = simRollD6(rand);
-      // energiesteen rolt in dezelfde volgorde mee als in de batch: eerst de loopstenen
-      const energyRoll = simRollEnergy(rand);
-      const energyGain = simGainEnergy(player, energyRoll);
-      renderWalkDice(d1, d2, energyRoll, false);
-      const roll = d1 + d2;
+      let d3 = null;
+      if (player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
+        d3 = simRollD6(rand);
+        player.energy -= ENERGY_ACTIONS.boost.cost;
+        player.actionUses++;
+        usedAction = 'boost';
+      }
+      renderWalkDice(d1, d2, energyRoll, false, d3);
+      const roll = d1 + d2 + (d3 || 0);
       if (aborted()) return;
       await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
@@ -387,19 +430,38 @@ async function runWalkSimulation(){
       const occupied = new Set();
       for (const other of players) if (other.idx !== pIdx && !walkIsIn(other)) occupied.add(other.pos);
 
-      const move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
-
-      // pad stap voor stap aflopen (path[0] is het vakje waar de pion al staat)
-      for (let i = 1; i < move.path.length; i++){
-        if (aborted()) return;
-        const leaving = walkCellDiv(graph, player.pos);
-        leaving.style.setProperty('--pc', player.color);
-        leaving.classList.add('walk-trail');
-        player.pos = move.path[i];
-        paintWalkPawns(graph, players, pIdx);
-        renderWalkMeta({ player, turn, stepsLeft: move.path.length - 1 - i });
-        await walkTick(walkSpeed().stepMs);
+      // pion langs een pad laten lopen; `jumpStyle` markeert het spoor van een Noodtransport
+      async function walkPath(path, jumpStyle){
+        for (let i = 1; i < path.length; i++){
+          if (aborted()) return false;
+          const leaving = walkCellDiv(graph, player.pos);
+          leaving.style.setProperty('--pc', player.color);
+          leaving.classList.add('walk-trail');
+          if (jumpStyle) leaving.classList.add('walk-jump');
+          player.pos = path[i];
+          paintWalkPawns(graph, players, pIdx);
+          renderWalkMeta({ player, turn, stepsLeft: path.length - 1 - i });
+          await walkTick(walkSpeed().stepMs);
+        }
+        return true;
       }
+
+      // Noodtransport mag tussentijds, dus vóór de zet — zelfde volgorde als de batch
+      let move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+      if (!move.bankedQuest && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
+        const jump = resolveEnergyJump(graph, player.pos, ENERGY_JUMP_RANGE, targetKey);
+        if (jump){
+          player.energy -= ENERGY_ACTIONS.jump.cost;
+          player.actionUses++;
+          usedAction = 'jump';
+          if (!await walkPath(jump.path, true)) return;
+          move = jump.banked
+            ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
+            : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
+        }
+      }
+
+      if (!await walkPath(move.path, false)) return;
 
       if (move.bankedQuest){
         player.completed++;
@@ -408,7 +470,7 @@ async function runWalkSimulation(){
         targetDiv.classList.remove('walk-target');
         targetDiv.classList.add('walk-done');
         const extra = move.stepsUsed < roll ? ` (na ${move.stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
-        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b>${walkEnergyNote(energyRoll, energyGain, player)} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
+        walkLog(`Beurt ${turn}: <b>${walkRollText(d1, d2, d3, roll)}</b>${walkEnergyNote(energyRoll, energyGain, player)}${walkActionNote(usedAction)} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
 
         if (player.completed >= SIM_QUESTS_TO_WIN){
           finished++;
@@ -426,7 +488,7 @@ async function runWalkSimulation(){
       } else {
         const blocked = move.wasBlocked ? ' · liep onderweg tegen een bezette route aan' : '';
         const extra = move.stepsUsed < roll ? ` — kon maar ${move.stepsUsed} stappen zetten (doodlopend)` : '';
-        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b>${walkEnergyNote(energyRoll, energyGain, player)} → onderweg naar ${targetLabel}${extra}${blocked}`, null, player);
+        walkLog(`Beurt ${turn}: <b>${walkRollText(d1, d2, d3, roll)}</b>${walkEnergyNote(energyRoll, energyGain, player)}${walkActionNote(usedAction)} → onderweg naar ${targetLabel}${extra}${blocked}`, null, player);
       }
       renderWalkScore(players, pIdx);
       renderWalkMeta({ player, turn });

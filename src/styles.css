@@ -264,6 +264,8 @@
     margin-left:10px;
   }
   .walk-die-sum.energy{color:var(--start);}
+  /* derde loopsteen van de Stuwstoot: zelfde witte steen, amberen rand als "die is gekocht" */
+  .walk-die.boost{box-shadow:0 2px 5px rgba(0,0,0,.45), 0 0 0 2px var(--amber);}
   .walk-meta{
     font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
     display:flex; flex-direction:column; gap:3px; line-height:1.5;
@@ -309,6 +311,10 @@
   .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
   .walk-player-goal .hit{color:var(--start);}
   .walk-player-goal .lost{color:var(--danger);}
+  .walk-player-strat{
+    flex:none; font-size:10px; letter-spacing:.04em; color:var(--text-dim);
+    border:1px solid var(--line-dim); border-radius:3px; padding:1px 5px; white-space:nowrap;
+  }
   .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
   .walk-player-energy.full{color:var(--amber); font-weight:700;}
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
@@ -395,6 +401,12 @@
   .walk-log b{color:var(--amber);}
   .walk-log .hit{color:var(--start);}
   .walk-log .energy{color:var(--start); opacity:.8;}
+  .walk-log .action{color:var(--amber); font-weight:700;}
+  /* route van een Noodtransport: zelfde spoor, maar gestippeld zodat je ziet dat het geen
+     gewone zet was */
+  .cell.walk-trail.walk-jump{
+    box-shadow:inset 0 0 0 1px #fff, 0 0 5px var(--pc, var(--amber)) !important;
+  }
   .walk-log-dot{
     width:7px; height:7px; border-radius:50%; background:var(--pc); display:inline-block;
     margin-right:7px; vertical-align:middle; flex:none;
