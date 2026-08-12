@@ -26,14 +26,18 @@
     --start-glow:#9bffc6;
     --danger:    #ff5d5d;
     --slot-empty:#0e1319;
+    /* achtergrond van de pagina (alleen body) — panelen blijven --hull */
+    --page:      #a81f5c;
+    --page-hi:   #c4306f;
+    --page-lo:   #8c1a4c;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0; overflow-x:hidden;}
   body{
     background:
-      radial-gradient(ellipse at 20% -10%, #16202b 0%, transparent 55%),
-      radial-gradient(ellipse at 100% 110%, #131a22 0%, transparent 50%),
-      var(--hull);
+      radial-gradient(ellipse at 20% -10%, var(--page-hi) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 110%, var(--page-lo) 0%, transparent 50%),
+      var(--page);
     color:var(--text);
     font-family:var(--font-display);
     min-height:100vh;
