@@ -207,6 +207,7 @@
     justify-content:flex-end; align-items:center; position:relative;
   }
   .sim-hist-bar{width:100%; background:var(--quest); border-radius:4px 4px 0 0; min-height:2px;}
+  .sim-hist-bar.energy{background:var(--start);}
   .sim-hist-tick{
     position:absolute; bottom:-16px; font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim);
   }
@@ -256,6 +257,13 @@
   .walk-die-sum{
     font-family:var(--font-mono); font-size:12.5px; color:var(--amber); letter-spacing:.04em;
   }
+  /* energiesteen: zelfde vorm, andere kleur, zodat je 'm niet voor een loopsteen aanziet */
+  .walk-die.energy{
+    background:linear-gradient(180deg,#3d6b52,#20402f); color:#c9ffdf;
+    box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 0 0 1px rgba(155,255,198,.35);
+    margin-left:10px;
+  }
+  .walk-die-sum.energy{color:var(--start);}
   .walk-meta{
     font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
     display:flex; flex-direction:column; gap:3px; line-height:1.5;
@@ -301,6 +309,8 @@
   .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
   .walk-player-goal .hit{color:var(--start);}
   .walk-player-goal .lost{color:var(--danger);}
+  .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
+  .walk-player-energy.full{color:var(--amber); font-weight:700;}
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
@@ -384,6 +394,7 @@
   .walk-log div{border-bottom:1px solid rgba(255,255,255,.04); padding:2px 0;}
   .walk-log b{color:var(--amber);}
   .walk-log .hit{color:var(--start);}
+  .walk-log .energy{color:var(--start); opacity:.8;}
   .walk-log-dot{
     width:7px; height:7px; border-radius:50%; background:var(--pc); display:inline-block;
     margin-right:7px; vertical-align:middle; flex:none;

@@ -24,6 +24,31 @@ function simFinishTarget(playerCount){ return Math.max(1, playerCount - 1); }
 const SIM_QUEST_LABELS = ['2.1','2.2','2.3','2.4','2.5','2.6','2.7','2.8','2.9'];
 const SIM_HISTOGRAM_BINS = 12;
 
+// ---------- energie ----------
+// Naast de twee loopstenen rolt elke beurt een derde, zeszijdige steen mee: één kant niks,
+// twee kanten 1, twee kanten 2 en één kant 3 — gemiddeld 1,5 energie per beurt. Wat je hebt
+// stapelt tot ENERGY_MAX; alles daarboven gaat verloren.
+//
+// UITGEVEN ZIT ER BEWUST NOG NIET IN. Energie verandert op dit moment dus niets aan het
+// spelverloop: het wordt alleen opgebouwd en gemeten, zodat je aan de cijfers kunt zien wat
+// een actie later mag kosten. Als het uitgeven erbij komt, is de afspraak: een speler zet in
+// zodra hij het kan betalen (ENERGY_SPEND_WHEN_AFFORDABLE), maximaal één keer per beurt.
+const ENERGY_DIE_FACES = [0, 1, 1, 2, 2, 3];
+const ENERGY_MAX = 10;
+const ENERGY_SPEND_WHEN_AFFORDABLE = true;   // beleid voor straks; nu nog ongebruikt
+
+function simRollEnergy(rand){
+  return ENERGY_DIE_FACES[Math.floor(rand() * ENERGY_DIE_FACES.length)];
+}
+// schrijft de winst bij tot het plafond en geeft terug wat er daadwerkelijk bijkwam en wat
+// er door het plafond verloren ging
+function simGainEnergy(player, roll){
+  const before = player.energy;
+  player.energy = Math.min(ENERGY_MAX, before + roll);
+  const gained = player.energy - before;
+  return { gained, wasted: roll - gained };
+}
+
 // Bordgrootte ligt vast (4x8 rijen, 5x8 kolommen); de dedup-buffer hieronder wordt
 // EENMALIG aangemaakt en over duizenden potjes heen hergebruikt via een oplopend
 // "stempel"-getal in plaats van steeds nieuwe typed arrays te alloceren — dat
@@ -234,6 +259,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     nextIdx: 0,
     completed: 0,
     turnsOnTarget: 0,
+    energy: 0,
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
@@ -250,6 +276,15 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
       const roll = simRollD6(rand) + simRollD6(rand);
+
+      // energiesteen rolt elke beurt mee. Het niveau wordt geteld NA het bijschrijven: dat is
+      // wat deze speler deze beurt zou kunnen inzetten zodra uitgeven bestaat.
+      const energyRoll = simRollEnergy(rand);
+      const energyGain = simGainEnergy(player, energyRoll);
+      extra.energyRolled += energyRoll;
+      extra.energyWasted += energyGain.wasted;
+      extra.energyLevels[player.energy]++;
+
       const occupied = new Set();
       for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
       const targetLabel = player.order[player.nextIdx];
@@ -521,6 +556,39 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
   html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${avgGap.toFixed(1)}</b> opdracht(en) achter — <b>${nailBiterPct.toFixed(0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${blockedPct.toFixed(1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
 
+  // ---------- energie ----------
+  // Zolang er niets uitgegeven wordt, is dit een nulmeting: hoeveel komt er binnen, hoe snel
+  // zit je aan het plafond en hoe vaak kun je een actie van N energie betalen. Precies de
+  // cijfers die je nodig hebt om te bepalen wat zo'n actie mag kosten.
+  const energyTurns = extra.energyLevels.reduce((a, b) => a + b, 0);
+  const energyAvg = energyTurns
+    ? extra.energyLevels.reduce((s, c, lvl) => s + c * lvl, 0) / energyTurns : 0;
+  const energyAtCap = energyTurns ? (extra.energyLevels[ENERGY_MAX] / energyTurns * 100) : 0;
+  const energyWastePct = extra.energyRolled ? (extra.energyWasted / extra.energyRolled * 100) : 0;
+  const energyPerTurn = energyTurns ? (extra.energyRolled / energyTurns) : 0;
+
+  // kans dat je aan het begin van een beurt minstens N energie hebt = kans dat je een actie
+  // van N kunt betalen
+  let atLeast = 0;
+  const affordRows = [];
+  for (let lvl = ENERGY_MAX; lvl >= 1; lvl--){
+    atLeast += extra.energyLevels[lvl];
+    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? (atLeast / energyTurns * 100).toFixed(1) : '0.0'}%</td></tr>`);
+  }
+  const maxLevel = Math.max(...extra.energyLevels);
+  const energyBars = Array.from(extra.energyLevels, (c, lvl) => {
+    const h = maxLevel ? Math.round((c / maxLevel) * 100) : 0;
+    const tick = (lvl % 2 === 0) ? `<span class="sim-hist-tick">${lvl}</span>` : '';
+    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? (c / energyTurns * 100).toFixed(1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
+  }).join('');
+
+  html += `<h3 class="sim-subhead">Energie</h3>`;
+  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Er wordt nog niets uitgegeven, dus dit is een nulmeting: energie verandert op dit moment niets aan het spelverloop.</p>`;
+  html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
+  html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
+  html += `<div class="sim-hist">${energyBars}</div>`;
+  html += `<table class="sim-table"><thead><tr><th>Kosten van een actie</th><th>Aandeel beurten waarin je 'm kunt betalen</th></tr></thead><tbody>${affordRows.join('')}</tbody></table>`;
+
   html += `<h3 class="sim-subhead">Drukte op het bord</h3>`;
   html += `<p class="hint">Hoe vaak elk vakje betreden werd over alle ${played} meegetelde potjes — laat bottleneck-gangen en nauwelijks gebruikte hoekjes zien.</p>`;
   html += renderHeatmap(graph, heatmap);
@@ -576,7 +644,11 @@ function runSimulationBatch(){
       const seatWins = [0, 0, 0, 0];
       const gameLengths = [];
       const heatmap = new Int32Array(graph.N);
-      const extra = { totalTurns: 0, blockedTurns: 0, winGapSum: 0, winGapCount: 0, nailBiters: 0 };
+      const extra = {
+        totalTurns: 0, blockedTurns: 0, winGapSum: 0, winGapCount: 0, nailBiters: 0,
+        energyRolled: 0, energyWasted: 0,
+        energyLevels: new Int32Array(ENERGY_MAX + 1),   // hoe vaak stond een speler op N energie
+      };
       let stuckCount = 0;
 
       for (let i = 0; i < n; i++){

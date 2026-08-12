@@ -144,6 +144,18 @@ Check minimaal:
    ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
    standenbalk telt mee en "Startpositie" is alleen te kiezen bij 1 speler.
 
+- **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
+  beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
+  gemiddeld 1,5 per beurt, en de voorraad stapelt tot `ENERGY_MAX` = 10.
+  **Uitgeven bestaat nog niet**, dus energie verandert op dit moment niets aan
+  het spelverloop — het wordt alleen opgebouwd en gemeten. Zonder uitgeven zit
+  een speler na ~7 eigen beurten aan het plafond en gaat ~77% van alle gerolde
+  energie verloren; dat cijfer is de maatstaf voor wat een actie mag kosten.
+  Komt het uitgeven erbij, dan is de afgesproken standaard: inzetten zodra je
+  het kunt betalen (`ENERGY_SPEND_WHEN_AFFORDABLE`), maximaal één keer per beurt.
+  Let op: de energiesteen trekt elke beurt een getal uit dezelfde `rand`-stroom,
+  dus dezelfde seed geeft een ander verloop dan vóór deze toevoeging.
+
 ## Nog te doen
 
 - Elke opdracht (2.1–2.9) heeft nu een naam (`QUEST_NAMES` in `10-rules.js`,

@@ -214,6 +214,7 @@
     justify-content:flex-end; align-items:center; position:relative;
   }
   .sim-hist-bar{width:100%; background:var(--quest); border-radius:4px 4px 0 0; min-height:2px;}
+  .sim-hist-bar.energy{background:var(--start);}
   .sim-hist-tick{
     position:absolute; bottom:-16px; font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim);
   }
@@ -263,6 +264,13 @@
   .walk-die-sum{
     font-family:var(--font-mono); font-size:12.5px; color:var(--amber); letter-spacing:.04em;
   }
+  /* energiesteen: zelfde vorm, andere kleur, zodat je 'm niet voor een loopsteen aanziet */
+  .walk-die.energy{
+    background:linear-gradient(180deg,#3d6b52,#20402f); color:#c9ffdf;
+    box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 0 0 1px rgba(155,255,198,.35);
+    margin-left:10px;
+  }
+  .walk-die-sum.energy{color:var(--start);}
   .walk-meta{
     font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
     display:flex; flex-direction:column; gap:3px; line-height:1.5;
@@ -308,6 +316,8 @@
   .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
   .walk-player-goal .hit{color:var(--start);}
   .walk-player-goal .lost{color:var(--danger);}
+  .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
+  .walk-player-energy.full{color:var(--amber); font-weight:700;}
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
@@ -391,6 +401,7 @@
   .walk-log div{border-bottom:1px solid rgba(255,255,255,.04); padding:2px 0;}
   .walk-log b{color:var(--amber);}
   .walk-log .hit{color:var(--start);}
+  .walk-log .energy{color:var(--start); opacity:.8;}
   .walk-log-dot{
     width:7px; height:7px; border-radius:50%; background:var(--pc); display:inline-block;
     margin-right:7px; vertical-align:middle; flex:none;
@@ -2564,6 +2575,31 @@ function simFinishTarget(playerCount){ return Math.max(1, playerCount - 1); }
 const SIM_QUEST_LABELS = ['2.1','2.2','2.3','2.4','2.5','2.6','2.7','2.8','2.9'];
 const SIM_HISTOGRAM_BINS = 12;
 
+// ---------- energie ----------
+// Naast de twee loopstenen rolt elke beurt een derde, zeszijdige steen mee: één kant niks,
+// twee kanten 1, twee kanten 2 en één kant 3 — gemiddeld 1,5 energie per beurt. Wat je hebt
+// stapelt tot ENERGY_MAX; alles daarboven gaat verloren.
+//
+// UITGEVEN ZIT ER BEWUST NOG NIET IN. Energie verandert op dit moment dus niets aan het
+// spelverloop: het wordt alleen opgebouwd en gemeten, zodat je aan de cijfers kunt zien wat
+// een actie later mag kosten. Als het uitgeven erbij komt, is de afspraak: een speler zet in
+// zodra hij het kan betalen (ENERGY_SPEND_WHEN_AFFORDABLE), maximaal één keer per beurt.
+const ENERGY_DIE_FACES = [0, 1, 1, 2, 2, 3];
+const ENERGY_MAX = 10;
+const ENERGY_SPEND_WHEN_AFFORDABLE = true;   // beleid voor straks; nu nog ongebruikt
+
+function simRollEnergy(rand){
+  return ENERGY_DIE_FACES[Math.floor(rand() * ENERGY_DIE_FACES.length)];
+}
+// schrijft de winst bij tot het plafond en geeft terug wat er daadwerkelijk bijkwam en wat
+// er door het plafond verloren ging
+function simGainEnergy(player, roll){
+  const before = player.energy;
+  player.energy = Math.min(ENERGY_MAX, before + roll);
+  const gained = player.energy - before;
+  return { gained, wasted: roll - gained };
+}
+
 // Bordgrootte ligt vast (4x8 rijen, 5x8 kolommen); de dedup-buffer hieronder wordt
 // EENMALIG aangemaakt en over duizenden potjes heen hergebruikt via een oplopend
 // "stempel"-getal in plaats van steeds nieuwe typed arrays te alloceren — dat
@@ -2774,6 +2810,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     nextIdx: 0,
     completed: 0,
     turnsOnTarget: 0,
+    energy: 0,
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
@@ -2790,6 +2827,15 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
       const roll = simRollD6(rand) + simRollD6(rand);
+
+      // energiesteen rolt elke beurt mee. Het niveau wordt geteld NA het bijschrijven: dat is
+      // wat deze speler deze beurt zou kunnen inzetten zodra uitgeven bestaat.
+      const energyRoll = simRollEnergy(rand);
+      const energyGain = simGainEnergy(player, energyRoll);
+      extra.energyRolled += energyRoll;
+      extra.energyWasted += energyGain.wasted;
+      extra.energyLevels[player.energy]++;
+
       const occupied = new Set();
       for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
       const targetLabel = player.order[player.nextIdx];
@@ -3061,6 +3107,39 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
   html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${avgGap.toFixed(1)}</b> opdracht(en) achter — <b>${nailBiterPct.toFixed(0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${blockedPct.toFixed(1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
 
+  // ---------- energie ----------
+  // Zolang er niets uitgegeven wordt, is dit een nulmeting: hoeveel komt er binnen, hoe snel
+  // zit je aan het plafond en hoe vaak kun je een actie van N energie betalen. Precies de
+  // cijfers die je nodig hebt om te bepalen wat zo'n actie mag kosten.
+  const energyTurns = extra.energyLevels.reduce((a, b) => a + b, 0);
+  const energyAvg = energyTurns
+    ? extra.energyLevels.reduce((s, c, lvl) => s + c * lvl, 0) / energyTurns : 0;
+  const energyAtCap = energyTurns ? (extra.energyLevels[ENERGY_MAX] / energyTurns * 100) : 0;
+  const energyWastePct = extra.energyRolled ? (extra.energyWasted / extra.energyRolled * 100) : 0;
+  const energyPerTurn = energyTurns ? (extra.energyRolled / energyTurns) : 0;
+
+  // kans dat je aan het begin van een beurt minstens N energie hebt = kans dat je een actie
+  // van N kunt betalen
+  let atLeast = 0;
+  const affordRows = [];
+  for (let lvl = ENERGY_MAX; lvl >= 1; lvl--){
+    atLeast += extra.energyLevels[lvl];
+    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? (atLeast / energyTurns * 100).toFixed(1) : '0.0'}%</td></tr>`);
+  }
+  const maxLevel = Math.max(...extra.energyLevels);
+  const energyBars = Array.from(extra.energyLevels, (c, lvl) => {
+    const h = maxLevel ? Math.round((c / maxLevel) * 100) : 0;
+    const tick = (lvl % 2 === 0) ? `<span class="sim-hist-tick">${lvl}</span>` : '';
+    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? (c / energyTurns * 100).toFixed(1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
+  }).join('');
+
+  html += `<h3 class="sim-subhead">Energie</h3>`;
+  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Er wordt nog niets uitgegeven, dus dit is een nulmeting: energie verandert op dit moment niets aan het spelverloop.</p>`;
+  html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
+  html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
+  html += `<div class="sim-hist">${energyBars}</div>`;
+  html += `<table class="sim-table"><thead><tr><th>Kosten van een actie</th><th>Aandeel beurten waarin je 'm kunt betalen</th></tr></thead><tbody>${affordRows.join('')}</tbody></table>`;
+
   html += `<h3 class="sim-subhead">Drukte op het bord</h3>`;
   html += `<p class="hint">Hoe vaak elk vakje betreden werd over alle ${played} meegetelde potjes — laat bottleneck-gangen en nauwelijks gebruikte hoekjes zien.</p>`;
   html += renderHeatmap(graph, heatmap);
@@ -3116,7 +3195,11 @@ function runSimulationBatch(){
       const seatWins = [0, 0, 0, 0];
       const gameLengths = [];
       const heatmap = new Int32Array(graph.N);
-      const extra = { totalTurns: 0, blockedTurns: 0, winGapSum: 0, winGapCount: 0, nailBiters: 0 };
+      const extra = {
+        totalTurns: 0, blockedTurns: 0, winGapSum: 0, winGapCount: 0, nailBiters: 0,
+        energyRolled: 0, energyWasted: 0,
+        energyLevels: new Int32Array(ENERGY_MAX + 1),   // hoe vaak stond een speler op N energie
+      };
       let stuckCount = 0;
 
       for (let i = 0; i < n; i++){
@@ -3291,10 +3374,14 @@ function paintWalkPawns(graph, players, activeIdx){
 }
 
 // ---------- HUD ----------
-function renderWalkDice(a, b, rolling){
+// twee loopstenen plus de energiesteen; `e` is de energiekant (0 = niks)
+function renderWalkDice(a, b, e, rolling){
   const cls = 'walk-die' + (rolling ? ' rolling' : '');
   const sum = rolling ? '' : `<span class="walk-die-sum">= ${a + b} stappen</span>`;
-  walkDiceEl.innerHTML = `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${sum}`;
+  const energy = rolling ? '' : `<span class="walk-die-sum energy">+${e} energie</span>`;
+  walkDiceEl.innerHTML =
+    `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${sum}` +
+    `<span class="${cls} energy">${e === 0 && !rolling ? '–' : e}</span>${energy}`;
 }
 
 function renderWalkMeta({ player, turn, stepsLeft }){
@@ -3316,6 +3403,15 @@ function renderWalkMeta({ player, turn, stepsLeft }){
 // stand van alle spelers naast elkaar — met meerdere pionnen op het bord is dit de plek
 // waar je ziet wie waar naartoe wil en wie voorstaat
 function walkRankLabel(rank){ return rank ? `${rank}e` : '—'; }
+
+// wat de energiesteen deze beurt opleverde; meldt ook wanneer het plafond energie opslokt,
+// want dat is precies het cijfer waar de kosten van een toekomstige actie op afgestemd worden
+function walkEnergyNote(roll, gain, player){
+  if (roll === 0) return ` <span class="energy">⚡0</span>`;
+  if (gain.gained === 0) return ` <span class="energy">⚡vol — ${roll} verloren</span>`;
+  const lost = gain.wasted ? `, ${gain.wasted} verloren` : '';
+  return ` <span class="energy">⚡+${gain.gained} → ${player.energy}${lost}</span>`;
+}
 // Alleen wie zijn 6 opdrachten rond heeft is écht binnen en verlaat het bord. De laatste
 // speler krijgt zijn plaats toebedeeld omdat het potje stopt, niet omdat hij binnenkwam.
 function walkIsIn(p){ return p.completed >= SIM_QUESTS_TO_WIN; }
@@ -3334,6 +3430,7 @@ function renderWalkScore(players, activeIdx){
       `<span class="walk-player-dot"></span>` +
       `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
       `<span class="walk-player-goal">${goal}</span>` +
+      `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
       `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
     `</div>`;
   }).join('');
@@ -3443,6 +3540,7 @@ async function runWalkSimulation(){
     deck: simShuffle(SIM_QUEST_LABELS, rand),
     nextIdx: 0,
     completed: 0,
+    energy: 0,
     rank: 0,                // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     doneCells: [],          // opdrachtvakjes die DEZE speler al gehad heeft
   }));
@@ -3497,11 +3595,15 @@ async function runWalkSimulation(){
       const shakeSteps = Math.round(walkSpeed().rollMs / 90);
       for (let i = 0; i < shakeSteps; i++){
         if (aborted()) return;
-        renderWalkDice(1 + Math.floor(Math.random()*6), 1 + Math.floor(Math.random()*6), true);
+        renderWalkDice(1 + Math.floor(Math.random()*6), 1 + Math.floor(Math.random()*6),
+                       ENERGY_DIE_FACES[Math.floor(Math.random()*ENERGY_DIE_FACES.length)], true);
         await walkTick(90);
       }
       const d1 = simRollD6(rand), d2 = simRollD6(rand);
-      renderWalkDice(d1, d2, false);
+      // energiesteen rolt in dezelfde volgorde mee als in de batch: eerst de loopstenen
+      const energyRoll = simRollEnergy(rand);
+      const energyGain = simGainEnergy(player, energyRoll);
+      renderWalkDice(d1, d2, energyRoll, false);
       const roll = d1 + d2;
       if (aborted()) return;
       await walkTick(Math.min(500, walkSpeed().rollMs));
@@ -3533,7 +3635,7 @@ async function runWalkSimulation(){
         targetDiv.classList.remove('walk-target');
         targetDiv.classList.add('walk-done');
         const extra = move.stepsUsed < roll ? ` (na ${move.stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
-        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b> → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
+        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b>${walkEnergyNote(energyRoll, energyGain, player)} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
 
         if (player.completed >= SIM_QUESTS_TO_WIN){
           finished++;
@@ -3551,7 +3653,7 @@ async function runWalkSimulation(){
       } else {
         const blocked = move.wasBlocked ? ' · liep onderweg tegen een bezette route aan' : '';
         const extra = move.stepsUsed < roll ? ` — kon maar ${move.stepsUsed} stappen zetten (doodlopend)` : '';
-        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b> → onderweg naar ${targetLabel}${extra}${blocked}`, null, player);
+        walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b>${walkEnergyNote(energyRoll, energyGain, player)} → onderweg naar ${targetLabel}${extra}${blocked}`, null, player);
       }
       renderWalkScore(players, pIdx);
       renderWalkMeta({ player, turn });
