@@ -576,7 +576,6 @@
     <div class="status">
       <div><span class="dot"></span>SYSTEEM ACTIEF</div>
       <div>SEED: <b id="statSeed">—</b></div>
-      <div>VELDEN GEDEKT: <b id="statCells">529</b> / 529</div>
     </div>
   </header>
 
@@ -943,7 +942,6 @@ const paletteCorrEl  = document.getElementById('paletteCorridors');
 const seedInput = document.getElementById('seedInput');
 const layoutCodeEl = document.getElementById('layoutCode');
 const statSeed = document.getElementById('statSeed');
-const statCells = document.getElementById('statCells');
 const swapHint = document.getElementById('swapHint');
 
 function cellType(v){
@@ -1177,7 +1175,6 @@ function buildBoardSkeleton(){
 let cellEls = buildBoardSkeleton();
 
 function renderBoard(){
-  let filledCount = 0;
   // reset alles, ook de niet-patroon cellen (die dragen nu het 8x8 selectiekader)
   for (let R=0; R<TILE_ROWS*TILE_H; R++){
     for (let C=0; C<TILE_COLS*TILE_W; C++){
@@ -1199,7 +1196,6 @@ function renderBoard(){
       if (type){
         div.classList.add(type);
         if (type === 'walk' && ROOM_NAMES[tileId]) div.classList.add('room-tile');
-        filledCount++;
       }
       else if (patternSet.has(dr+'_'+dc)){ div.classList.add('empty-slot'); }
       if (highlightTile !== null && tileId === highlightTile) div.classList.add('slot-hover');
@@ -1225,7 +1221,6 @@ function renderBoard(){
         okDrop ? '0 0 9px rgba(85,214,138,.6)' : '0 0 9px rgba(255,93,93,.6)');
     }
   }
-  statCells.textContent = filledCount;
   layoutCodeEl.textContent = layout.join(',');
 
   // naad-markeringen

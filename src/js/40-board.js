@@ -83,7 +83,6 @@ function buildBoardSkeleton(){
 let cellEls = buildBoardSkeleton();
 
 function renderBoard(){
-  let filledCount = 0;
   // reset alles, ook de niet-patroon cellen (die dragen nu het 8x8 selectiekader)
   for (let R=0; R<TILE_ROWS*TILE_H; R++){
     for (let C=0; C<TILE_COLS*TILE_W; C++){
@@ -105,7 +104,6 @@ function renderBoard(){
       if (type){
         div.classList.add(type);
         if (type === 'walk' && ROOM_NAMES[tileId]) div.classList.add('room-tile');
-        filledCount++;
       }
       else if (patternSet.has(dr+'_'+dc)){ div.classList.add('empty-slot'); }
       if (highlightTile !== null && tileId === highlightTile) div.classList.add('slot-hover');
@@ -131,7 +129,6 @@ function renderBoard(){
         okDrop ? '0 0 9px rgba(85,214,138,.6)' : '0 0 9px rgba(255,93,93,.6)');
     }
   }
-  statCells.textContent = filledCount;
   layoutCodeEl.textContent = layout.join(',');
 
   // naad-markeringen

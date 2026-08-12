@@ -143,7 +143,6 @@ const paletteCorrEl  = document.getElementById('paletteCorridors');
 const seedInput = document.getElementById('seedInput');
 const layoutCodeEl = document.getElementById('layoutCode');
 const statSeed = document.getElementById('statSeed');
-const statCells = document.getElementById('statCells');
 const swapHint = document.getElementById('swapHint');
 
 function cellType(v){
