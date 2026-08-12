@@ -6,12 +6,21 @@
 // Elke speler heeft een eigen geschud stapeltje opdrachten 1-9 (labels 2.1..2.9);
 // wie als eerste 6 opdrachten voltooit wint.
 //
+// Er wordt DOORGESPEELD na de winnaar, om ook plaats 2 en 3 uit te spelen. Wie binnen
+// is stopt met spelen en verdwijnt van het bord (blokkeert dus ook niemand meer). Zodra
+// de nummer 3 binnen is stopt het potje: de laatste speler is dan automatisch vierde en
+// er valt niets meer te beslissen.
+//
 // Cellen worden als vlakke index (R*W+C) gebruikt en de buren-adjacency wordt één
 // keer per run vooraf berekend (niet per stap opnieuw) — dat is waar bij duizenden
 // potjes de tijd in gaat zitten, dus dat blijft hier bewust plat en allocatie-arm.
-const SIM_MAX_TURNS = 500;
+const SIM_MAX_TURNS = 900;
 const SIM_QUESTS_TO_WIN = 6;
 const SIM_START_LABELS = ['3.1', '3.2', '3.3', '3.4'];
+// zoveel spelers moeten binnen zijn voordat het potje klaar is; de rest ligt daarmee vast.
+// Bij 4 spelers dus 3. Ook bruikbaar voor de kleinere bezettingen van "stap voor stap":
+// met 2 spelers is de nummer 2 al bekend zodra de winnaar binnen is.
+function simFinishTarget(playerCount){ return Math.max(1, playerCount - 1); }
 const SIM_QUEST_LABELS = ['2.1','2.2','2.3','2.4','2.5','2.6','2.7','2.8','2.9'];
 const SIM_HISTOGRAM_BINS = 12;
 
@@ -217,24 +226,32 @@ function simRollD6(rand){ return 1 + Math.floor(rand() * 6); }
 // voorsprong bij winst) — allemaal gedeeld over de hele batch, dus geen allocatie
 // per potje nodig.
 function simulateOneGame(graph, rand, heatmap, questStats, extra){
-  const players = SIM_START_LABELS.map(label => ({
+  const players = SIM_START_LABELS.map((label, idx) => ({
+    idx,
     startLabel: label,
     pos: graph.startCells[label],
     order: simShuffle(SIM_QUEST_LABELS, rand),
     nextIdx: 0,
     completed: 0,
     turnsOnTarget: 0,
+    rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
+    finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
   const turnOrder = simShuffle([0, 1, 2, 3], rand);
+  for (let s = 0; s < turnOrder.length; s++) players[turnOrder[s]].seat = s;
+
+  const finishTarget = simFinishTarget(players.length);
+  let finished = 0;
   let turnCount = 0;
 
   while (turnCount < SIM_MAX_TURNS){
     for (const pIdx of turnOrder){
-      turnCount++;
       const player = players[pIdx];
+      if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
+      turnCount++;
       const roll = simRollD6(rand) + simRollD6(rand);
       const occupied = new Set();
-      for (let j = 0; j < 4; j++) if (j !== pIdx) occupied.add(players[j].pos);
+      for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
       const targetLabel = player.order[player.nextIdx];
       const targetKey = graph.questCells[targetLabel];
 
@@ -253,19 +270,29 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         player.nextIdx++;
         player.turnsOnTarget = 0;
         if (player.completed >= SIM_QUESTS_TO_WIN){
-          let runnerUp = 0;
-          for (let j = 0; j < 4; j++) if (j !== pIdx) runnerUp = Math.max(runnerUp, players[j].completed);
-          const gap = SIM_QUESTS_TO_WIN - runnerUp;
-          extra.winGapSum += gap;
-          extra.winGapCount++;
-          if (gap === 1) extra.nailBiters++;
-          return { stuck: false, startLabel: player.startLabel, seatOrder: turnOrder.indexOf(pIdx), turns: turnCount };
+          finished++;
+          player.rank = finished;
+          player.finishTurn = turnCount;
+          if (finished === 1){
+            // spanning meten op het moment van de winst, niet aan het eind van het potje
+            let runnerUp = 0;
+            for (let j = 0; j < 4; j++) if (j !== pIdx) runnerUp = Math.max(runnerUp, players[j].completed);
+            const gap = SIM_QUESTS_TO_WIN - runnerUp;
+            extra.winGapSum += gap;
+            extra.winGapCount++;
+            if (gap === 1) extra.nailBiters++;
+          }
+          if (finished >= finishTarget){
+            // de achterblijver(s) hebben verloren zonder dat ze nog iets kunnen doen
+            for (const p of players) if (!p.rank) p.rank = finished + 1;
+            return { stuck: false, turns: turnCount, players };
+          }
         }
       }
-      if (turnCount >= SIM_MAX_TURNS) return { stuck: true, turns: turnCount };
+      if (turnCount >= SIM_MAX_TURNS) return { stuck: true, turns: turnCount, players };
     }
   }
-  return { stuck: true, turns: turnCount };
+  return { stuck: true, turns: turnCount, players };
 }
 
 // ---------- UI ----------
@@ -417,7 +444,7 @@ function renderHeatmap(graph, heatmap){
     </div>`;
 }
 
-function renderSimResults({ n, stuckCount, startWins, startTurnsSum, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs }){
+function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs }){
   const played = n - stuckCount;
 
   const startPcts = SIM_START_LABELS.map(lbl => played ? (startWins[lbl] / played * 100) : 0);
@@ -466,6 +493,20 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, seatWins, g
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>Winst% (±95%-marge)</th><th>Gem. beurten tot winst</th></tr></thead><tbody>${rows}</tbody></table>`;
   html += `<p class="hint">Balans: ${verdict} (spreiding <b>${spread.toFixed(1)}</b> procentpunt, gem. foutmarge ±<b>${avgMoe.toFixed(1)}</b>).</p>`;
 
+  // Nu er wordt doorgespeeld tot de nummer 3 binnen is, ligt van elk potje de hele
+  // klassering vast. Alleen naar winst kijken verbergt een startpositie die zelden wint
+  // maar wel structureel derde of vierde wordt.
+  const rankRows = SIM_START_LABELS.map(lbl => {
+    const counts = startRanks[lbl];
+    const total = counts.reduce((a, b) => a + b, 0);
+    const cells = counts.map(c => `<td class="num">${total ? (c / total * 100).toFixed(1) : '0.0'}%</td>`).join('');
+    const avgRank = total ? counts.reduce((s, c, i) => s + c * (i + 1), 0) / total : 0;
+    return `<tr><td>${lbl}</td>${cells}<td class="num">${avgRank.toFixed(2)}</td></tr>`;
+  }).join('');
+  html += `<h3 class="sim-subhead">Eindklassering per startpositie</h3>`;
+  html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>1e</th><th>2e</th><th>3e</th><th>4e</th><th>Gem. plaats</th></tr></thead><tbody>${rankRows}</tbody></table>`;
+  html += `<p class="hint">Er wordt doorgespeeld tot de <b>nummer 3</b> binnen is; de laatste speler is dan automatisch vierde. Bij een eerlijk bord ligt elke kolom rond de 25% en de gemiddelde plaats rond de 2,50.</p>`;
+
   html += `<h3 class="sim-subhead">Eerlijkheid per beurtvolgorde</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Beurtvolgorde</th><th>Winst%</th></tr></thead><tbody>${seatRows}</tbody></table>`;
 
@@ -474,7 +515,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, seatWins, g
   html += `<p class="hint">Hoe hoger het gemiddelde, hoe afgelegener dat opdrachtvakje ligt vanaf waar spelers 'm meestal moeten benaderen.</p>`;
 
   html += `<h3 class="sim-subhead">Speelduur</h3>`;
-  html += `<p class="hint">Gemiddeld <b>${avg.toFixed(1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen).</p>`;
+  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${avg.toFixed(1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
   html += renderHistogram(gameLengths);
 
   html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
@@ -524,8 +565,12 @@ function runSimulationBatch(){
       const rand = mulberry32(Math.floor(Math.random() * 4294967296));
       const t0 = performance.now();
 
-      const startWins = {}, startTurnsSum = {};
-      for (const lbl of SIM_START_LABELS){ startWins[lbl] = 0; startTurnsSum[lbl] = 0; }
+      const startWins = {}, startTurnsSum = {}, startRanks = {};
+      for (const lbl of SIM_START_LABELS){
+        startWins[lbl] = 0;
+        startTurnsSum[lbl] = 0;
+        startRanks[lbl] = [0, 0, 0, 0];   // hoe vaak deze startpositie 1e/2e/3e/4e werd
+      }
       const questStats = {};
       for (const lbl of SIM_QUEST_LABELS) questStats[lbl] = { turns: 0, count: 0 };
       const seatWins = [0, 0, 0, 0];
@@ -537,14 +582,16 @@ function runSimulationBatch(){
       for (let i = 0; i < n; i++){
         const result = simulateOneGame(graph, rand, heatmap, questStats, extra);
         if (result.stuck){ stuckCount++; continue; }
-        startWins[result.startLabel]++;
-        startTurnsSum[result.startLabel] += result.turns;
-        seatWins[result.seatOrder]++;
+        for (const p of result.players) startRanks[p.startLabel][p.rank - 1]++;
+        const winner = result.players.find(p => p.rank === 1);
+        startWins[winner.startLabel]++;
+        startTurnsSum[winner.startLabel] += winner.finishTurn;
+        seatWins[winner.seat]++;
         gameLengths.push(result.turns);
       }
 
       const elapsedMs = performance.now() - t0;
-      renderSimResults({ n, stuckCount, startWins, startTurnsSum, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs });
+      renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs });
     } catch (err){
       simStatusEl.innerHTML = `<span class="bad">✕ Simulatie mislukt: ${err.message}</span>`;
     }

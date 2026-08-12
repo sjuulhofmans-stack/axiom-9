@@ -3,8 +3,12 @@
 // 95-simulate.js (buildSimGraph + resolveMove), zodat de regels hier per definitie dezelfde
 // zijn als in de batch-simulatie: 2xD6 = exact aantal stappen, geen U-turn, bezette vakjes
 // blokkeren, en je stopt zodra je je eigen opdrachtvakje raakt (rest van de worp vervalt).
-// Met meerdere spelers is de "bezette vakjes"-set precies de posities van de andere pionnen,
-// net als in simulateOneGame(); met één speler is die set leeg.
+// Met meerdere spelers is de "bezette vakjes"-set precies de posities van de andere pionnen
+// die nog meespelen, net als in simulateOneGame(); met één speler is die set leeg.
+//
+// Er wordt doorgespeeld na de winnaar: wie binnen is verlaat het bord en het potje loopt
+// door tot simFinishTarget() spelers binnen zijn (bij 4 spelers de nummer 3, want dan is de
+// vierde plaats al beslist).
 
 // tempo-standen voor de schuifregelaar: ms per gezette stap
 const WALK_SPEEDS = [
@@ -133,6 +137,7 @@ function paintWalkPawns(graph, players, activeIdx){
   for (const el of walkPaintedPawns) el.classList.remove('walk-pawn', 'walk-pawn-active');
   walkPaintedPawns = [];
   for (const p of players){
+    if (walkIsIn(p)) continue;   // binnen: pion is van het bord
     const el = walkCellDiv(graph, p.pos);
     el.style.setProperty('--pawn', p.color);
     el.classList.add('walk-pawn');
@@ -151,9 +156,13 @@ function renderWalkDice(a, b, rolling){
 function renderWalkMeta({ player, turn, stepsLeft }){
   if (!player){ walkMetaEl.innerHTML = ''; return; }
   const targetLabel = player.deck[player.nextIdx];
-  const goal = targetLabel
-    ? `<span class="goal">${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}</span>`
-    : '—';
+  const goal = player.rank
+    ? walkIsIn(player)
+      ? `<span class="hit">binnen als ${walkRankLabel(player.rank)}</span>`
+      : `<span class="lost">verloren — ${walkRankLabel(player.rank)}</span>`
+    : targetLabel
+      ? `<span class="goal">${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}</span>`
+      : '—';
   walkMetaEl.innerHTML =
     `<span>Beurt <b>${turn}</b> · aan zet: <b class="walk-active-name" style="--pc:${player.color}">${player.name}</b> (start ${player.startLabel})</span>` +
     `<span>Doel: ${goal}</span>` +
@@ -162,14 +171,22 @@ function renderWalkMeta({ player, turn, stepsLeft }){
 
 // stand van alle spelers naast elkaar — met meerdere pionnen op het bord is dit de plek
 // waar je ziet wie waar naartoe wil en wie voorstaat
+function walkRankLabel(rank){ return rank ? `${rank}e` : '—'; }
+// Alleen wie zijn 6 opdrachten rond heeft is écht binnen en verlaat het bord. De laatste
+// speler krijgt zijn plaats toebedeeld omdat het potje stopt, niet omdat hij binnenkwam.
+function walkIsIn(p){ return p.completed >= SIM_QUESTS_TO_WIN; }
+
 function renderWalkScore(players, activeIdx){
   if (!walkScoreEl) return;
   walkScoreEl.innerHTML = players.map(p => {
     const targetLabel = p.deck[p.nextIdx];
-    const goal = p.completed >= SIM_QUESTS_TO_WIN
-      ? '<span class="hit">gewonnen</span>'
+    const goal = p.rank
+      ? walkIsIn(p)
+        ? `<span class="hit">binnen — ${walkRankLabel(p.rank)}</span>`
+        : `<span class="lost">verloren — ${walkRankLabel(p.rank)}</span>`
       : `${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}`;
-    return `<div class="walk-player${p.idx === activeIdx ? ' active' : ''}" style="--pc:${p.color}">` +
+    const cls = 'walk-player' + (p.idx === activeIdx ? ' active' : '') + (p.rank ? ' done' : '');
+    return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-dot"></span>` +
       `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
       `<span class="walk-player-goal">${goal}</span>` +
@@ -227,10 +244,15 @@ function refreshWalkStartOptions(){
   walkStartSel.value = SIM_START_LABELS.includes(prev) || prev === '?' ? prev : '?';
 }
 
-// eindstand, gesorteerd op voltooide opdrachten
+// eindklassering: eerst wie binnen is op volgorde van binnenkomst, daarna de rest op
+// aantal voltooide opdrachten
 function walkStandings(players){
-  return players.slice().sort((a, b) => b.completed - a.completed)
-    .map(p => `<span class="walk-standing" style="--pc:${p.color}"><i class="walk-log-dot" style="--pc:${p.color}"></i>${p.name} ${p.completed}/${SIM_QUESTS_TO_WIN}</span>`)
+  return players.slice()
+    .sort((a, b) => (a.rank || 99) - (b.rank || 99) || b.completed - a.completed)
+    .map(p => {
+      const place = p.rank ? `${walkRankLabel(p.rank)} ` : '';
+      return `<span class="walk-standing" style="--pc:${p.color}"><i class="walk-log-dot" style="--pc:${p.color}"></i>${place}${p.name} ${p.completed}/${SIM_QUESTS_TO_WIN}</span>`;
+    })
     .join('');
 }
 
@@ -277,16 +299,21 @@ async function runWalkSimulation(){
     deck: simShuffle(SIM_QUEST_LABELS, rand),
     nextIdx: 0,
     completed: 0,
+    rank: 0,                // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     doneCells: [],          // opdrachtvakjes die DEZE speler al gehad heeft
   }));
   // beurtvolgorde geloot, net als in simulateOneGame()
   const turnOrder = simShuffle(players.map(p => p.idx), rand);
+  const finishTarget = simFinishTarget(playerCount);
 
   for (const p of players){
     walkLog(`${p.name} start op <b>${p.startLabel}</b> · stapel: ${p.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, p);
   }
   if (playerCount > 1){
     walkLog(`Beurtvolgorde: ${turnOrder.map(i => players[i].name).join(' → ')}.`);
+    walkLog(playerCount === 2
+      ? `Er wordt gespeeld tot de winnaar binnen is — de ander is dan tweede.`
+      : `Er wordt doorgespeeld tot de <b>${finishTarget}e</b> binnen is; de laatste speler is dan automatisch ${playerCount}e.`);
   }
 
   renderWalkScore(players, turnOrder[0]);
@@ -294,15 +321,18 @@ async function runWalkSimulation(){
   paintWalkPawns(graph, players, turnOrder[0]);
 
   let turn = 0;
-  let winner = null;
+  let finished = 0;
+  let gameOver = false;
 
-  while (turn < SIM_MAX_TURNS && !winner){
+  while (turn < SIM_MAX_TURNS && !gameOver){
     for (const pIdx of turnOrder){
-      if (winner || turn >= SIM_MAX_TURNS) break;
+      if (gameOver || turn >= SIM_MAX_TURNS) break;
       if (aborted()) return;
-      turn++;
 
       const player = players[pIdx];
+      if (player.rank) continue;   // binnen: speelt niet meer mee
+      turn++;
+
       const targetLabel = player.deck[player.nextIdx];
       const targetKey = graph.questCells[targetLabel];
 
@@ -333,9 +363,10 @@ async function runWalkSimulation(){
       await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
 
-      // andere pionnen blokkeren, precies zoals in de batch-simulatie
+      // andere pionnen blokkeren, precies zoals in de batch-simulatie; wie binnen is
+      // staat niet meer op het bord en blokkeert dus ook niets
       const occupied = new Set();
-      for (const other of players) if (other.idx !== pIdx) occupied.add(other.pos);
+      for (const other of players) if (other.idx !== pIdx && !walkIsIn(other)) occupied.add(other.pos);
 
       const move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
 
@@ -359,7 +390,20 @@ async function runWalkSimulation(){
         targetDiv.classList.add('walk-done');
         const extra = move.stepsUsed < roll ? ` (na ${move.stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
         walkLog(`Beurt ${turn}: <b>${d1}+${d2}=${roll}</b> → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
-        if (player.completed >= SIM_QUESTS_TO_WIN) winner = player;
+
+        if (player.completed >= SIM_QUESTS_TO_WIN){
+          finished++;
+          player.rank = finished;
+          player.finishTurn = turn;
+          walkClearClass('walk-target');
+          walkLog(`<b>${player.name} is binnen als ${walkRankLabel(player.rank)}</b> (beurt ${turn}) en verlaat het bord.`, 'hit', player);
+          if (finished >= finishTarget){
+            // de achterblijver(s) kunnen niets meer bereiken: plaats staat vast
+            for (const p of players) if (!p.rank) p.rank = finished + 1;
+            gameOver = true;
+          }
+          paintWalkPawns(graph, players, pIdx);
+        }
       } else {
         const blocked = move.wasBlocked ? ' · liep onderweg tegen een bezette route aan' : '';
         const extra = move.stepsUsed < roll ? ` — kon maar ${move.stepsUsed} stappen zetten (doodlopend)` : '';
@@ -372,11 +416,13 @@ async function runWalkSimulation(){
 
   if (aborted()) return;
   walkClearClass('walk-target');
-  if (winner){
-    const standings = playerCount > 1 ? ` Eindstand: ${walkStandings(players)}` : '';
-    walkStatusEl.innerHTML = `<span class="ok">✓ ${winner.name} wint vanaf ${winner.startLabel} in ${turn} beurten — ${SIM_QUESTS_TO_WIN} opdrachten voltooid.</span>${standings}`;
+  walkClearClass('walk-trail');
+  const winner = players.find(p => p.rank === 1);
+  if (gameOver && winner){
+    const standings = playerCount > 1 ? `<span class="walk-standings-row">Eindklassering: ${walkStandings(players)}</span>` : '';
+    walkStatusEl.innerHTML = `<span class="ok">✓ ${winner.name} wint vanaf ${winner.startLabel} in ${winner.finishTurn} beurten — potje uitgespeeld in ${turn} beurten.</span>${standings}`;
   } else {
-    walkStatusEl.innerHTML = `<span class="bad">✕ Afgekapt na ${SIM_MAX_TURNS} beurten zonder winst.</span> ${walkStandings(players)}`;
+    walkStatusEl.innerHTML = `<span class="bad">✕ Afgekapt na ${SIM_MAX_TURNS} beurten — niet iedereen was binnen.</span><span class="walk-standings-row">${walkStandings(players)}</span>`;
   }
   setWalkRunning(false);
 }

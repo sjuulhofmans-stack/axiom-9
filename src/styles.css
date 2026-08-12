@@ -300,11 +300,18 @@
   .walk-player-name .sub{color:var(--text-dim);}
   .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
   .walk-player-goal .hit{color:var(--start);}
+  .walk-player-goal .lost{color:var(--danger);}
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
+  /* speler die binnen is: van het bord af, dus gedempt weergeven */
+  .walk-player.done{border-left-color:var(--start); opacity:.62;}
+  .walk-meta .hit{color:var(--start);}
+  .walk-meta .lost{color:var(--danger);}
+  .walk-standings-row{display:flex; flex-wrap:wrap; gap:4px 0; margin-top:2px;}
   .walk-standing{
     display:inline-flex; align-items:center; gap:5px; margin-left:10px;
     font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
   }
+  .walk-standing:first-child{margin-left:0;}
 
   #walkBoard{
     --cell: 19px;

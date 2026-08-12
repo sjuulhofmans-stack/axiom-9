@@ -97,6 +97,15 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   en vervalt de rest. Elke speler heeft een eigen geschud stapeltje opdrachten
   1–9 (labels `2.1`–`2.9`); wie als eerste 6 opdrachten voltooit wint. Draait
   altijd op de indeling die op dat moment in de tool staat.
+- **Er wordt doorgespeeld na de winnaar**, zodat ook plaats 2 en 3 uitgespeeld
+  worden. Wie binnen is stopt met spelen en verdwijnt van het bord — hij
+  blokkeert dus niemand meer. Het potje eindigt zodra `simFinishTarget()`
+  spelers binnen zijn: bij 4 spelers is dat de **nummer 3**, want daarmee is de
+  vierde plaats al beslist en kan die speler niets meer veranderen. De formule
+  is `max(1, aantal spelers - 1)`, zodat "stap voor stap" met 2 of 3 spelers
+  hetzelfde principe volgt. `SIM_MAX_TURNS` staat daarom op 900 (was 500): een
+  potje duurt nu ~115 beurten in plaats van ~90, en die marge houdt het aantal
+  vastgelopen potjes op 0.
 - Stap voor stap (`96-walk.js`) speelt hetzelfde potje met **1 t/m 4 zichtbare
   spelers** en roept daarvoor dezelfde `resolveMove()` aan als de batch — dus
   dezelfde U-turn- en blokkeerregels. Bij meerdere spelers is de "bezette
@@ -116,12 +125,17 @@ Check minimaal:
 4. Een tegel over een andere slepen → wisselt om, rood kader = niet toegestaan.
 5. Browserconsole moet leeg zijn.
 6. Paneel Simulatie → "Draai simulatie" → 4 startposities laten allemaal winst
-   zien, "vastgelopen potjes" is 0 of bijna 0.
+   zien, "vastgelopen potjes" is 0 of bijna 0. In "Eindklassering per
+   startpositie" moet elke kolom (1e/2e/3e/4e) over de vier startposities
+   optellen tot 100% en de gemiddelde plaats over alle vier precies 2,50 zijn —
+   dat is een rekenkundige controle op de klassering, geen balanstest.
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
 8. Tabblad "Stap voor stap" → "Simulatie starten" → de pionnen lopen zichtbaar,
-   de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y".
+   de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y"
+   plus een eindklassering 1e t/m 4e; de pion van wie binnen is verdwijnt, die
+   van de verliezer blijft staan.
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pionnen
    echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
    (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
