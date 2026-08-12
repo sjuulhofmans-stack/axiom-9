@@ -140,13 +140,19 @@ Check minimaal:
    echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
    (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
    stoppen vanuit pauze mag niet blijven hangen.
-9. In "Welke energie-actie wint?" moeten de drie acties binnen ongeveer 2
-   procentpunt van elkaar liggen (rond 31-32% elk) en de speler die nooit
-   uitgeeft rond de 6%. Loopt één actie weg, dan is de balans stuk — stel
-   `ENERGY_JUMP_RANGE` bij en draai de sweep uit het codecommentaar opnieuw.
-10. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
+9. In "Welke energie-actie wint?" liggen Stuwstoot en Noodtransport rond de
+   32-34%, Herprioritering rond de 26% (lager dan zonder kaarten: Herkalibratie
+   geeft nu iedereen af en toe hetzelfde gratis, wat specifiek Herprioritering's
+   voorsprong opeet) en de speler die nooit uitgeeft rond de 7%. Loopt één
+   actie ver weg van dit patroon, dan is de balans stuk.
+10. In "Beloningskaarten" (zelfde paneel) moet elke kaart behalve Prioriteitspas
+   op een aantal keer per potje > 0 staan; Prioriteitspas hoort op 0,00 (geen
+   mechanisch effect in de bot-simulatie, geen bug). Het aandeel trekkansen
+   verloren aan een volle hand ligt rond de 15-20%.
+11. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
    ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
-   standenbalk telt mee en "Startpositie" is alleen te kiezen bij 1 speler.
+   standenbalk telt mee, "Startpositie" is alleen te kiezen bij 1 speler, en
+   getrokken beloningskaarten verschijnen als kleine badges naast elke speler.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -170,6 +176,43 @@ Check minimaal:
     zonder (verhouding 1,000 over 180 startposities).
   Let op: de energiesteen trekt elke beurt een getal uit dezelfde `rand`-stroom,
   dus dezelfde seed geeft een ander verloop dan vóór deze toevoeging.
+- **Beloningskaarten** (`95-simulate.js`, bij `ACTION_CARDS`): wie een opdracht
+  bereikt trekt een kaart van een **gedeelde**, gesloten stapel van 20 (2 van
+  elk van de 10 typen, `ACTION_CARD_IDS`). Max **2 kaarten in de hand**
+  (`ACTION_CARD_HAND_MAX`) — sta je al op 2, dan trek je niet, de kaart blijft
+  liggen. Gebruikte kaarten gaan op de aflegstapel; is de trekstapel leeg, dan
+  wordt de aflegstapel geschud en dient weer als trekstapel
+  (`buildActionDeck`/`drawActionCard`). De opdrachtkaarten blijven gewoon staan
+  — een beloningskaart is een bonus onderweg, geen vervanging van de 6 op te
+  lossen opdrachten.
+  - Een kaart spelen is **dezelfde actie-slot** als een energie-actie: hooguit
+    één ding per beurt, of dat nu een kaart is of energie. Kaarten zijn gratis,
+    dus een speler geeft ze voorrang boven het uitgeven van energie.
+  - De tien kaarten en hun AI-voorwaarde in de simulatie (`resolveGravityBoots`,
+    `pickShortCircuitTarget`, `pickShoveMove` — de rest zit inline in
+    `simulateOneGame`): Zwaartekracht-laarzen (10 rechtdoor, geen bochten —
+    alleen gebruikt als het doel raakt of minstens 7 stappen dichterbij komt),
+    Noodrantsoen (+3 energie, alleen onder het plafond), Kortsluiting (de
+    koploper mist zijn eerstvolgende energiesteen), Blinde Vlek (reageert
+    alleen als de normale zet daadwerkelijk geblokkeerd werd), Herkalibratie
+    (gratis versie van Herprioritering, zelfde dichterbij-voorwaarde), Duwstoot
+    (duwt de tegenstander wiens afstand tot zijn eigen doel het meest toeneemt),
+    Stuwlading (gratis versie van Stuwstoot, altijd gebruikt), Overdrukklep
+    (redt energie die anders over het plafond ging), Herbevoorrading (trekt
+    een nieuwe kaart, alleen als sluitstuk — niets anders was die beurt bruikbaar),
+    Prioriteitspas (puur informatie, **geen mechanisch effect** in de bot-
+    simulatie, dus altijd 0 keer ingezet in de tabel — dat is verwacht, geen bug).
+  - `pickShoveMove`/`pickShortCircuitTarget`/`resolveGravityBoots` worden door
+    zowel de batch als "stap voor stap" gebruikt. De batch-speler noemt zijn
+    opdrachtstapel `order`, het tabblad noemt 'm `deck` — waar een functie een
+    willekeurige speler uit de array pakt (niet "de huidige speler" via een
+    `shim`), moet hij dus met **beide** veldnamen overweg kunnen
+    (`target.order || target.deck`). Dit was al eens een bug (Duwstoot crashte
+    het tabblad zodra een tegenstander adjacent stond) — vergeet dit niet
+    opnieuw als je een elfde kaart toevoegt die ook naar een ANDERE speler kijkt.
+  - Sectie "Beloningskaarten" in het simulatiepaneel: keer getrokken, keer
+    gebruikt per kaart, en het aandeel trekkansen dat verloren ging aan een
+    volle hand.
 
 ## Nog te doen
 

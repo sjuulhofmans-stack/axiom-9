@@ -125,6 +125,146 @@ function energyReorderTarget(graph, player, fromKey){
   return altLabel;
 }
 
+// ---------- beloningskaarten ----------
+// Wie een opdracht bereikt trekt een kaart van een gedeelde, gesloten stapel (2 exemplaren
+// van elk van de 10 typen = 20 kaarten). Je mag maximaal 2 kaarten tegelijk vasthouden; sta je
+// al op 2, dan trek je niet (de kaart blijft liggen). Gebruikte kaarten gaan op de aflegstapel;
+// is de trekstapel leeg, dan wordt de aflegstapel geschud en dient weer als trekstapel. De
+// opdrachtkaarten blijven gewoon staan — je moet nog steeds je 6 opdrachten voltooien, de
+// kaarten zijn een bonus onderweg, geen vervanging.
+//
+// Een kaart spelen is JE ACTIE VOOR DIE BEURT: hooguit één ding per beurt, of dat nu een
+// energie-actie is of een kaart. Kaarten zijn gratis, dus een bot geeft ze voorrang boven het
+// uitgeven van energie — waarom betalen als hetzelfde gratis kan? Binnen die voorrang is de
+// volgorde: eerst de energie-kaarten (ze horen bij de worp die net gevallen is), dan de
+// doelkaarten, dan de bewegingskaarten, dan de reactieve kaart, en Herbevoorrading als sluitstuk
+// voor beurten waarin verder niets speelde. Prioriteitspas heeft geen meetbaar effect in deze
+// bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit actief
+// gespeeld — hij kan dus een handslot permanent bezet houden; zie extra.cardDeadHand.
+const ACTION_CARDS = {
+  boots:     { name: 'Zwaartekracht-laarzen', hint: '10 stappen rechtdoor, geen bochten' },
+  ration:    { name: 'Noodrantsoen',          hint: '+3 energie direct' },
+  short:     { name: 'Kortsluiting',          hint: 'tegenstander mist zijn energiesteen' },
+  blind:     { name: 'Blinde Vlek',           hint: 'bezette vakjes tellen deze beurt niet mee' },
+  recal:     { name: 'Herkalibratie',         hint: 'gratis wissel met de volgende opdracht' },
+  shove:     { name: 'Duwstoot',              hint: 'duw een naastgelegen tegenstander weg' },
+  boostcell: { name: 'Stuwlading',            hint: 'gratis derde loopsteen' },
+  valve:     { name: 'Overdrukklep',          hint: 'redt energie die anders over het plafond ging' },
+  resupply:  { name: 'Herbevoorrading',       hint: 'trek meteen nog een kaart' },
+  scan:      { name: 'Prioriteitspas',        hint: 'bekijk de volgende opdracht van een tegenstander' },
+};
+const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
+const ACTION_CARD_HAND_MAX = 2;
+
+function buildActionDeck(rand){
+  const cards = [];
+  for (const id of ACTION_CARD_IDS){ cards.push(id, id); }
+  return { draw: simShuffle(cards, rand), discard: [] };
+}
+function drawActionCard(deck, rand){
+  if (deck.draw.length === 0){
+    if (deck.discard.length === 0) return null;
+    deck.draw = simShuffle(deck.discard, rand);
+    deck.discard = [];
+  }
+  return deck.draw.pop();
+}
+// verwijdert een kaart uit de hand van een speler en legt hem af. `extra` is optioneel —
+// "stap voor stap" telt niets bij, alleen de batch-simulatie.
+function useActionCard(player, id, deck, extra){
+  const i = player.cards.indexOf(id);
+  if (i === -1) return;
+  player.cards.splice(i, 1);
+  deck.discard.push(id);
+  if (extra) extra.cardUses[id]++;
+}
+
+// Zwaartekracht-laarzen: loop tot `maxSteps` in een RECHTE lijn (geen bochten, dus strenger
+// dan de geen-U-turn-regel) in elk van de 4 richtingen vanaf `fromKey`, stop bij een bezet
+// vakje. Geeft, net als resolveMove, een move-vormig resultaat terug — of null als geen van de
+// vier richtingen minstens zo veel oplevert als een gemiddelde worp (het doel raken telt
+// altijd, ongeacht hoeveel stappen dat kostte).
+function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
+  const { adjKey, adjDir } = graph;
+  const candidates = [];
+  for (let d = 0; d < 4; d++){
+    let cur = fromKey;
+    const path = [cur];
+    let wasBlocked = false;
+    let bankedAt = -1;
+    for (let s = 0; s < maxSteps; s++){
+      const neigh = adjKey[cur], dirs = adjDir[cur];
+      let next = -1;
+      for (let j = 0; j < dirs.length; j++) if (dirs[j] === d){ next = neigh[j]; break; }
+      if (next === -1) break;           // muur: deze richting stopt hier
+      if (occupied.has(next)){ wasBlocked = true; break; }
+      cur = next;
+      path.push(cur);
+      if (cur === targetKey){ bankedAt = path.length - 1; break; }
+    }
+    if (path.length > 1) candidates.push({ path, wasBlocked, bankedAt });
+  }
+  if (!candidates.length) return null;
+
+  const banked = candidates.find(c => c.bankedAt !== -1);
+  if (banked) return { key: targetKey, path: banked.path, stepsUsed: banked.bankedAt, bankedQuest: true, wasBlocked: banked.wasBlocked };
+
+  // geen van de vier raakte het doel: kies de richting die het dichtst bij eindigt, en
+  // gebruik de kaart alleen als dat minstens zo goed is als een gemiddelde worp (7 stappen
+  // nettoverbetering) — anders houd je 'm liever achter de hand.
+  const stamp = simBfsDistances(graph, targetKey);
+  const dBefore = simDistLookup(stamp, fromKey);
+  let best = null, bestImprovement = -Infinity;
+  for (const c of candidates){
+    const end = c.path[c.path.length - 1];
+    const dAfter = simDistLookup(stamp, end);
+    if (dAfter < 0) continue;
+    const improvement = dBefore - dAfter;
+    if (improvement > bestImprovement){ bestImprovement = improvement; best = c; }
+  }
+  if (!best || bestImprovement < 7) return null;
+  return { key: best.path[best.path.length - 1], path: best.path, stepsUsed: best.path.length - 1, bankedQuest: false, wasBlocked: best.wasBlocked };
+}
+
+// Kortsluiting: raakt de speler die op dit moment de meeste opdrachten heeft (bij gelijke
+// stand de eerste in spelervolgorde), voor zover die nog meespeelt en niet al geraakt is.
+function pickShortCircuitTarget(players, selfIdx){
+  let best = null;
+  for (const p of players){
+    if (p.idx === selfIdx || p.rank || p.skipEnergyRoll) continue;
+    if (!best || p.completed > best.completed) best = p;
+  }
+  return best;
+}
+
+// Duwstoot: onder de tegenstanders die nu aan mij grenzen, kies de zet die hun afstand tot
+// hún eigen doel het meest vergroot — en alleen toepassen als dat ook echt iets oplevert.
+function pickShoveMove(graph, players, selfIdx){
+  const self = players[selfIdx];
+  const neigh = graph.adjKey[self.pos];
+  const occupiedNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
+  let best = null, bestGain = 0;
+  for (const nk of neigh){
+    const target = players.find(p => !p.rank && p.idx !== selfIdx && p.pos === nk);
+    if (!target) continue;
+    // batch-spelers noemen hun opdrachtstapel `order`, het tabblad "stap voor stap" noemt
+    // 'm `deck` — deze functie wordt door allebei gebruikt, dus moet met beide overweg kunnen
+    const targetLabel = (target.order || target.deck)[target.nextIdx];
+    const targetKeyForThem = graph.questCells[targetLabel];
+    const stamp = simBfsDistances(graph, targetKeyForThem);
+    const dBefore = simDistLookup(stamp, target.pos);
+    const theirNeigh = graph.adjKey[target.pos];
+    for (const nk2 of theirNeigh){
+      if (occupiedNow.has(nk2)) continue;         // moet naar een leeg vakje
+      const dAfter = simDistLookup(stamp, nk2);
+      if (dAfter < 0) continue;
+      const gain = dAfter - dBefore;
+      if (gain > bestGain){ bestGain = gain; best = { player: target, toKey: nk2 }; }
+    }
+  }
+  return best;
+}
+
 function simRollEnergy(rand){
   return ENERGY_DIE_FACES[Math.floor(rand() * ENERGY_DIE_FACES.length)];
 }
@@ -350,6 +490,8 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     energy: 0,
     strategy: 'none',
     actionUses: 0,
+    cards: [],             // beloningskaarten in de hand (max ACTION_CARD_HAND_MAX)
+    skipEnergyRoll: false, // getroffen door Kortsluiting: mist de eerstvolgende energiesteen
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
@@ -358,6 +500,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
   // strategieën loten, zodat "welke actie wint" niet vervuild wordt door de startpositie
   const strategies = simShuffle(ENERGY_STRATEGIES, rand);
   for (let i = 0; i < players.length; i++) players[i].strategy = strategies[i];
+  const deck = buildActionDeck(rand);   // één gedeelde stapel voor het hele potje
 
   const finishTarget = simFinishTarget(players.length);
   let finished = 0;
@@ -368,48 +511,121 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
+      let actionUsed = false;   // hooguit 1 actie per beurt, of dat nu een kaart is of energie
 
-      // 1. energiesteen rolt mee. Het niveau wordt geteld NA het bijschrijven, want dat is wat
-      //    deze speler deze beurt kan inzetten.
-      const energyRoll = simRollEnergy(rand);
-      const energyGain = simGainEnergy(player, energyRoll);
+      // 1. energiesteen rolt mee (tenzij Kortsluiting die deze beurt blokkeert). Het niveau
+      //    wordt geteld NA het bijschrijven, want dat is wat deze speler deze beurt kan inzetten.
+      let energyRoll = 0, energyGain = { gained: 0, wasted: 0 };
+      if (player.skipEnergyRoll){
+        player.skipEnergyRoll = false;
+      } else {
+        energyRoll = simRollEnergy(rand);
+        energyGain = simGainEnergy(player, energyRoll);
+      }
       extra.energyRolled += energyRoll;
       extra.energyWasted += energyGain.wasted;
       extra.energyLevels[player.energy]++;
 
-      // 2. Herprioritering gaat vóór de zet: het verandert waar je heen moet
+      // 1b. energie-kaarten horen bij de worp die net gevallen is: Overdrukklep redt wat
+      //     anders over het plafond ging, Kortsluiting raakt de leider, Noodrantsoen vult aan.
+      if (!actionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
+        const saved = Math.min(3, energyGain.wasted);
+        player.energy += saved;
+        extra.energyWasted -= saved;
+        useActionCard(player, 'valve', deck, extra);
+        actionUsed = true;
+      }
+      if (!actionUsed && player.cards.includes('short')){
+        const victim = pickShortCircuitTarget(players, pIdx);
+        if (victim){
+          victim.skipEnergyRoll = true;
+          useActionCard(player, 'short', deck, extra);
+          actionUsed = true;
+        }
+      }
+      if (!actionUsed && player.cards.includes('ration') && player.energy < ENERGY_MAX){
+        simGainEnergy(player, 3);
+        useActionCard(player, 'ration', deck, extra);
+        actionUsed = true;
+      }
+
+      // 2. doel bepalen: Herkalibratie (gratis, kaart) gaat vóór de betaalde Herprioritering
       let targetLabel = player.order[player.nextIdx];
-      if (player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
+      if (!actionUsed && player.cards.includes('recal')){
+        const swapped = energyReorderTarget(graph, player, player.pos);
+        if (swapped !== null){
+          targetLabel = swapped;
+          useActionCard(player, 'recal', deck, extra);
+          actionUsed = true;
+        }
+      }
+      if (!actionUsed && player.cards.includes('shove')){
+        const shove = pickShoveMove(graph, players, pIdx);
+        if (shove){
+          shove.player.pos = shove.toKey;
+          useActionCard(player, 'shove', deck, extra);
+          actionUsed = true;
+        }
+      }
+      if (!actionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
         const swapped = energyReorderTarget(graph, player, player.pos);
         if (swapped !== null){
           targetLabel = swapped;
           player.energy -= ENERGY_ACTIONS.reorder.cost;
           player.actionUses++;
+          actionUsed = true;
         }
       }
       const targetKey = graph.questCells[targetLabel];
 
-      // 3. loopstenen, met de Stuwstoot als derde steen
-      let roll = simRollD6(rand) + simRollD6(rand);
-      if (player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
-        roll += simRollD6(rand);
-        player.energy -= ENERGY_ACTIONS.boost.cost;
-        player.actionUses++;
-      }
-
       const occupied = new Set();
       for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
 
-      // 4. Noodtransport mag TUSSENTIJDS, dus vóór de zet: dan brengt de sprong de opdracht
-      //    binnen bereik van de stenen en kan de zet 'm alsnog pakken. Alleen ná de zet
-      //    springen maakt de actie veel zwakker — dat is gemeten (26,7% winst tegen 32,4%
-      //    voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
-      let move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
-      if (!move.bankedQuest && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
+      // 3. beweging: Zwaartekracht-laarzen vervangt de worp helemaal; anders de gewone
+      //    loopstenen met Stuwlading (kaart) of Stuwstoot (energie) als derde steen
+      let move, roll = 0, usedBoots = false;
+      if (!actionUsed && player.cards.includes('boots')){
+        const bootsMove = resolveGravityBoots(graph, player.pos, 10, occupied, targetKey);
+        if (bootsMove){
+          move = bootsMove;
+          usedBoots = true;
+          useActionCard(player, 'boots', deck, extra);
+          actionUsed = true;
+        }
+      }
+      if (!usedBoots){
+        roll = simRollD6(rand) + simRollD6(rand);
+        if (!actionUsed && player.cards.includes('boostcell')){
+          roll += simRollD6(rand);
+          useActionCard(player, 'boostcell', deck, extra);
+          actionUsed = true;
+        } else if (!actionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
+          roll += simRollD6(rand);
+          player.energy -= ENERGY_ACTIONS.boost.cost;
+          player.actionUses++;
+          actionUsed = true;
+        }
+        move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+      }
+
+      // 4. Blinde Vlek reageert op een geblokkeerde poging; Noodtransport mag TUSSENTIJDS, dus
+      //    ná een geslaagde deblokkering alsnog. Alleen ná de zet springen maakt Noodtransport
+      //    veel zwakker — dat is gemeten (26,7% winst tegen 32,4% voor de goedkoopste actie)
+      //    en was een fout, geen ontwerpkeuze.
+      if (!move.bankedQuest && !actionUsed && player.cards.includes('blind') && move.wasBlocked){
+        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
+        if (retry.key !== move.key){
+          move = retry;
+          useActionCard(player, 'blind', deck, extra);
+          actionUsed = true;
+        }
+      }
+      if (!move.bankedQuest && !actionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
         const jump = resolveEnergyJump(graph, player.pos, ENERGY_JUMP_RANGE, targetKey);
         if (jump){
           player.energy -= ENERGY_ACTIONS.jump.cost;
           player.actionUses++;
+          actionUsed = true;
           for (let p = 0; p < jump.path.length; p++) heatmap[jump.path[p]]++;
           // de sprong kan de opdracht zelf al pakken; anders loop je vanaf daar verder
           move = jump.banked
@@ -417,6 +633,14 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
             : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
         }
       }
+      // 5. Herbevoorrading als sluitstuk: alleen als er verder niets te doen viel deze beurt
+      if (!actionUsed && player.cards.includes('resupply')){
+        useActionCard(player, 'resupply', deck, extra);
+        const drawn = drawActionCard(deck, rand);
+        if (drawn){ player.cards.push(drawn); extra.cardDraws++; }
+        actionUsed = true;
+      }
+
       player.pos = move.key;
       player.turnsOnTarget++;
       extra.totalTurns++;
@@ -430,6 +654,13 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         player.completed++;
         player.nextIdx++;
         player.turnsOnTarget = 0;
+        // beloning: een kaart trekken, als de hand niet al vol is
+        if (player.cards.length < ACTION_CARD_HAND_MAX){
+          const drawn = drawActionCard(deck, rand);
+          if (drawn){ player.cards.push(drawn); extra.cardDraws++; }
+        } else {
+          extra.handFullOnBank++;
+        }
         if (player.completed >= SIM_QUESTS_TO_WIN){
           finished++;
           player.rank = finished;
@@ -729,6 +960,21 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<table class="sim-table"><thead><tr><th>Strategie</th><th>Winst% (±95%-marge)</th><th>Top 2</th><th>Gem. plaats</th><th>Keer ingezet</th></tr></thead><tbody>${stratRows}</tbody></table>`;
   html += `<p class="hint">Elk potje zit één speler per strategie, geloot over de startposities. Een speler zet zijn actie in zodra hij 'm kan betalen — Herprioritering alleen als de volgende opdracht daadwerkelijk dichterbij ligt, en Noodtransport alleen als de gewone zet de opdracht nog niet pakte. Bij vier gelijkwaardige strategieën staat iedereen op 25% winst en gemiddelde plaats 2,50; wie daar significant boven zit, is te sterk.</p>`;
 
+  // ---------- beloningskaarten ----------
+  const cardRows = ACTION_CARD_IDS.map(id => {
+    const act = ACTION_CARDS[id];
+    const uses = extra.cardUses[id];
+    const perGame = played ? (uses / played) : 0;
+    return `<tr><td>${act.name} <span class="sub">${act.hint}</span></td><td class="num">${perGame.toFixed(2)}</td></tr>`;
+  }).join('');
+  const drawsPerGame = played ? (extra.cardDraws / played) : 0;
+  const handFullPct = extra.cardDraws + extra.handFullOnBank
+    ? (extra.handFullOnBank / (extra.cardDraws + extra.handFullOnBank) * 100) : 0;
+  html += `<h3 class="sim-subhead">Beloningskaarten</h3>`;
+  html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${drawsPerGame.toFixed(1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${handFullPct.toFixed(1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
+  html += `<table class="sim-table"><thead><tr><th>Kaart</th><th>Keer gebruikt per potje</th></tr></thead><tbody>${cardRows}</tbody></table>`;
+  html += `<p class="hint">Prioriteitspas heeft in deze simulatie geen mechanisch effect (het is pure informatie voor een mens aan tafel) en wordt daarom nooit ingezet — 0,00 hierboven is dus verwacht, niet een bug. Een getrokken Prioriteitspas bezet wel een handslot tot het potje afloopt.</p>`;
+
   html += `<h3 class="sim-subhead">Energie</h3>`;
   html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
   html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
@@ -793,10 +1039,13 @@ function runSimulationBatch(){
       const seatWins = [0, 0, 0, 0];
       const gameLengths = [];
       const heatmap = new Int32Array(graph.N);
+      const cardUses = {};
+      for (const id of ACTION_CARD_IDS) cardUses[id] = 0;
       const extra = {
         totalTurns: 0, blockedTurns: 0, winGapSum: 0, winGapCount: 0, nailBiters: 0,
         energyRolled: 0, energyWasted: 0,
         energyLevels: new Int32Array(ENERGY_MAX + 1),   // hoe vaak stond een speler op N energie
+        cardDraws: 0, handFullOnBank: 0, cardUses,
       };
       let stuckCount = 0;
 

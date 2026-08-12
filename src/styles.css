@@ -317,6 +317,12 @@
   }
   .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
   .walk-player-energy.full{color:var(--amber); font-weight:700;}
+  .walk-player-cards{flex:none; display:flex; gap:2px;}
+  .walk-card-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:18px; height:18px; font-size:11px; border-radius:3px;
+    background:rgba(255,255,255,.06); border:1px solid var(--line-dim); cursor:default;
+  }
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
