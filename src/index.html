@@ -138,7 +138,12 @@
     <div class="panel">
       <h2>Stap voor stap</h2>
       <div class="controls">
-        <div class="walk-controls">
+        <div class="walk-mode-toggle" role="tablist">
+          <button class="walk-mode-btn active" id="walkModeAuto" data-mode="auto" role="tab" aria-selected="true">Automatisch</button>
+          <button class="walk-mode-btn" id="walkModeSolo" data-mode="solo" role="tab" aria-selected="false">Zelf spelen</button>
+        </div>
+
+        <div class="walk-controls" id="walkAutoControls">
           <div class="field">
             <label for="walkPlayers">Aantal spelers</label>
             <select id="walkPlayers">
@@ -172,7 +177,19 @@
             <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
           </div>
         </div>
-        <p class="hint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat, en er wordt doorgespeeld tot de één na laatste speler binnen is — bij 4 spelers dus tot en met de nummer 3, want dan ligt de vierde plaats vast. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
+        <p class="hint" id="walkAutoHint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat, en er wordt doorgespeeld tot de één na laatste speler binnen is — bij 4 spelers dus tot en met de nummer 3, want dan ligt de vierde plaats vast. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
+
+        <div class="walk-controls" id="walkSoloControls" hidden>
+          <div class="field">
+            <label for="walkStartSolo">Startpositie</label>
+            <select id="walkStartSolo"></select>
+          </div>
+          <div class="btn-row">
+            <button id="btnWalkSoloStart" class="primary">Potje starten</button>
+            <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
+          </div>
+        </div>
+        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf, alleen op het bord: gooi de stenen, kies na elke worp zelf een aangrenzend vakje om naartoe te lopen, en zet een energie-actie of handkaart in wanneer jij dat wilt (hooguit één per beurt). Niemand blokkeert je — je speelt tegen de klok van je eigen 6 opdrachten.</p>
 
         <div class="walk-hud">
           <div class="walk-dice" id="walkDice"></div>
@@ -181,6 +198,14 @@
         </div>
 
         <div class="walk-score" id="walkScore"></div>
+
+        <div class="walk-solo-panel" id="walkSoloPanel" hidden>
+          <div class="walk-solo-actions" id="walkSoloActions"></div>
+          <div class="btn-row">
+            <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+            <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
+          </div>
+        </div>
 
         <div id="walkStatus" class="reach-status"></div>
 

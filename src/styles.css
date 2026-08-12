@@ -232,10 +232,43 @@
   .sim-heat-swatch.start{box-shadow:inset 0 0 0 1px var(--start);}
 
   /* ---------- stap voor stap ---------- */
+  .walk-mode-toggle{display:flex; gap:4px; margin-bottom:14px;}
+  .walk-mode-btn{
+    flex:1; font-family:var(--font-mono); font-size:11.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:9px 12px; background:var(--hull);
+    border:1px solid var(--line-dim); border-radius:5px; color:var(--text-dim);
+  }
+  .walk-mode-btn.active{
+    color:#eafcff; border-color:var(--quest); background:rgba(79,184,224,.1);
+    box-shadow:0 0 10px rgba(79,184,224,.18);
+  }
   .walk-controls{display:flex; gap:18px; align-items:flex-end; flex-wrap:wrap;}
+  .walk-controls[hidden]{display:none;}
   .walk-controls .field{margin:0; min-width:170px;}
   .walk-controls .btn-row{margin-bottom:1px;}
   input[type=range]{width:100%; accent-color:var(--quest); cursor:pointer;}
+
+  /* jouw beurt in de solo-modus: kies hooguit één actie, of gooi meteen */
+  .walk-solo-panel{
+    display:flex; flex-direction:column; gap:10px; margin:14px 0;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:12px;
+  }
+  .walk-solo-panel[hidden]{display:none;}
+  .walk-solo-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .walk-solo-actions:empty{display:none;}
+  /* de "gewoon dobbelen"-optie is zelf ook een keuzekaart, maar zonder illustratie */
+  .action-card--plain{
+    justify-content:center; color:var(--text-dim); border-style:dashed;
+  }
+  .action-card--plain .action-card-name{font-size:11px; color:var(--text);}
+  button.action-card--plain:not(:disabled):hover{border-color:var(--text-dim); transform:none; box-shadow:none;}
+
+  /* aanklikbare vakjes tijdens jouw zet in de solo-modus */
+  .cell.walk-clickable{
+    cursor:pointer; box-shadow:0 0 0 2px var(--start), 0 0 8px rgba(85,214,138,.6) !important;
+    z-index:5; position:relative;
+  }
+  .cell.walk-clickable:hover{box-shadow:0 0 0 2px #fff, 0 0 10px rgba(85,214,138,.9) !important;}
 
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -318,12 +351,67 @@
   .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
   .walk-player-energy.full{color:var(--amber); font-weight:700;}
   .walk-player-cards{flex:none; display:flex; gap:2px;}
-  .walk-card-badge{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:18px; height:18px; font-size:11px; border-radius:3px;
-    background:rgba(255,255,255,.06); border:1px solid var(--line-dim); cursor:default;
-  }
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
+
+  /* ---------- kaart-illustraties ---------- */
+  /* tint-kleur per kaarttype: amber=beweging, groen=energie, blauw=nut, rood=verstoring,
+     gedimd=puur informatief (Prioriteitspas) */
+  .action-card--amber{ --card-tint: var(--amber); --card-glow: rgba(255,181,69,.35); }
+  .action-card--start{ --card-tint: var(--start); --card-glow: rgba(85,214,138,.35); }
+  .action-card--quest{ --card-tint: var(--quest); --card-glow: rgba(79,184,224,.35); }
+  .action-card--danger{ --card-tint: var(--danger); --card-glow: rgba(255,93,93,.35); }
+  .action-card--dim{ --card-tint: var(--text-dim); --card-glow: rgba(111,128,146,.25); }
+
+  .action-card{
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    background:linear-gradient(165deg, var(--panel-2) 0%, var(--hull) 78%);
+    border:1px solid var(--line); color:var(--card-tint);
+    clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    font-family:var(--font-display); text-align:center; cursor:default;
+  }
+  button.action-card{ font: inherit; }
+  .action-card::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    box-shadow: inset 0 0 14px var(--card-glow);
+    clip-path: inherit;
+  }
+  .action-card-cost{
+    position:absolute; top:5px; right:8px; font-family:var(--font-mono); font-size:9.5px;
+    letter-spacing:.04em; color:var(--card-tint); opacity:.85;
+  }
+  .action-card-icon{flex:none;}
+  .action-card-name{
+    font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--text);
+    line-height:1.2;
+  }
+  .action-card-hint{
+    font-family:var(--font-mono); color:var(--text-dim); line-height:1.35;
+  }
+
+  .action-card--sm{
+    width:26px; height:26px; padding:2px; justify-content:center;
+  }
+  .action-card--sm .action-card-icon{width:15px; height:15px;}
+  .action-card--sm .action-card-name, .action-card--sm .action-card-cost{display:none;}
+
+  .action-card--lg{
+    width:108px; padding:10px 8px 9px; gap:4px;
+    transition:transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .action-card--lg .action-card-icon{width:44px; height:44px; margin-top:4px;}
+  .action-card--lg .action-card-name{font-size:11.5px;}
+  .action-card--lg .action-card-hint{font-size:9.5px;}
+  button.action-card--lg:not(.is-disabled):not(:disabled){cursor:pointer;}
+  button.action-card--lg:not(.is-disabled):not(:disabled):hover{
+    transform:translateY(-2px);
+    border-color:var(--card-tint);
+    box-shadow:0 6px 16px rgba(0,0,0,.4), 0 0 0 1px var(--card-tint);
+  }
+  .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
+
+  .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
+
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
   .walk-meta .hit{color:var(--start);}

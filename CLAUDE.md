@@ -35,7 +35,8 @@ src/
     80-controls.js    knoppen: seed, dobbelsteen, herstel, draaien, download, legenda
     90-editor.js      tegel-editor (vakjes aan/uit klikken)
     95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren)
-    96-walk.js        stap-voor-stap: 1-4 spelers zichtbaar over het bord, eigen tabblad
+    96-walk.js        stap-voor-stap "automatisch": 1-4 bot-spelers zichtbaar over het bord
+    97-solo.js        stap-voor-stap "zelf spelen": jij dobbelt/loopt/speelt kaarten zelf
 build.py              plakt alles tot dist/axiom9.html
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
 ```
@@ -58,7 +59,8 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pionnen, tempo, pauze, aantal spelers) | `96-walk.js` |
+| iets aan "stap voor stap" automatisch (pionnen, tempo, pauze, aantal spelers) | `96-walk.js` |
+| iets aan "stap voor stap" zelf spelen (jouw acties, klikbare vakjes)   | `97-solo.js` |
 
 ## Spelregels die in de code zitten
 
@@ -159,6 +161,18 @@ Check minimaal:
    niet groter is dan `clientWidth`. Wordt dat toch breder, dan klopt de
    `clamp(...)`-formule voor `--cell` in `styles.css` niet meer met de werkelijke
    marges van `body`/`.panel` op dat breakpoint.
+13. Tabblad "Stap voor stap" → "Zelf spelen": alleen de solo-besturing
+   (Startpositie/Potje starten/Nieuw potje) mag zichtbaar zijn, niet de
+   automatische besturing (Aantal spelers/Energie-inzet/Tempo/Simulatie starten)
+   — en andersom bij "Automatisch". Wisselen van modus of het bord bewerken
+   (Genereer indeling) terwijl een solo-potje loopt moet dat potje stilletjes
+   afbreken (`stopSoloGame()`), niet laten hangen of crashen. Een potje uitspelen:
+   dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-vakjes zijn
+   niet aanklikbaar) → bij 6/6 een winmelding. Kortsluiting/Blinde Vlek/Duwstoot/
+   Prioriteitspas staan altijd uitgeschakeld in het actiepaneel (tooltip legt uit
+   waarom); de overige kaarten en alle drie de energie-acties moeten wél werken,
+   inclusief de richtingskeuze bij Zwaartekracht-laarzen en de vakjeskeuze bij
+   Noodtransport.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -219,6 +233,41 @@ Check minimaal:
   - Sectie "Beloningskaarten" in het simulatiepaneel: keer getrokken, keer
     gebruikt per kaart, en het aandeel trekkansen dat verloren ging aan een
     volle hand.
+  - Kaart-illustraties (`95-simulate.js`, `ACTION_CARD_ICONS`/`ACTION_CARD_TINTS`/
+    `renderActionCardFace`): elke kaart is een klein lijntekening-icoon in inline
+    SVG (geen losse plaatjes — dat zou het éénbestands-HTML flink opblazen),
+    gedeeld tussen de badges in de bot-standenbalk (`size:'sm'`) en de klikbare
+    kaarten in de solo-modus (`size:'lg'`, `interactive:true`). Nieuwe kaart
+    toevoegen? Voeg 'm toe aan `ACTION_CARDS`/`ACTION_CARD_IDS` in `95-simulate.js`
+    én teken een icoon in `ACTION_CARD_ICONS` — zonder icoon crasht de render.
+- **Stap voor stap, zelf spelen** (`97-solo.js`): los tabblad-modusje, geen bots.
+  Jij dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje om
+  naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse), en
+  kiest zelf een energie-actie of handkaart aan het begin van je beurt — hooguit
+  één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
+  staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),
+  en Herkalibratie/Herprioritering zijn hier **onvoorwaardelijk**: de bot-AI
+  swapt alleen als het dichterbij is, maar een mens mag zelf kiezen ook als het
+  niet optimaal is — vandaar `soloUnconditionalSwap()` in plaats van het
+  hergebruiken van `energyReorderTarget()` voor de daadwerkelijke uitvoering.
+  - Geen tegenstanders → Kortsluiting, Blinde Vlek, Duwstoot en Prioriteitspas
+    hebben altijd een doelwit nodig dat er in solo niet is; ze staan daarom
+    permanent uitgeschakeld in het actiepaneel (`WALK_SOLO_NO_OPPONENT_CARDS`),
+    met een tooltip die uitlegt waarom — niet stilzwijgend verbergen, dat oogt
+    als een bug.
+  - Zwaartekracht-laarzen laat de speler zelf een richting kiezen (N/O/Z/W) in
+    plaats van de bot-AI die automatisch de beste richting bepaalt;
+    `gravityBootsOptions()` in `95-simulate.js` geeft alle (tot 4) rechte lijnen
+    terug zodat de UI ze als knoppen kan tonen. Noodtransport licht elk vakje
+    binnen bereik op als klikbaar (tot `ENERGY_JUMP_RANGE` vakjes vrij) i.p.v.
+    automatisch het beste te kiezen.
+  - **Belangrijke CSS-valkuil**: een element met een eigen `display`-regel
+    (zoals `.walk-controls{display:flex}`) negeert het HTML `hidden`-attribuut
+    tenzij je ook `<selector>[hidden]{display:none;}` toevoegt — auteur-CSS wint
+    altijd van de UA-standaardregel voor `[hidden]`, ook al is de specificiteit
+    gelijk. Dit was een echte bug (de automatische besturing bleef zichtbaar in
+    de solo-modus): zoek naar bestaande `[hidden]`-regels in `styles.css` als
+    voorbeeld voordat je een nieuw element toggle je via `.hidden = true/false`.
 
 ## Nog te doen
 

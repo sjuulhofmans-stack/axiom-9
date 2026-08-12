@@ -196,16 +196,13 @@ function walkCardNote(id){
   if (!id) return '';
   return ` <span class="action">🃏 ${ACTION_CARDS[id].name}</span>`;
 }
-const ACTION_CARD_ICONS = {
-  boots: '🥾', ration: '🔋', short: '⚡✕', blind: '👁', recal: '🔀',
-  shove: '👊', boostcell: '🎲', valve: '🚿', resupply: '🔁', scan: '🔎',
-};
-// de handkaarten van een speler als kleine badges, met de volledige naam in de title
+// de handkaarten van een speler als kleine kaart-badges (renderActionCardFace uit
+// 95-simulate.js, gedeeld met de solo-modus)
 function walkCardBadges(player){
   if (!player.cards.length) return '';
-  return `<span class="walk-player-cards">` + player.cards.map(id =>
-    `<span class="walk-card-badge" title="${ACTION_CARDS[id].name} — ${ACTION_CARDS[id].hint}">${ACTION_CARD_ICONS[id]}</span>`
-  ).join('') + `</span>`;
+  return `<span class="walk-player-cards">` +
+    player.cards.map(id => renderActionCardFace(id, { size: 'sm' })).join('') +
+  `</span>`;
 }
 
 function walkEnergyNote(roll, gain, player){

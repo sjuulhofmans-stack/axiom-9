@@ -156,6 +156,65 @@ const ACTION_CARDS = {
 const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
 const ACTION_CARD_HAND_MAX = 2;
 
+// ---------- kaart-illustraties ----------
+// Geen losse plaatjes (dat blaast het éénbestands-HTML op) — elke kaart is een klein
+// lijntekening-icoon in inline SVG, opgebouwd uit dezelfde stroke-taal als de rest van de
+// HUD (currentColor, ronde lijnuiteinden). `tint` groepeert de kaarten thematisch in de
+// bestaande kleurtaal: amber = beweging, groen = energie, blauw = nut/utility,
+// rood = verstoring, gedimd = puur informatief (Prioriteitspas).
+const ACTION_CARD_TINTS = {
+  boots: 'amber', ration: 'start', short: 'danger', blind: 'quest', recal: 'quest',
+  shove: 'danger', boostcell: 'amber', valve: 'start', resupply: 'quest', scan: 'dim',
+};
+const ACTION_CARD_ICONS = {
+  boots: `<path d="M14 34 L14 18 Q14 14 18 14 L22 14 L22 24 L30 24 Q34 24 34 28 L34 34 Z"/>
+    <line x1="6" y1="16" x2="12" y2="16"/><line x1="4" y1="22" x2="11" y2="22"/><line x1="6" y1="28" x2="12" y2="28"/>`,
+  ration: `<rect x="14" y="12" width="20" height="26" rx="3"/>
+    <rect x="20" y="7" width="8" height="5" rx="1" fill="currentColor" stroke="none"/>
+    <path d="M26 18 L20 27 L24 27 L22 34 L30 24 L25 24 Z" fill="currentColor" stroke="none"/>`,
+  short: `<path d="M8 24 L20 24 L16 16 L28 16"/><path d="M28 16 L24 32 L40 22"/>
+    <circle cx="24" cy="24" r="2.6" fill="currentColor" stroke="none"/>
+    <line x1="30" y1="12" x2="34" y2="8"/><line x1="35" y1="18" x2="40" y2="16"/><line x1="32" y1="27" x2="37" y2="31"/>`,
+  blind: `<path d="M5 24 Q24 9 43 24 Q24 39 5 24 Z"/><circle cx="24" cy="24" r="6"/>
+    <circle cx="24" cy="24" r="2" fill="currentColor" stroke="none"/>
+    <line x1="4" y1="20.5" x2="44" y2="20.5" stroke-dasharray="2.5 3"/>
+    <line x1="4" y1="27.5" x2="44" y2="27.5" stroke-dasharray="2.5 3"/>`,
+  recal: `<path d="M33 13 A15 15 0 1 0 35 33"/><path d="M33 13 L28 12.5 M33 13 L32.3 18"/>
+    <path d="M35 33 L40 33.5 M35 33 L35.7 28"/>
+    <circle cx="21" cy="24" r="3.2"/><line x1="21" y1="19" x2="21" y2="21.5"/><line x1="21" y1="26.5" x2="21" y2="29"/>
+    <line x1="16" y1="24" x2="18.5" y2="24"/><line x1="23.5" y1="24" x2="26" y2="24"/>`,
+  shove: `<circle cx="32" cy="24" r="7.5"/><line x1="5" y1="24" x2="20" y2="24"/><path d="M14 17.5 L20.5 24 L14 30.5"/>`,
+  boostcell: `<rect x="5" y="30" width="10" height="10" rx="2"/><circle cx="10" cy="35" r="1.3" fill="currentColor" stroke="none"/>
+    <rect x="19" y="19" width="10" height="10" rx="2"/>
+    <circle cx="22" cy="22" r="1.1" fill="currentColor" stroke="none"/><circle cx="26" cy="26" r="1.1" fill="currentColor" stroke="none"/>
+    <rect x="33" y="8" width="10" height="10" rx="2"/>
+    <circle cx="36" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="40" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="36" cy="15" r="1" fill="currentColor" stroke="none"/>`,
+  valve: `<circle cx="19" cy="27" r="12"/><line x1="19" y1="27" x2="25.5" y2="19"/><circle cx="19" cy="27" r="1.6" fill="currentColor" stroke="none"/>
+    <path d="M28 14 Q31.5 9 28 4.5"/><path d="M33.5 16.5 Q38 12.5 35.5 7"/>`,
+  resupply: `<path d="M8 20 L24 12 L40 20 L40 36 L8 36 Z"/><line x1="8" y1="20" x2="24" y2="28"/><line x1="40" y1="20" x2="24" y2="28"/><line x1="24" y1="28" x2="24" y2="36"/>
+    <path d="M19 6 A8 8 0 1 1 12.5 12.5"/><path d="M19 6 L14.5 5 M19 6 L18 10"/>`,
+  scan: `<rect x="6" y="12" width="21" height="27" rx="2"/><line x1="10.5" y1="19" x2="22.5" y2="19"/><line x1="10.5" y1="24.5" x2="22.5" y2="24.5"/>
+    <circle cx="31.5" cy="30.5" r="8"/><line x1="37.2" y1="36.2" x2="43" y2="42"/>`,
+};
+
+// Bouwt één kaart: `size` is 'sm' (badge in de standenbalk) of 'lg' (jouw hand / getrokken-
+// kaart in de solo-modus). `interactive` voegt een button-rol toe voor de solo-modus.
+function renderActionCardFace(id, { size = 'lg', disabled = false, interactive = false, titleOverride = null } = {}){
+  const act = ACTION_CARDS[id];
+  const tint = ACTION_CARD_TINTS[id];
+  const tag = interactive ? 'button' : 'div';
+  const attrs = interactive ? `type="button" data-card="${id}"${disabled ? ' disabled' : ''}` : '';
+  const title = titleOverride || `${act.name} — ${act.hint}`;
+  // beloningskaarten kosten nooit energie — vandaar altijd "gratis", niet af te lezen uit
+  // een costveld (dat hebben ze niet, in tegenstelling tot ENERGY_ACTIONS)
+  return `<${tag} class="action-card action-card--${size} action-card--${tint}${disabled ? ' is-disabled' : ''}" ${attrs} title="${title}">
+    <span class="action-card-cost">gratis</span>
+    <svg class="action-card-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${ACTION_CARD_ICONS[id]}</svg>
+    <span class="action-card-name">${act.name}</span>
+    ${size === 'lg' ? `<span class="action-card-hint">${act.hint}</span>` : ''}
+  </${tag}>`;
+}
+
 function buildActionDeck(rand){
   const cards = [];
   for (const id of ACTION_CARD_IDS){ cards.push(id, id); }
@@ -184,25 +243,43 @@ function useActionCard(player, id, deck, extra){
 // vakje. Geeft, net als resolveMove, een move-vormig resultaat terug — of null als geen van de
 // vier richtingen minstens zo veel oplevert als een gemiddelde worp (het doel raken telt
 // altijd, ongeacht hoeveel stappen dat kostte).
-function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
+// Loopt vanaf `fromKey` een vaste richting `dir` uit tot `maxSteps`, geen bochten. Stopt bij
+// een muur of een bezet vakje; `bankedAt` is de padindex waarop het doel geraakt werd (-1 als
+// niet). Gedeeld door de bot-AI (resolveGravityBoots) en de solo-modus (die de speler zelf een
+// richting laat kiezen in plaats van 'm automatisch te laten bepalen).
+function walkStraightLine(graph, fromKey, dir, maxSteps, occupied, targetKey){
   const { adjKey, adjDir } = graph;
+  let cur = fromKey;
+  const path = [cur];
+  let wasBlocked = false;
+  let bankedAt = -1;
+  for (let s = 0; s < maxSteps; s++){
+    const neigh = adjKey[cur], dirs = adjDir[cur];
+    let next = -1;
+    for (let j = 0; j < dirs.length; j++) if (dirs[j] === dir){ next = neigh[j]; break; }
+    if (next === -1) break;           // muur: deze richting stopt hier
+    if (occupied.has(next)){ wasBlocked = true; break; }
+    cur = next;
+    path.push(cur);
+    if (targetKey !== undefined && cur === targetKey){ bankedAt = path.length - 1; break; }
+  }
+  return { path, wasBlocked, bankedAt };
+}
+// alle (tot 4) rechte richtingen vanaf `fromKey`, voor de solo-modus: de speler kiest zelf.
+function gravityBootsOptions(graph, fromKey, maxSteps, occupied, targetKey){
+  const options = [];
+  for (let d = 0; d < 4; d++){
+    const line = walkStraightLine(graph, fromKey, d, maxSteps, occupied, targetKey);
+    if (line.path.length > 1) options.push({ dir: d, ...line });
+  }
+  return options;
+}
+
+function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
   const candidates = [];
   for (let d = 0; d < 4; d++){
-    let cur = fromKey;
-    const path = [cur];
-    let wasBlocked = false;
-    let bankedAt = -1;
-    for (let s = 0; s < maxSteps; s++){
-      const neigh = adjKey[cur], dirs = adjDir[cur];
-      let next = -1;
-      for (let j = 0; j < dirs.length; j++) if (dirs[j] === d){ next = neigh[j]; break; }
-      if (next === -1) break;           // muur: deze richting stopt hier
-      if (occupied.has(next)){ wasBlocked = true; break; }
-      cur = next;
-      path.push(cur);
-      if (cur === targetKey){ bankedAt = path.length - 1; break; }
-    }
-    if (path.length > 1) candidates.push({ path, wasBlocked, bankedAt });
+    const line = walkStraightLine(graph, fromKey, d, maxSteps, occupied, targetKey);
+    if (line.path.length > 1) candidates.push(line);
   }
   if (!candidates.length) return null;
 
@@ -700,6 +777,7 @@ const btnSimulate = document.getElementById('btnSimulate');
 function clearSimResults(){
   // een lopende stap-voor-stap-pion hoort niet op een bord dat onder hem vandaan verandert
   stopWalkSimulation();
+  stopSoloGame();
   if (!simResultsEl) return;
   simResultsEl.innerHTML = '';
   simStatusEl.innerHTML = `<span class="sub">Indeling gewijzigd — draai de simulatie opnieuw voor cijfers die bij dit bord horen.</span>`;

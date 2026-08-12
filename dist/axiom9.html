@@ -239,10 +239,43 @@
   .sim-heat-swatch.start{box-shadow:inset 0 0 0 1px var(--start);}
 
   /* ---------- stap voor stap ---------- */
+  .walk-mode-toggle{display:flex; gap:4px; margin-bottom:14px;}
+  .walk-mode-btn{
+    flex:1; font-family:var(--font-mono); font-size:11.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:9px 12px; background:var(--hull);
+    border:1px solid var(--line-dim); border-radius:5px; color:var(--text-dim);
+  }
+  .walk-mode-btn.active{
+    color:#eafcff; border-color:var(--quest); background:rgba(79,184,224,.1);
+    box-shadow:0 0 10px rgba(79,184,224,.18);
+  }
   .walk-controls{display:flex; gap:18px; align-items:flex-end; flex-wrap:wrap;}
+  .walk-controls[hidden]{display:none;}
   .walk-controls .field{margin:0; min-width:170px;}
   .walk-controls .btn-row{margin-bottom:1px;}
   input[type=range]{width:100%; accent-color:var(--quest); cursor:pointer;}
+
+  /* jouw beurt in de solo-modus: kies hooguit één actie, of gooi meteen */
+  .walk-solo-panel{
+    display:flex; flex-direction:column; gap:10px; margin:14px 0;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:12px;
+  }
+  .walk-solo-panel[hidden]{display:none;}
+  .walk-solo-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .walk-solo-actions:empty{display:none;}
+  /* de "gewoon dobbelen"-optie is zelf ook een keuzekaart, maar zonder illustratie */
+  .action-card--plain{
+    justify-content:center; color:var(--text-dim); border-style:dashed;
+  }
+  .action-card--plain .action-card-name{font-size:11px; color:var(--text);}
+  button.action-card--plain:not(:disabled):hover{border-color:var(--text-dim); transform:none; box-shadow:none;}
+
+  /* aanklikbare vakjes tijdens jouw zet in de solo-modus */
+  .cell.walk-clickable{
+    cursor:pointer; box-shadow:0 0 0 2px var(--start), 0 0 8px rgba(85,214,138,.6) !important;
+    z-index:5; position:relative;
+  }
+  .cell.walk-clickable:hover{box-shadow:0 0 0 2px #fff, 0 0 10px rgba(85,214,138,.9) !important;}
 
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -325,12 +358,67 @@
   .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
   .walk-player-energy.full{color:var(--amber); font-weight:700;}
   .walk-player-cards{flex:none; display:flex; gap:2px;}
-  .walk-card-badge{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:18px; height:18px; font-size:11px; border-radius:3px;
-    background:rgba(255,255,255,.06); border:1px solid var(--line-dim); cursor:default;
-  }
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
+
+  /* ---------- kaart-illustraties ---------- */
+  /* tint-kleur per kaarttype: amber=beweging, groen=energie, blauw=nut, rood=verstoring,
+     gedimd=puur informatief (Prioriteitspas) */
+  .action-card--amber{ --card-tint: var(--amber); --card-glow: rgba(255,181,69,.35); }
+  .action-card--start{ --card-tint: var(--start); --card-glow: rgba(85,214,138,.35); }
+  .action-card--quest{ --card-tint: var(--quest); --card-glow: rgba(79,184,224,.35); }
+  .action-card--danger{ --card-tint: var(--danger); --card-glow: rgba(255,93,93,.35); }
+  .action-card--dim{ --card-tint: var(--text-dim); --card-glow: rgba(111,128,146,.25); }
+
+  .action-card{
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    background:linear-gradient(165deg, var(--panel-2) 0%, var(--hull) 78%);
+    border:1px solid var(--line); color:var(--card-tint);
+    clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    font-family:var(--font-display); text-align:center; cursor:default;
+  }
+  button.action-card{ font: inherit; }
+  .action-card::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    box-shadow: inset 0 0 14px var(--card-glow);
+    clip-path: inherit;
+  }
+  .action-card-cost{
+    position:absolute; top:5px; right:8px; font-family:var(--font-mono); font-size:9.5px;
+    letter-spacing:.04em; color:var(--card-tint); opacity:.85;
+  }
+  .action-card-icon{flex:none;}
+  .action-card-name{
+    font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--text);
+    line-height:1.2;
+  }
+  .action-card-hint{
+    font-family:var(--font-mono); color:var(--text-dim); line-height:1.35;
+  }
+
+  .action-card--sm{
+    width:26px; height:26px; padding:2px; justify-content:center;
+  }
+  .action-card--sm .action-card-icon{width:15px; height:15px;}
+  .action-card--sm .action-card-name, .action-card--sm .action-card-cost{display:none;}
+
+  .action-card--lg{
+    width:108px; padding:10px 8px 9px; gap:4px;
+    transition:transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .action-card--lg .action-card-icon{width:44px; height:44px; margin-top:4px;}
+  .action-card--lg .action-card-name{font-size:11.5px;}
+  .action-card--lg .action-card-hint{font-size:9.5px;}
+  button.action-card--lg:not(.is-disabled):not(:disabled){cursor:pointer;}
+  button.action-card--lg:not(.is-disabled):not(:disabled):hover{
+    transform:translateY(-2px);
+    border-color:var(--card-tint);
+    box-shadow:0 6px 16px rgba(0,0,0,.4), 0 0 0 1px var(--card-tint);
+  }
+  .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
+
+  .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
+
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
   .walk-meta .hit{color:var(--start);}
@@ -800,7 +888,12 @@
     <div class="panel">
       <h2>Stap voor stap</h2>
       <div class="controls">
-        <div class="walk-controls">
+        <div class="walk-mode-toggle" role="tablist">
+          <button class="walk-mode-btn active" id="walkModeAuto" data-mode="auto" role="tab" aria-selected="true">Automatisch</button>
+          <button class="walk-mode-btn" id="walkModeSolo" data-mode="solo" role="tab" aria-selected="false">Zelf spelen</button>
+        </div>
+
+        <div class="walk-controls" id="walkAutoControls">
           <div class="field">
             <label for="walkPlayers">Aantal spelers</label>
             <select id="walkPlayers">
@@ -834,7 +927,19 @@
             <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
           </div>
         </div>
-        <p class="hint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat, en er wordt doorgespeeld tot de één na laatste speler binnen is — bij 4 spelers dus tot en met de nummer 3, want dan ligt de vierde plaats vast. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
+        <p class="hint" id="walkAutoHint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat, en er wordt doorgespeeld tot de één na laatste speler binnen is — bij 4 spelers dus tot en met de nummer 3, want dan ligt de vierde plaats vast. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
+
+        <div class="walk-controls" id="walkSoloControls" hidden>
+          <div class="field">
+            <label for="walkStartSolo">Startpositie</label>
+            <select id="walkStartSolo"></select>
+          </div>
+          <div class="btn-row">
+            <button id="btnWalkSoloStart" class="primary">Potje starten</button>
+            <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
+          </div>
+        </div>
+        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf, alleen op het bord: gooi de stenen, kies na elke worp zelf een aangrenzend vakje om naartoe te lopen, en zet een energie-actie of handkaart in wanneer jij dat wilt (hooguit één per beurt). Niemand blokkeert je — je speelt tegen de klok van je eigen 6 opdrachten.</p>
 
         <div class="walk-hud">
           <div class="walk-dice" id="walkDice"></div>
@@ -843,6 +948,14 @@
         </div>
 
         <div class="walk-score" id="walkScore"></div>
+
+        <div class="walk-solo-panel" id="walkSoloPanel" hidden>
+          <div class="walk-solo-actions" id="walkSoloActions"></div>
+          <div class="btn-row">
+            <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+            <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
+          </div>
+        </div>
 
         <div id="walkStatus" class="reach-status"></div>
 
@@ -2741,6 +2854,65 @@ const ACTION_CARDS = {
 const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
 const ACTION_CARD_HAND_MAX = 2;
 
+// ---------- kaart-illustraties ----------
+// Geen losse plaatjes (dat blaast het éénbestands-HTML op) — elke kaart is een klein
+// lijntekening-icoon in inline SVG, opgebouwd uit dezelfde stroke-taal als de rest van de
+// HUD (currentColor, ronde lijnuiteinden). `tint` groepeert de kaarten thematisch in de
+// bestaande kleurtaal: amber = beweging, groen = energie, blauw = nut/utility,
+// rood = verstoring, gedimd = puur informatief (Prioriteitspas).
+const ACTION_CARD_TINTS = {
+  boots: 'amber', ration: 'start', short: 'danger', blind: 'quest', recal: 'quest',
+  shove: 'danger', boostcell: 'amber', valve: 'start', resupply: 'quest', scan: 'dim',
+};
+const ACTION_CARD_ICONS = {
+  boots: `<path d="M14 34 L14 18 Q14 14 18 14 L22 14 L22 24 L30 24 Q34 24 34 28 L34 34 Z"/>
+    <line x1="6" y1="16" x2="12" y2="16"/><line x1="4" y1="22" x2="11" y2="22"/><line x1="6" y1="28" x2="12" y2="28"/>`,
+  ration: `<rect x="14" y="12" width="20" height="26" rx="3"/>
+    <rect x="20" y="7" width="8" height="5" rx="1" fill="currentColor" stroke="none"/>
+    <path d="M26 18 L20 27 L24 27 L22 34 L30 24 L25 24 Z" fill="currentColor" stroke="none"/>`,
+  short: `<path d="M8 24 L20 24 L16 16 L28 16"/><path d="M28 16 L24 32 L40 22"/>
+    <circle cx="24" cy="24" r="2.6" fill="currentColor" stroke="none"/>
+    <line x1="30" y1="12" x2="34" y2="8"/><line x1="35" y1="18" x2="40" y2="16"/><line x1="32" y1="27" x2="37" y2="31"/>`,
+  blind: `<path d="M5 24 Q24 9 43 24 Q24 39 5 24 Z"/><circle cx="24" cy="24" r="6"/>
+    <circle cx="24" cy="24" r="2" fill="currentColor" stroke="none"/>
+    <line x1="4" y1="20.5" x2="44" y2="20.5" stroke-dasharray="2.5 3"/>
+    <line x1="4" y1="27.5" x2="44" y2="27.5" stroke-dasharray="2.5 3"/>`,
+  recal: `<path d="M33 13 A15 15 0 1 0 35 33"/><path d="M33 13 L28 12.5 M33 13 L32.3 18"/>
+    <path d="M35 33 L40 33.5 M35 33 L35.7 28"/>
+    <circle cx="21" cy="24" r="3.2"/><line x1="21" y1="19" x2="21" y2="21.5"/><line x1="21" y1="26.5" x2="21" y2="29"/>
+    <line x1="16" y1="24" x2="18.5" y2="24"/><line x1="23.5" y1="24" x2="26" y2="24"/>`,
+  shove: `<circle cx="32" cy="24" r="7.5"/><line x1="5" y1="24" x2="20" y2="24"/><path d="M14 17.5 L20.5 24 L14 30.5"/>`,
+  boostcell: `<rect x="5" y="30" width="10" height="10" rx="2"/><circle cx="10" cy="35" r="1.3" fill="currentColor" stroke="none"/>
+    <rect x="19" y="19" width="10" height="10" rx="2"/>
+    <circle cx="22" cy="22" r="1.1" fill="currentColor" stroke="none"/><circle cx="26" cy="26" r="1.1" fill="currentColor" stroke="none"/>
+    <rect x="33" y="8" width="10" height="10" rx="2"/>
+    <circle cx="36" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="40" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="36" cy="15" r="1" fill="currentColor" stroke="none"/>`,
+  valve: `<circle cx="19" cy="27" r="12"/><line x1="19" y1="27" x2="25.5" y2="19"/><circle cx="19" cy="27" r="1.6" fill="currentColor" stroke="none"/>
+    <path d="M28 14 Q31.5 9 28 4.5"/><path d="M33.5 16.5 Q38 12.5 35.5 7"/>`,
+  resupply: `<path d="M8 20 L24 12 L40 20 L40 36 L8 36 Z"/><line x1="8" y1="20" x2="24" y2="28"/><line x1="40" y1="20" x2="24" y2="28"/><line x1="24" y1="28" x2="24" y2="36"/>
+    <path d="M19 6 A8 8 0 1 1 12.5 12.5"/><path d="M19 6 L14.5 5 M19 6 L18 10"/>`,
+  scan: `<rect x="6" y="12" width="21" height="27" rx="2"/><line x1="10.5" y1="19" x2="22.5" y2="19"/><line x1="10.5" y1="24.5" x2="22.5" y2="24.5"/>
+    <circle cx="31.5" cy="30.5" r="8"/><line x1="37.2" y1="36.2" x2="43" y2="42"/>`,
+};
+
+// Bouwt één kaart: `size` is 'sm' (badge in de standenbalk) of 'lg' (jouw hand / getrokken-
+// kaart in de solo-modus). `interactive` voegt een button-rol toe voor de solo-modus.
+function renderActionCardFace(id, { size = 'lg', disabled = false, interactive = false, titleOverride = null } = {}){
+  const act = ACTION_CARDS[id];
+  const tint = ACTION_CARD_TINTS[id];
+  const tag = interactive ? 'button' : 'div';
+  const attrs = interactive ? `type="button" data-card="${id}"${disabled ? ' disabled' : ''}` : '';
+  const title = titleOverride || `${act.name} — ${act.hint}`;
+  // beloningskaarten kosten nooit energie — vandaar altijd "gratis", niet af te lezen uit
+  // een costveld (dat hebben ze niet, in tegenstelling tot ENERGY_ACTIONS)
+  return `<${tag} class="action-card action-card--${size} action-card--${tint}${disabled ? ' is-disabled' : ''}" ${attrs} title="${title}">
+    <span class="action-card-cost">gratis</span>
+    <svg class="action-card-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${ACTION_CARD_ICONS[id]}</svg>
+    <span class="action-card-name">${act.name}</span>
+    ${size === 'lg' ? `<span class="action-card-hint">${act.hint}</span>` : ''}
+  </${tag}>`;
+}
+
 function buildActionDeck(rand){
   const cards = [];
   for (const id of ACTION_CARD_IDS){ cards.push(id, id); }
@@ -2769,25 +2941,43 @@ function useActionCard(player, id, deck, extra){
 // vakje. Geeft, net als resolveMove, een move-vormig resultaat terug — of null als geen van de
 // vier richtingen minstens zo veel oplevert als een gemiddelde worp (het doel raken telt
 // altijd, ongeacht hoeveel stappen dat kostte).
-function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
+// Loopt vanaf `fromKey` een vaste richting `dir` uit tot `maxSteps`, geen bochten. Stopt bij
+// een muur of een bezet vakje; `bankedAt` is de padindex waarop het doel geraakt werd (-1 als
+// niet). Gedeeld door de bot-AI (resolveGravityBoots) en de solo-modus (die de speler zelf een
+// richting laat kiezen in plaats van 'm automatisch te laten bepalen).
+function walkStraightLine(graph, fromKey, dir, maxSteps, occupied, targetKey){
   const { adjKey, adjDir } = graph;
+  let cur = fromKey;
+  const path = [cur];
+  let wasBlocked = false;
+  let bankedAt = -1;
+  for (let s = 0; s < maxSteps; s++){
+    const neigh = adjKey[cur], dirs = adjDir[cur];
+    let next = -1;
+    for (let j = 0; j < dirs.length; j++) if (dirs[j] === dir){ next = neigh[j]; break; }
+    if (next === -1) break;           // muur: deze richting stopt hier
+    if (occupied.has(next)){ wasBlocked = true; break; }
+    cur = next;
+    path.push(cur);
+    if (targetKey !== undefined && cur === targetKey){ bankedAt = path.length - 1; break; }
+  }
+  return { path, wasBlocked, bankedAt };
+}
+// alle (tot 4) rechte richtingen vanaf `fromKey`, voor de solo-modus: de speler kiest zelf.
+function gravityBootsOptions(graph, fromKey, maxSteps, occupied, targetKey){
+  const options = [];
+  for (let d = 0; d < 4; d++){
+    const line = walkStraightLine(graph, fromKey, d, maxSteps, occupied, targetKey);
+    if (line.path.length > 1) options.push({ dir: d, ...line });
+  }
+  return options;
+}
+
+function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
   const candidates = [];
   for (let d = 0; d < 4; d++){
-    let cur = fromKey;
-    const path = [cur];
-    let wasBlocked = false;
-    let bankedAt = -1;
-    for (let s = 0; s < maxSteps; s++){
-      const neigh = adjKey[cur], dirs = adjDir[cur];
-      let next = -1;
-      for (let j = 0; j < dirs.length; j++) if (dirs[j] === d){ next = neigh[j]; break; }
-      if (next === -1) break;           // muur: deze richting stopt hier
-      if (occupied.has(next)){ wasBlocked = true; break; }
-      cur = next;
-      path.push(cur);
-      if (cur === targetKey){ bankedAt = path.length - 1; break; }
-    }
-    if (path.length > 1) candidates.push({ path, wasBlocked, bankedAt });
+    const line = walkStraightLine(graph, fromKey, d, maxSteps, occupied, targetKey);
+    if (line.path.length > 1) candidates.push(line);
   }
   if (!candidates.length) return null;
 
@@ -3285,6 +3475,7 @@ const btnSimulate = document.getElementById('btnSimulate');
 function clearSimResults(){
   // een lopende stap-voor-stap-pion hoort niet op een bord dat onder hem vandaan verandert
   stopWalkSimulation();
+  stopSoloGame();
   if (!simResultsEl) return;
   simResultsEl.innerHTML = '';
   simStatusEl.innerHTML = `<span class="sub">Indeling gewijzigd — draai de simulatie opnieuw voor cijfers die bij dit bord horen.</span>`;
@@ -3863,16 +4054,13 @@ function walkCardNote(id){
   if (!id) return '';
   return ` <span class="action">🃏 ${ACTION_CARDS[id].name}</span>`;
 }
-const ACTION_CARD_ICONS = {
-  boots: '🥾', ration: '🔋', short: '⚡✕', blind: '👁', recal: '🔀',
-  shove: '👊', boostcell: '🎲', valve: '🚿', resupply: '🔁', scan: '🔎',
-};
-// de handkaarten van een speler als kleine badges, met de volledige naam in de title
+// de handkaarten van een speler als kleine kaart-badges (renderActionCardFace uit
+// 95-simulate.js, gedeeld met de solo-modus)
 function walkCardBadges(player){
   if (!player.cards.length) return '';
-  return `<span class="walk-player-cards">` + player.cards.map(id =>
-    `<span class="walk-card-badge" title="${ACTION_CARDS[id].name} — ${ACTION_CARDS[id].hint}">${ACTION_CARD_ICONS[id]}</span>`
-  ).join('') + `</span>`;
+  return `<span class="walk-player-cards">` +
+    player.cards.map(id => renderActionCardFace(id, { size: 'sm' })).join('') +
+  `</span>`;
 }
 
 function walkEnergyNote(roll, gain, player){
@@ -4310,6 +4498,561 @@ if (walkSpeedEl){
 }
 refreshWalkStartOptions();
 syncWalkStartEnabled();
+
+
+// ===== 97-solo.js =====
+// ---------- stap voor stap: zelf spelen (solo) ----------
+// Geen bots, geen animatietempo — jij dobbelt zelf, kiest zelf elke stap een aangrenzend
+// vakje, en zet zelf een energie-actie of handkaart in. Hergebruikt dezelfde spelregels als
+// de batch/auto-modus (resolveMove-achtige geen-U-turn-logica, ENERGY_ACTIONS, ACTION_CARDS,
+// buildActionDeck), maar zonder de bot-AI: er wordt niets automatisch beslist behalve de
+// worpen zelf, die blijven random.
+//
+// Omdat je alleen speelt, is er niemand die je blokkeert — Kortsluiting, Blinde Vlek, Duwstoot
+// en Prioriteitspas hebben allemaal een tegenstander nodig en staan daarom altijd uit als je
+// ze trekt (net zoals Prioriteitspas ook in de bot-simulatie geen effect heeft).
+const WALK_SOLO_NO_OPPONENT_CARDS = ['short', 'blind', 'shove', 'scan'];
+
+const walkModeAutoBtn = document.getElementById('walkModeAuto');
+const walkModeSoloBtn = document.getElementById('walkModeSolo');
+const walkAutoControlsEl = document.getElementById('walkAutoControls');
+const walkSoloControlsEl = document.getElementById('walkSoloControls');
+const walkAutoHintEl = document.getElementById('walkAutoHint');
+const walkSoloHintEl = document.getElementById('walkSoloHint');
+const walkStartSoloSel = document.getElementById('walkStartSolo');
+const btnWalkSoloStart = document.getElementById('btnWalkSoloStart');
+const btnWalkSoloReset = document.getElementById('btnWalkSoloReset');
+const walkSoloPanelEl = document.getElementById('walkSoloPanel');
+const walkSoloActionsEl = document.getElementById('walkSoloActions');
+const btnWalkSoloRoll = document.getElementById('btnWalkSoloRoll');
+const btnWalkSoloSkip = document.getElementById('btnWalkSoloSkip');
+
+let soloGraph = null;
+let soloPlayer = null;
+let soloDeck = null;
+let soloRand = null;
+let soloTurn = 0;
+let soloTargetKey = null;
+// 'idle' | 'choose-action' | 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
+let soloPhase = 'idle';
+let soloRunId = 0;
+let soloMove = null;            // { d1, d2, d3, roll, stepsLeft, lastDir, path }
+let soloEnergyRoll = 0;
+let soloEnergyGain = { gained: 0, wasted: 0 };
+let soloUsedEnergyId = null;    // id uit ENERGY_ACTIONS, voor de logregel
+let soloUsedCardId = null;      // id uit ACTION_CARDS, voor de logregel
+let soloPendingBoost = false;   // Stuwstoot/Stuwlading: deze beurt een 3e loopsteen
+let soloUsedBoots = false;
+let soloUsedJump = false;
+let soloBootsOptions = [];
+
+function soloRefreshStartOptions(){
+  if (!walkStartSoloSel) return;
+  const prev = walkStartSoloSel.value;
+  walkStartSoloSel.innerHTML = SIM_START_LABELS.map(l => `<option value="${l}">${l}</option>`).join('')
+    + `<option value="?">willekeurig</option>`;
+  walkStartSoloSel.value = SIM_START_LABELS.includes(prev) || prev === '?' ? prev : '?';
+}
+
+// ---------- modus wisselen ----------
+function setWalkMode(mode){
+  stopWalkSimulation();
+  stopSoloGame();
+  const isAuto = mode === 'auto';
+  if (walkModeAutoBtn){ walkModeAutoBtn.classList.toggle('active', isAuto); walkModeAutoBtn.setAttribute('aria-selected', String(isAuto)); }
+  if (walkModeSoloBtn){ walkModeSoloBtn.classList.toggle('active', !isAuto); walkModeSoloBtn.setAttribute('aria-selected', String(!isAuto)); }
+  if (walkAutoControlsEl) walkAutoControlsEl.hidden = !isAuto;
+  if (walkSoloControlsEl) walkSoloControlsEl.hidden = isAuto;
+  if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
+  if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
+  if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
+  renderWalkBoard();
+  if (walkDiceEl) walkDiceEl.innerHTML = '';
+  if (walkMetaEl) walkMetaEl.innerHTML = '';
+  if (walkScoreEl) walkScoreEl.innerHTML = '';
+  if (walkStatusEl) walkStatusEl.innerHTML = '';
+  if (walkLogEl) walkLogEl.innerHTML = '';
+}
+
+// ---------- bord: welke vakjes zijn nu aanklikbaar ----------
+function soloClearClickable(){
+  if (!walkBoardEl) return;
+  for (const el of walkBoardEl.querySelectorAll('.walk-clickable')){
+    el.classList.remove('walk-clickable');
+    delete el.dataset.key;
+  }
+}
+function soloMarkClickable(graph, keys){
+  soloClearClickable();
+  for (const k of keys){
+    const el = walkCellDiv(graph, k);
+    el.classList.add('walk-clickable');
+    el.dataset.key = k;
+  }
+}
+
+if (walkBoardEl){
+  walkBoardEl.addEventListener('click', (e) => {
+    const el = e.target.closest('.walk-clickable');
+    if (!el) return;
+    const key = parseInt(el.dataset.key, 10);
+    if (soloPhase === 'moving') soloHandleMoveClick(key);
+    else if (soloPhase === 'jump-target') soloHandleJumpClick(key);
+  });
+}
+
+// welke vervolgstappen mag je zetten vanaf `pos`, gegeven de richting van je vorige stap
+// (-1 = eerste stap van de beurt, geen beperking) — zelfde geen-U-turn-regel als resolveMove()
+function soloLegalNextCells(graph, pos, lastDir){
+  const neigh = graph.adjKey[pos], dirs = graph.adjDir[pos];
+  const out = [];
+  for (let j = 0; j < neigh.length; j++){
+    const d = dirs[j];
+    if (lastDir !== -1 && d === (lastDir + 2) % 4) continue;
+    out.push({ key: neigh[j], dir: d });
+  }
+  return out;
+}
+
+// ---------- score/meta ----------
+// eigen (simpele) variant van renderWalkScore(): geen strategie-badge, want in solo kies je
+// zelf wat je speelt in plaats van vast te zitten aan één bot-strategie
+function renderSoloScore(){
+  if (!walkScoreEl || !soloPlayer) return;
+  const p = soloPlayer;
+  const targetLabel = p.deck[p.nextIdx];
+  const goal = p.completed >= SIM_QUESTS_TO_WIN
+    ? '<span class="hit">alle opdrachten voltooid</span>'
+    : `${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}`;
+  walkScoreEl.innerHTML = `<div class="walk-player active" style="--pc:${p.color}">` +
+    `<span class="walk-player-dot"></span>` +
+    `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
+    walkCardBadges(p) +
+    `<span class="walk-player-goal">${goal}</span>` +
+    `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
+    `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
+  `</div>`;
+}
+// renderWalkMeta() + een regel met je eigen (zichtbare) opdrachtstapel, zodat je Herkalibratie/
+// Herprioritering weloverwogen kunt inzetten — je stapel is nooit geheim in een solo-potje
+function renderSoloMeta(stepsLeft){
+  renderWalkMeta({ player: soloPlayer, turn: soloTurn, stepsLeft });
+  if (!walkMetaEl || !soloPlayer || soloPlayer.completed >= SIM_QUESTS_TO_WIN) return;
+  const upcoming = soloPlayer.deck.slice(soloPlayer.nextIdx, soloPlayer.nextIdx + 3)
+    .map((l, i) => i === 0 ? `<b>${l}</b>` : l).join(' → ');
+  walkMetaEl.insertAdjacentHTML('beforeend', `<span>Volgende: ${upcoming} …</span>`);
+}
+function soloRefreshTarget(){
+  const label = soloPlayer.deck[soloPlayer.nextIdx];
+  soloTargetKey = soloGraph.questCells[label];
+  walkClearClass('walk-target');
+  const el = walkCellDiv(soloGraph, soloTargetKey);
+  el.style.setProperty('--pc', soloPlayer.color);
+  el.classList.add('walk-target');
+}
+
+// ---------- actiepaneel (begin van de beurt) ----------
+function renderEnergySoloButton(id, disabled, reason){
+  const act = ENERGY_ACTIONS[id];
+  const title = reason ? `${act.name} — ${reason}` : `${act.name} — ${act.hint}`;
+  return `<button type="button" class="action-card action-card--lg action-card--plain${disabled ? ' is-disabled' : ''}" data-energy="${id}"${disabled ? ' disabled' : ''} title="${title}">
+    <span class="action-card-cost">${act.cost}</span>
+    <span class="action-card-name" style="margin-top:22px;">${act.name}</span>
+    <span class="action-card-hint">${act.hint}</span>
+  </button>`;
+}
+function soloRenderActionPanel(){
+  if (!walkSoloActionsEl) return;
+  const p = soloPlayer;
+  const energyBtns = ['boost', 'reorder', 'jump'].map(id =>
+    renderEnergySoloButton(id, p.energy < ENERGY_ACTIONS[id].cost)
+  ).join('');
+
+  const cardBtns = p.cards.map(id => {
+    let disabled = false, reason = null;
+    if (WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in de solo-modus'; }
+    else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
+    else if (id === 'valve' && soloEnergyGain.wasted === 0){ disabled = true; reason = 'er ging deze beurt geen energie verloren'; }
+    const titleOverride = reason ? `${ACTION_CARDS[id].name} — ${reason}` : null;
+    return renderActionCardFace(id, { size: 'lg', interactive: true, disabled, titleOverride });
+  }).join('');
+
+  walkSoloActionsEl.innerHTML =
+    `<div class="action-card-row">${energyBtns}</div>` +
+    (cardBtns ? `<div class="action-card-row">${cardBtns}</div>` : '');
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'choose-action') return;
+    const btn = e.target.closest('button.action-card');
+    if (!btn || btn.disabled || btn.classList.contains('is-disabled')) return;
+    if (btn.dataset.card) soloPlayCard(btn.dataset.card);
+    else if (btn.dataset.energy) soloUseEnergyAction(btn.dataset.energy);
+  });
+}
+
+function soloUnconditionalSwap(){
+  const cur = soloPlayer.deck[soloPlayer.nextIdx];
+  const alt = soloPlayer.deck[soloPlayer.nextIdx + 1];
+  soloPlayer.deck[soloPlayer.nextIdx] = alt;
+  soloPlayer.deck[soloPlayer.nextIdx + 1] = cur;
+}
+
+function soloPlayCard(id){
+  if (id === 'boots'){ soloEnterBootsDirection(); return; }
+  if (id === 'ration'){
+    simGainEnergy(soloPlayer, 3);
+    useActionCard(soloPlayer, 'ration', soloDeck);
+    soloUsedCardId = 'ration';
+    walkLog(`Je speelt <b>Noodrantsoen</b>: +3 energie → ${soloPlayer.energy}.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'recal'){
+    soloUnconditionalSwap();
+    useActionCard(soloPlayer, 'recal', soloDeck);
+    soloUsedCardId = 'recal';
+    soloRefreshTarget();
+    walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${soloPlayer.deck[soloPlayer.nextIdx]}.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'boostcell'){
+    soloPendingBoost = true;
+    useActionCard(soloPlayer, 'boostcell', soloDeck);
+    soloUsedCardId = 'boostcell';
+    walkLog(`Je speelt <b>Stuwlading</b>: deze beurt met 3 loopstenen.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'valve'){
+    const saved = Math.min(3, soloEnergyGain.wasted);
+    soloPlayer.energy += saved;
+    soloEnergyGain.wasted -= saved;
+    useActionCard(soloPlayer, 'valve', soloDeck);
+    soloUsedCardId = 'valve';
+    walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${soloPlayer.energy}.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'resupply'){
+    useActionCard(soloPlayer, 'resupply', soloDeck);
+    const drawn = drawActionCard(soloDeck, soloRand);
+    if (drawn) soloPlayer.cards.push(drawn);
+    soloUsedCardId = 'resupply';
+    walkLog(`Je speelt <b>Herbevoorrading</b> en trekt meteen <b>${drawn ? ACTION_CARDS[drawn].name : 'niets — stapel leeg'}</b>.`, null, soloPlayer);
+    soloProceedToRoll();
+  }
+}
+function soloUseEnergyAction(id){
+  const act = ENERGY_ACTIONS[id];
+  if (soloPlayer.energy < act.cost) return;
+  soloPlayer.energy -= act.cost;
+  soloUsedEnergyId = id;
+  if (id === 'boost'){
+    soloPendingBoost = true;
+    walkLog(`Je zet <b>Stuwstoot</b> in (−3): deze beurt met 3 loopstenen.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'reorder'){
+    soloUnconditionalSwap();
+    soloRefreshTarget();
+    walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${soloPlayer.deck[soloPlayer.nextIdx]}.`, null, soloPlayer);
+    soloProceedToRoll();
+  } else if (id === 'jump'){
+    soloEnterJumpTarget();
+  }
+}
+
+// ---------- Zwaartekracht-laarzen: richting kiezen ----------
+function soloEnterBootsDirection(){
+  const options = gravityBootsOptions(soloGraph, soloPlayer.pos, 10, new Set(), soloTargetKey);
+  if (!options.length){
+    walkLog(`<b>Zwaartekracht-laarzen</b>: in geen enkele richting is een stap mogelijk vanaf hier — de kaart blijft in je hand.`, null, soloPlayer);
+    return;
+  }
+  soloBootsOptions = options;
+  soloPhase = 'boots-direction';
+  btnWalkSoloSkip.hidden = true;
+  const names = ['Noord', 'Oost', 'Zuid', 'West'];
+  walkSoloActionsEl.innerHTML = `<div class="action-card-row">` + options.map(o =>
+    `<button type="button" class="action-card action-card--lg action-card--plain" data-boots-dir="${o.dir}" title="${names[o.dir]} — ${o.path.length - 1} stappen tot muur/rand">
+      <span class="action-card-name" style="margin-top:22px;">${names[o.dir]}</span>
+      <span class="action-card-hint">${o.path.length - 1} vakjes tot muur/rand${o.bankedAt !== -1 ? ' — raakt je doel!' : ''}</span>
+    </button>`
+  ).join('') + `</div>`;
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'boots-direction') return;
+    const btn = e.target.closest('button[data-boots-dir]');
+    if (!btn) return;
+    soloResolveBoots(parseInt(btn.dataset.bootsDir, 10));
+  });
+}
+function soloResolveBoots(dir){
+  const opt = soloBootsOptions.find(o => o.dir === dir);
+  if (!opt) return;
+  useActionCard(soloPlayer, 'boots', soloDeck);
+  soloUsedCardId = 'boots';
+  soloUsedBoots = true;
+  const banked = opt.bankedAt !== -1;
+  const path = banked ? opt.path.slice(0, opt.bankedAt + 1) : opt.path;
+
+  walkLog(`Je speelt <b>Zwaartekracht-laarzen</b>: ${path.length - 1} stappen rechtdoor.`, null, soloPlayer);
+  for (let i = 1; i < path.length; i++){
+    const leaving = walkCellDiv(soloGraph, soloPlayer.pos);
+    leaving.style.setProperty('--pc', soloPlayer.color);
+    leaving.classList.add('walk-trail', 'walk-jump');
+    soloPlayer.pos = path[i];
+  }
+  paintWalkPawns(soloGraph, [soloPlayer], 0);
+  soloMove = { d1: 0, d2: 0, d3: null, roll: path.length - 1, stepsLeft: 0, lastDir: -1, path };
+  soloFinishTurn(banked);
+}
+
+// ---------- Noodtransport: doel kiezen ----------
+function soloEnterJumpTarget(){
+  soloPhase = 'jump-target';
+  walkSoloActionsEl.innerHTML = '';
+  btnWalkSoloSkip.hidden = true;
+  btnWalkSoloRoll.hidden = true;
+  const stamp = simBfsDistances(soloGraph, soloPlayer.pos);
+  const keys = [];
+  for (let k = 0; k < soloGraph.N; k++){
+    if (k === soloPlayer.pos) continue;
+    const d = simDistLookup(stamp, k);
+    if (d >= 0 && d <= ENERGY_JUMP_RANGE) keys.push(k);
+  }
+  soloMarkClickable(soloGraph, keys);
+  walkLog(`<b>Noodtransport</b> ingezet — klik een groen omrand vakje binnen bereik (tot ${ENERGY_JUMP_RANGE} vakjes vrij) om erheen te springen.`, null, soloPlayer);
+}
+function soloHandleJumpClick(key){
+  soloClearClickable();
+  soloUsedJump = true;
+  const fromEl = walkCellDiv(soloGraph, soloPlayer.pos);
+  fromEl.style.setProperty('--pc', soloPlayer.color);
+  fromEl.classList.add('walk-trail', 'walk-jump');
+  soloPlayer.pos = key;
+  const toEl = walkCellDiv(soloGraph, key);
+  toEl.style.setProperty('--pc', soloPlayer.color);
+  toEl.classList.add('walk-trail', 'walk-jump');
+  paintWalkPawns(soloGraph, [soloPlayer], 0);
+
+  if (key === soloTargetKey){
+    soloMove = { d1: 0, d2: 0, d3: null, roll: 0, stepsLeft: 0, lastDir: -1, path: [key] };
+    soloFinishTurn(true);
+  } else {
+    walkLog(`Je springt met <b>Noodtransport</b> naar een nieuwe plek — niet op je doel, dus je gooit gewoon door vanaf hier.`, null, soloPlayer);
+    soloProceedToRoll();
+  }
+}
+
+// ---------- dobbelen + lopen ----------
+// alleen de energiesteen is al bekend aan het begin van de beurt; de loopstenen tonen we
+// als "?" i.p.v. ze door renderWalkDice() te laten optellen (die verwacht getallen, geen
+// placeholder-tekens — "–"+"–" zou tekst-aan-elkaar-plakken worden, geen 0)
+function renderSoloDicePending(){
+  const e = soloEnergyRoll;
+  walkDiceEl.innerHTML =
+    `<span class="walk-die">?</span><span class="walk-die">?</span>` +
+    `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
+}
+function soloProceedToRoll(){
+  walkSoloActionsEl.innerHTML = '';
+  btnWalkSoloSkip.hidden = true;
+  btnWalkSoloRoll.hidden = false;
+  btnWalkSoloRoll.textContent = soloPendingBoost ? '🎲 Gooi 3 dobbelstenen' : '🎲 Gooi de dobbelstenen';
+  soloPhase = 'rolling';
+  renderSoloScore();
+  renderSoloMeta();
+}
+function soloRollDice(){
+  if (soloPhase !== 'rolling') return;
+  const d1 = simRollD6(soloRand), d2 = simRollD6(soloRand);
+  const d3 = soloPendingBoost ? simRollD6(soloRand) : null;
+  renderWalkDice(d1, d2, soloEnergyRoll, false, d3);
+  const roll = d1 + d2 + (d3 || 0);
+  soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [soloPlayer.pos] };
+  btnWalkSoloRoll.hidden = true;
+  soloAdvanceMovePhase();
+}
+if (btnWalkSoloRoll) btnWalkSoloRoll.addEventListener('click', soloRollDice);
+if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
+  if (soloPhase !== 'choose-action') return;
+  soloProceedToRoll();
+});
+
+function soloAdvanceMovePhase(){
+  const legal = soloLegalNextCells(soloGraph, soloPlayer.pos, soloMove.lastDir);
+  if (!legal.length){
+    walkLog(`Doodlopend — geen vervolgstap meer mogelijk.`, null, soloPlayer);
+    soloFinishTurn(false);
+    return;
+  }
+  soloPhase = 'moving';
+  soloMarkClickable(soloGraph, legal.map(l => l.key));
+  renderSoloMeta(soloMove.stepsLeft);
+}
+function soloHandleMoveClick(key){
+  const legal = soloLegalNextCells(soloGraph, soloPlayer.pos, soloMove.lastDir);
+  const match = legal.find(l => l.key === key);
+  if (!match) return;
+  const leaving = walkCellDiv(soloGraph, soloPlayer.pos);
+  leaving.style.setProperty('--pc', soloPlayer.color);
+  leaving.classList.add('walk-trail');
+  soloPlayer.pos = key;
+  soloMove.lastDir = match.dir;
+  soloMove.stepsLeft--;
+  soloMove.path.push(key);
+  paintWalkPawns(soloGraph, [soloPlayer], 0);
+
+  if (key === soloTargetKey){
+    soloClearClickable();
+    soloFinishTurn(true);
+  } else if (soloMove.stepsLeft <= 0){
+    soloClearClickable();
+    soloFinishTurn(false);
+  } else {
+    soloAdvanceMovePhase();
+  }
+}
+
+// ---------- beurt afronden ----------
+function soloFinishTurn(banked){
+  soloClearClickable();
+  const { d1, d2, d3, roll } = soloMove;
+  const stepsUsed = soloMove.path.length - 1;
+  const rollText = soloUsedBoots
+    ? `🥾 ${stepsUsed} van 10 stappen rechtdoor`
+    : soloUsedJump
+      ? `⚡ Noodtransport`
+      : walkRollText(d1, d2, d3, roll);
+  const turnNote = soloUsedEnergyId ? walkActionNote(soloUsedEnergyId) : walkCardNote(soloUsedCardId);
+  const targetLabel = soloPlayer.deck[soloPlayer.nextIdx];
+
+  if (banked){
+    soloPlayer.completed++;
+    soloPlayer.doneCells.push(soloTargetKey);
+    walkClearClass('walk-target');
+    walkCellDiv(soloGraph, soloTargetKey).classList.add('walk-done');
+    const extra = (!soloUsedBoots && !soloUsedJump && stepsUsed < roll) ? ` (na ${stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
+    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, soloPlayer)}${turnNote} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${soloPlayer.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', soloPlayer);
+    soloPlayer.nextIdx++;
+
+    if (soloPlayer.cards.length < ACTION_CARD_HAND_MAX){
+      const drawn = drawActionCard(soloDeck, soloRand);
+      if (drawn){
+        soloPlayer.cards.push(drawn);
+        walkLog(`Je trekt een beloningskaart: <b>${ACTION_CARDS[drawn].name}</b> — ${ACTION_CARDS[drawn].hint}.`, null, soloPlayer);
+      }
+    } else {
+      walkLog(`Je zou een kaart trekken, maar je hand is al vol.`, null, soloPlayer);
+    }
+
+    if (soloPlayer.completed >= SIM_QUESTS_TO_WIN){
+      soloEndGame();
+      return;
+    }
+  } else {
+    const extra = (!soloUsedBoots && !soloUsedJump && stepsUsed < roll) ? ` — kon maar ${stepsUsed} stappen zetten (doodlopend)` : '';
+    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, soloPlayer)}${turnNote} → onderweg naar ${targetLabel}${extra}`, null, soloPlayer);
+  }
+  renderSoloScore();
+  beginSoloTurn();
+}
+function soloEndGame(){
+  soloPhase = 'game-over';
+  walkClearClass('walk-target');
+  walkSoloActionsEl.innerHTML = '';
+  btnWalkSoloRoll.hidden = true;
+  btnWalkSoloSkip.hidden = true;
+  renderSoloScore();
+  if (walkMetaEl) walkMetaEl.innerHTML = '';
+  walkStatusEl.innerHTML = `<span class="ok">✓ Alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid in ${soloTurn} beurten!</span>`;
+  btnWalkSoloStart.disabled = false;
+  walkStartSoloSel.disabled = false;
+}
+
+// ---------- beurt starten ----------
+function beginSoloTurn(){
+  soloTurn++;
+  soloUsedEnergyId = null;
+  soloUsedCardId = null;
+  soloPendingBoost = false;
+  soloUsedBoots = false;
+  soloUsedJump = false;
+  soloMove = null;
+
+  soloEnergyRoll = simRollEnergy(soloRand);
+  soloEnergyGain = simGainEnergy(soloPlayer, soloEnergyRoll);
+
+  soloRefreshTarget();
+  renderSoloDicePending();
+  renderSoloScore();
+  renderSoloMeta();
+
+  btnWalkSoloRoll.hidden = true;
+  btnWalkSoloSkip.hidden = false;
+  soloPhase = 'choose-action';
+  soloRenderActionPanel();
+}
+
+// ---------- potje starten/stoppen ----------
+function stopSoloGame(){
+  soloRunId++;
+  soloPhase = 'idle';
+  soloGraph = null; soloPlayer = null; soloMove = null;
+  soloClearClickable();
+  if (walkSoloActionsEl) walkSoloActionsEl.innerHTML = '';
+  if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
+  if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
+  if (btnWalkSoloStart) btnWalkSoloStart.disabled = false;
+  if (btnWalkSoloReset) btnWalkSoloReset.disabled = true;
+  if (walkStartSoloSel) walkStartSoloSel.disabled = false;
+}
+function startSoloGame(){
+  stopSoloGame();
+  walkLogEl.innerHTML = '';
+  walkStatusEl.innerHTML = '';
+  if (walkSoloPanelEl) walkSoloPanelEl.hidden = false;
+
+  const reach = analyseCellReachability();
+  if (reach.unreachable.length > 0){
+    walkStatusEl.innerHTML = `<span class="bad">✕ Dit bord heeft ${reach.unreachable.length} onbereikbare vakjes — pas de indeling aan voordat je speelt.</span>`;
+    return;
+  }
+  renderWalkBoard();
+  const graph = buildSimGraph();
+  const missing = [...SIM_QUEST_LABELS, ...SIM_START_LABELS].filter(l =>
+    graph.questCells[l] === undefined && graph.startCells[l] === undefined);
+  if (missing.length){
+    walkStatusEl.innerHTML = `<span class="bad">✕ Deze vakjes ontbreken op het bord: ${missing.join(', ')}.</span>`;
+    return;
+  }
+
+  soloGraph = graph;
+  soloRand = mulberry32(Math.floor(Math.random() * 4294967296));
+  const startLabel = walkStartSoloSel.value === '?'
+    ? SIM_START_LABELS[Math.floor(soloRand() * SIM_START_LABELS.length)]
+    : walkStartSoloSel.value;
+  soloPlayer = {
+    idx: 0, name: 'Jij', color: WALK_PLAYER_COLORS[0], startLabel,
+    pos: graph.startCells[startLabel],
+    deck: simShuffle(SIM_QUEST_LABELS, soloRand),
+    nextIdx: 0, completed: 0, energy: 0, cards: [], rank: 0, doneCells: [],
+  };
+  soloDeck = buildActionDeck(soloRand);
+  soloTurn = 0;
+
+  btnWalkSoloStart.disabled = true;
+  btnWalkSoloReset.disabled = false;
+  walkStartSoloSel.disabled = true;
+
+  walkLog(`Jij start op <b>${startLabel}</b> · stapel: ${soloPlayer.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, soloPlayer);
+  walkLog(`Solo potje: niemand blokkeert je. Kortsluiting, Duwstoot, Blinde Vlek en Prioriteitspas hebben een tegenstander nodig en doen hier dus niets als je ze trekt.`);
+
+  paintWalkPawns(soloGraph, [soloPlayer], 0);
+  beginSoloTurn();
+}
+
+if (walkModeAutoBtn) walkModeAutoBtn.addEventListener('click', () => setWalkMode('auto'));
+if (walkModeSoloBtn) walkModeSoloBtn.addEventListener('click', () => setWalkMode('solo'));
+if (btnWalkSoloStart) btnWalkSoloStart.addEventListener('click', startSoloGame);
+if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', startSoloGame);
+
+soloRefreshStartOptions();
 
 </script>
 </body>
