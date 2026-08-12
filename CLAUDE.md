@@ -153,6 +153,12 @@ Check minimaal:
    ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
    standenbalk telt mee, "Startpositie" is alleen te kiezen bij 1 speler, en
    getrokken beloningskaarten verschijnen als kleine badges naast elke speler.
+12. Mobiel (breedte ≤ 640px, test o.a. op 320/375/414px): het bord (Kaart maken,
+   Stap voor stap én de drukte-heatmap in Simulatie) moet **passen zonder
+   horizontaal te scrollen** — controleer dat `document.documentElement.scrollWidth`
+   niet groter is dan `clientWidth`. Wordt dat toch breder, dan klopt de
+   `clamp(...)`-formule voor `--cell` in `styles.css` niet meer met de werkelijke
+   marges van `body`/`.panel` op dat breakpoint.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),

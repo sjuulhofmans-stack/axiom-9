@@ -635,19 +635,25 @@
     .selected-tile-box{font-size:13.5px; padding:10px 12px;}
     .tag{font-size:10.5px; padding:3px 7px;}
 
-    #board{ --cell: 18px; }
-    #walkBoard{ --cell: 16px; }
+    /* Het bord is 40 vakjes breed en past van zichzelf niet op een telefoon. In plaats van
+       een vaste --cell + horizontaal scrollen (wat op mobiel altijd een beetje onhandig
+       aanvoelt), rekenen we de celgrootte hier uit de beschikbare breedte: 40 cellen + 39
+       tussenruimtes van 1px moeten passen binnen (100vw - chrome). Chrome = 20px body-
+       marge + 28px paneel-marge (zie hierboven in dit blok), plus een marge van 8px omdat
+       we liever een fractie te klein zitten dan alsnog moeten scrollen.
+       Boven de 640px-grens (waar dit blok niet geldt) gelden de vaste desktopwaarden. */
+    #board{ --cell: clamp(5px, calc((100vw - 95px) / 40), 18px); }
+    #walkBoard{ --cell: clamp(5px, calc((100vw - 95px) / 40), 16px); }
     .walk-controls{gap:12px;}
     .walk-controls .field{min-width:0; flex:1 1 100%;}
-    .sim-heat-grid{ --hcell: 7px; }
-    .letter-badge{width:15px; height:15px; font-size:9.5px;}
-    .room-label{font-size:7.5px; padding-left:3px;}
-    .board-outer{
-      margin:0 -14px; padding-left:14px; padding-right:14px;
-      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-              mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    .sim-heat-grid{ --hcell: clamp(3.5px, calc((100vw - 95px) / 40), 7px); }
+    /* schaalt mee met --cell in plaats van een vaste px-waarde, anders past een badge van
+       15px niet meer op een cel die op een smalle telefoon nog maar 6-8px breed is */
+    .letter-badge{
+      width:calc(var(--cell) * 0.85); height:calc(var(--cell) * 0.85);
+      font-size:calc(var(--cell) * 0.5); border-radius:1px 4px 1px 1px;
     }
-    .scroll-hint{display:block;}
+    .room-label{font-size:calc(var(--cell) * 0.5); padding-left:3px;}
 
     #palette{grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:9px;}
     .tile-thumb{padding:8px;}
