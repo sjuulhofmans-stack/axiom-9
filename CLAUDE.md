@@ -77,9 +77,13 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   20 tegels met elkaar verbonden zijn. Kandidaten (pool van 20) worden daarna
   gerangschikt op (1) `deadTileCount`; (2) kamers achter een wurgpunt;
   (3) `roomIsolationScore` — hoeveel gangen je hoogstens moet passeren van een
-  kamer naar de dichtstbijzijnde andere kamer; (4) `questSpacingScore.minDist` —
+  kamer naar de dichtstbijzijnde andere kamer; (4) `roomAdjacencyCount` — bij
+  gelijke `roomIsolationScore` alsnog zoveel mogelijk kamers die ECHT
+  rechtstreeks aan een andere kamer grenzen (`roomIsolationScore` let alleen op
+  het slechtste geval, dus twee kandidaten kunnen daar allebei op 0 staan
+  terwijl de een veel meer kamer-kamer deuren heeft); (5) `questSpacingScore.minDist` —
   kortste loopafstand tussen twee opdrachtvakjes, zo groot mogelijk;
-  (5) `questCoverageScore`; (6) eerlijkheid startposities. Zie `70-generator.js`.
+  (6) `questCoverageScore`; (7) eerlijkheid startposities. Zie `70-generator.js`.
   **Waarom `deadTileCount` bovenaan staat:** "dicht bij een opdracht" bleek niet
   genoeg — een buitenrand-lus kan 5 stappen van een opdracht liggen en toch 0
   bezoeken krijgen, omdat spelers alleen van opdracht naar opdracht reizen. De
@@ -93,6 +97,27 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   over en dat is precies de gangenlus waar niemand komt. Twee ervan (7
   Serverruimte, 17 Kernreactor) dragen bovendien een opdracht, dus centraal
   vastzetten haalt de reden weg om naar buiten te lopen.
+  **Gevonden en gefixt — rotatie-vervuiling in `constrainedShuffle`.** De echte
+  boosdoener achter de dode-tegel-klachten bleek geen tegelplaatsing te zijn,
+  maar een globale-state-bug: `deadTileCount`/`startBalanceScore`/
+  `questCoverageScore` lezen tegelcellen via `getDisplayValue()`, dat de
+  GLOBALE `tileRotation` volgt. `applyRandomBoardFlip()` laat die global aan
+  het eind van elke `constrainedShuffle()`-aanroep op overal-0 of overal-180
+  staan (muntworp, zie hieronder), en handmatig een tegel draaien in de editor
+  zet 'm ook. `attemptSeamlessLayout()` bouwt nieuwe kandidaten echter altíjd
+  met de ongedraaide brondata — zonder reset werd de hele volgende
+  scoringsronde dus zo'n **helft van de tijd** uitgevoerd tegen de verkeerde
+  rotatie. Gemeten: het "beste" kandidaat in een pool leek dan `deadTileCount`
+  6–11 te hebben, terwijl diezelfde pool schoon gescoord gewoon een
+  dood-vrije (0) kandidaat bevatte — de generator koos zo effectief willekeurig
+  in plaats van de echte beste indeling, op elke klik die volgde op een
+  geflipt bord. Fix: `resetRotations()` als allereerste regel in
+  `constrainedShuffle()`. Effect over 300 gegenereerde indelingen: dood-vrij
+  64,3% → 97,7%, gemiddeld aantal dode tegels 0,86 → 0,03. Dit verklaart ook
+  meteen waarom "4-weg-tegels op de buitenring" geen echte oorzaak is: na de
+  fix is `deadTileCount` vlak (0,00–0,05) ongeacht hoeveel 4-weg-tegels op de
+  buitenring liggen — dus **niet** opnieuw proberen ze naar binnen te dwingen,
+  dat is het hierboven al afgeraden experiment.
 - Spelsimulatie (`95-simulate.js`): 2×D6 = exact aantal te lopen stappen, geen
   U-turn, bezette vakjes (andere spelers) blokkeren. Uitzondering: land je exact
   op je eigen opdrachtvakje met minder dan de volledige worp, dan stop je daar

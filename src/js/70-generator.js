@@ -380,6 +380,21 @@ function roomIsolationScore(lay){
   return worst;
 }
 
+// hoeveel deuren zitten er RECHTSTREEKS tussen twee kamertegels (geen gang ertussen)?
+// roomIsolationScore hierboven let alleen op het SLECHTSTE geval (isolationScore 0 zodra elke
+// kamer minstens 1 kamerbuur heeft) — deze telt het totaal, zodat de generator tussen kandidaten
+// die daar allebei op 0 staan alsnog kiest voor zoveel mogelijk kamers die daadwerkelijk aan
+// elkaar liggen, i.p.v. willekeurig de eerste zo'n kandidaat te pakken.
+function roomAdjacencyCount(lay){
+  const adj = tileAdjacency(lay);
+  let count = 0;
+  for (let s=0; s<20; s++){
+    if (!ROOM_NAMES[lay[s]]) continue;
+    for (const n of adj[s]) if (n > s && ROOM_NAMES[lay[n]]) count++;
+  }
+  return count;
+}
+
 // ---------- opdrachten niet tegen elkaar aan ----------
 // kortste ECHTE loopafstand (in vakjes, niet in tegels) tussen twee opdrachtvakjes. Twee
 // kamers mogen best naast elkaar liggen — zolang hun opdrachtvakjes maar niet op een paar
@@ -427,10 +442,14 @@ function questSpacingScore(lay){
 //     een speler komt.
 //  2. Kamers achter een wurgpunt — vervelend om te lopen, maar wordt wél gebruikt.
 //  3. roomIsolationScore — geen kamer die achter een rij gangen weggestopt zit ("4 gangen door").
-//  4. questSpacingScore.minDist — opdrachten niet tegen elkaar aan (grootste minimum wint).
+//  4. roomAdjacencyCount — bij gelijke isolationScore: zoveel mogelijk kamers die ECHT
+//     rechtstreeks aan een andere kamer grenzen (roomIsolationScore kijkt alleen naar het
+//     slechtste geval, dus twee kandidaten kunnen daar allebei op 0 staan terwijl de een veel
+//     meer kamer-kamer deuren heeft dan de ander).
+//  5. questSpacingScore.minDist — opdrachten niet tegen elkaar aan (grootste minimum wint).
 //     Staat NA de kamerkoppeling omdat kamers naast elkaar prima is: hun opdrachtvakjes liggen
 //     dan nog steeds ~8-12 vakjes uit elkaar binnen de 8x8 tegels.
-//  5-7. afstand tot een opdracht voor het verste vakje, eerlijkheid startposities, en de
+//  6-8. afstand tot een opdracht voor het verste vakje, eerlijkheid startposities, en de
 //     gemiddelden als fijnproever.
 function compareLayoutQuality(a, b){
   const da = deadTileCount(a), db = deadTileCount(b);
@@ -439,6 +458,8 @@ function compareLayoutQuality(a, b){
   if (ta !== tb) return ta - tb;
   const ia = roomIsolationScore(a), ib = roomIsolationScore(b);
   if (ia !== ib) return ia - ib;
+  const ra = roomAdjacencyCount(a), rb = roomAdjacencyCount(b);
+  if (ra !== rb) return rb - ra;
   const pa = questSpacingScore(a), pb = questSpacingScore(b);
   if (pa.minDist !== pb.minDist) return pb.minDist - pa.minDist;
   const qa = questCoverageScore(a), qb = questCoverageScore(b);
@@ -465,6 +486,16 @@ function applyRandomBoardFlip(lay, flip){
 }
 
 function constrainedShuffle(seedStr){
+  // BUG die hier zat: attemptSeamlessLayout bouwt kandidaten altijd met de ONGEDRAAIDE brondata
+  // (OPEN_EDGES_STATIC), maar deadTileCount/startBalanceScore/questCoverageScore lezen de
+  // kandidaat-cellen via getDisplayValue(), dat de GLOBALE tileRotation volgt. applyRandomBoardFlip
+  // laat die global aan het eind van elke aanroep op overal-0 of overal-180 staan (en handmatig
+  // draaien met de tegel-editor kan 'm ook per tegel verzetten) — zonder reset hierboven werd de
+  // hele volgende scoringsronde dus de HELFT van de tijd uitgevoerd tegen de verkeerde rotatie.
+  // Gemeten effect: het "beste" kandidaat in de pool leek dan deadTileCount 6-11 te hebben terwijl
+  // schoon scoren gewoon een deadTileCount-0 kandidaat opleverde — de generator koos zo effectief
+  // willekeurig i.p.v. de echte beste indeling, op elke klik die volgde op een geflipt bord.
+  resetRotations();
   const seedFn = hashSeed(seedStr);
   const seedInt = Math.floor(seedFn() * 4294967296);
   const masterRand = mulberry32(seedInt);
