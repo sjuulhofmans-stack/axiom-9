@@ -257,15 +257,19 @@
 
   /* richtingsknoppen tijdens het lopen in de solo-modus: hetzelfde als op een vakje
      klikken, maar een stuk makkelijker te raken op een telefoon dan de kleine cellen
-     op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. */
+     op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast
+     een stappenteller, zodat je niet terug hoeft te scrollen naar de worp bovenaan. */
+  .walk-dirpad-row{
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin:0 0 14px;
+  }
+  .walk-dirpad-row[hidden]{display:none;}
   .walk-dirpad{
     display:grid;
     grid-template-areas: ". n ." "w . o" ". z .";
     grid-template-columns: repeat(3, 58px);
     grid-auto-rows: 58px;
-    gap:6px; justify-content:center; margin:0 0 14px;
+    gap:6px;
   }
-  .walk-dirpad[hidden]{display:none;}
   .walk-dir-btn{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; font-size:19px; padding:0; background:var(--panel-2); border:1px solid var(--line);
@@ -277,6 +281,21 @@
   .walk-dir-btn:hover:not(:disabled){border-color:var(--start); box-shadow:0 0 8px rgba(85,214,138,.3);}
   .walk-dir-btn:disabled{opacity:.25; cursor:not-allowed;}
   .walk-dir-n{grid-area:n;} .walk-dir-w{grid-area:w;} .walk-dir-o{grid-area:o;} .walk-dir-z{grid-area:z;}
+
+  .walk-step-counter{display:flex; gap:10px;}
+  .walk-step-box{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-width:56px; padding:8px 10px; background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:8px;
+  }
+  .walk-step-num{
+    font-family:var(--font-mono); font-weight:700; font-size:22px; color:var(--amber);
+    line-height:1.1; font-variant-numeric:tabular-nums;
+  }
+  .walk-step-lbl{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
   .walk-solo-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .walk-solo-actions:empty{display:none;}
   /* de "gewoon dobbelen"-optie is zelf ook een keuzekaart, maar zonder illustratie */

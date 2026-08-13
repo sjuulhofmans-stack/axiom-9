@@ -247,9 +247,12 @@ Check minimaal:
   naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse). Boven
   het bord staat ook een richtingskruis (N/O/Z/W, `#walkDirPad`) dat exact
   dezelfde stap zet als een klik op de cel — op een telefoon zijn de kleine
-  vakjes lastig te raken, deze knoppen zijn 58×58px. Beide manieren werken
-  altijd tegelijk en door elkaar: een knopklik roept dezelfde
-  `soloHandleMoveClick()` aan als een celklik, en `soloRenderDirPad()`
+  vakjes lastig te raken, deze knoppen zijn 58×58px. Ernaast (op smalle
+  schermen: eronder, via `flex-wrap`) staat een stappenteller (gezet/nog) die
+  in `soloRenderDirPad()` meeschrijft bij elke stap — daarvoor moest je terug
+  scrollen naar de dobbelsteen-HUD bovenaan om te zien hoever je nog kon lopen.
+  Beide manieren werken altijd tegelijk en door elkaar: een knopklik roept
+  dezelfde `soloHandleMoveClick()` aan als een celklik, en `soloRenderDirPad()`
   schakelt per stap alleen de knoprichtingen in die net als de cellen ook
   daadwerkelijk legaal zijn (geen U-turn, geen muur). Vergeet bij een nieuwe
   fase niet ook `soloHideDirPad()` aan te roepen — net zo makkelijk te vergeten

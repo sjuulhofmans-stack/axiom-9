@@ -24,6 +24,8 @@ const walkSoloActionsEl = document.getElementById('walkSoloActions');
 const btnWalkSoloRoll = document.getElementById('btnWalkSoloRoll');
 const btnWalkSoloSkip = document.getElementById('btnWalkSoloSkip');
 const walkDirPadEl = document.getElementById('walkDirPad');
+const walkStepDoneEl = document.getElementById('walkStepDone');
+const walkStepLeftEl = document.getElementById('walkStepLeft');
 
 let soloGraph = null;
 let soloPlayer = null;
@@ -361,6 +363,10 @@ function soloRenderDirPad(legal){
   for (const btn of walkDirPadEl.querySelectorAll('button[data-dir]')){
     btn.disabled = !legalDirs.has(parseInt(btn.dataset.dir, 10));
   }
+  // stappenteller naast de knoppen, zodat je niet terug hoeft te scrollen naar de worp
+  // bovenaan om te zien wat je nog hebt staan
+  if (walkStepDoneEl) walkStepDoneEl.textContent = soloMove.path.length - 1;
+  if (walkStepLeftEl) walkStepLeftEl.textContent = soloMove.stepsLeft;
 }
 function soloHideDirPad(){
   if (walkDirPadEl) walkDirPadEl.hidden = true;
