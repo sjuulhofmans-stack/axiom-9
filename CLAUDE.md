@@ -73,6 +73,14 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 - Tegel **8** (Hibernatie) bevat de vier startposities 3.1–3.4 en hoort ook binnenin.
   Als enige kamertegel heeft hij bewust **geen** opdrachtvakje — de tegel-editor
   staat dat uitzonderlijk toe (zie `tileValidationIssues` in `90-editor.js`).
+- Tegel-editor, opdrachtgereedschap (`paintCell` in `90-editor.js`): een opdrachtlabel kan
+  alleen over een AL LOOPBAAR vakje gelegd worden (of over een vakje dat al opdracht is, om
+  het label te wisselen) — nooit op een lege/onbenutte sjabloonplek. Vroeger kon dat wel, en
+  dan werd de tegelvorm ongemerkt uitgebreid met dat vakje; verplaatste je het label daarna
+  naar een andere plek, dan viel de oude plek altijd terug op "loopbaar" (1) in plaats van
+  weer leeg, ook als hij dat origineel nooit was geweest. Nu is elk vakje dat ooit een
+  opdrachtlabel droeg per definitie al loopbaar geweest, dus dat terugvallen op "loopbaar" bij
+  het verplaatsen klopt nu altijd.
 - De generator zoekt een indeling **zonder doodlopende naden** en waarbij alle
   20 tegels met elkaar verbonden zijn. Kandidaten (pool van 20) worden daarna
   gerangschikt op (1) `deadTileCount`; (2) kamers achter een wurgpunt;

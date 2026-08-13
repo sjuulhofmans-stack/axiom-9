@@ -2682,6 +2682,13 @@ function paintCell(key){
   } else {
     // opdrachtvakjes alleen op gewone vakjes, nooit op een deurvakje of het vakje erachter
     if (DOOR_KEYS.has(key) || DOOR_INWARD_VALUES.has(key)) return;
+    // het opdrachtlabel wordt over een AL LOOPBAAR vakje gelegd (of over een vakje dat al
+    // opdracht is, om het label te wisselen) — nooit op een lege/onbenutte sjabloonplek.
+    // Kon dat eerder wel: dan werd de tegelvorm ongemerkt uitgebreid met dat vakje, en zodra
+    // je het label daarna verplaatste, viel de oude plek altijd terug op "loopbaar" (1) in
+    // plaats van weer leeg — ook als hij dat origineel nooit was.
+    const cur = m.get(key);
+    if (cur !== 1 && !(typeof cur === 'string' && cur.startsWith('2.'))) return;
     const label = labelSelect.value;
     if (!label) return;
     // hetzelfde label mag maar één keer voorkomen op het HELE bord (niet alleen deze
