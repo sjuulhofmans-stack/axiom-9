@@ -168,11 +168,13 @@ Check minimaal:
    (Genereer indeling) terwijl een solo-potje loopt moet dat potje stilletjes
    afbreken (`stopSoloGame()`), niet laten hangen of crashen. Een potje uitspelen:
    dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-vakjes zijn
-   niet aanklikbaar) → bij 6/6 een winmelding. Kortsluiting/Blinde Vlek/Duwstoot/
-   Prioriteitspas staan altijd uitgeschakeld in het actiepaneel (tooltip legt uit
-   waarom); de overige kaarten en alle drie de energie-acties moeten wél werken,
-   inclusief de richtingskeuze bij Zwaartekracht-laarzen en de vakjeskeuze bij
-   Noodtransport.
+   niet aanklikbaar) **of** een van de vier richtingsknoppen boven het bord
+   gebruiken (die alleen ingeschakeld zijn in een toegestane richting) → bij 6/6
+   een winmelding. Beide manieren van bewegen moeten door elkaar blijven werken
+   binnen dezelfde beurt. Kortsluiting/Blinde Vlek/Duwstoot/Prioriteitspas staan
+   altijd uitgeschakeld in het actiepaneel (tooltip legt uit waarom); de overige
+   kaarten en alle drie de energie-acties moeten wél werken, inclusief de
+   richtingskeuze bij Zwaartekracht-laarzen en de vakjeskeuze bij Noodtransport.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -242,9 +244,20 @@ Check minimaal:
     én teken een icoon in `ACTION_CARD_ICONS` — zonder icoon crasht de render.
 - **Stap voor stap, zelf spelen** (`97-solo.js`): los tabblad-modusje, geen bots.
   Jij dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje om
-  naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse), en
-  kiest zelf een energie-actie of handkaart aan het begin van je beurt — hooguit
-  één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
+  naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse). Boven
+  het bord staat ook een richtingskruis (N/O/Z/W, `#walkDirPad`) dat exact
+  dezelfde stap zet als een klik op de cel — op een telefoon zijn de kleine
+  vakjes lastig te raken, deze knoppen zijn 58×58px. Beide manieren werken
+  altijd tegelijk en door elkaar: een knopklik roept dezelfde
+  `soloHandleMoveClick()` aan als een celklik, en `soloRenderDirPad()`
+  schakelt per stap alleen de knoprichtingen in die net als de cellen ook
+  daadwerkelijk legaal zijn (geen U-turn, geen muur). Vergeet bij een nieuwe
+  fase niet ook `soloHideDirPad()` aan te roepen — net zo makkelijk te vergeten
+  als `soloClearClickable()`, en het kruis blijft anders zichtbaar tijdens een
+  fase waarin het niet hoort (bijv. tijdens het kiezen van een Noodtransport-
+  bestemming, die geen 4 maar tot 13 vakjes breed is).
+  Verder kiest de speler zelf een energie-actie of handkaart aan het begin van
+  de beurt — hooguit één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
   staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),
   en Herkalibratie/Herprioritering zijn hier **onvoorwaardelijk**: de bot-AI
   swapt alleen als het dichterbij is, maar een mens mag zelf kiezen ook als het

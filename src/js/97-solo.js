@@ -23,6 +23,7 @@ const walkSoloPanelEl = document.getElementById('walkSoloPanel');
 const walkSoloActionsEl = document.getElementById('walkSoloActions');
 const btnWalkSoloRoll = document.getElementById('btnWalkSoloRoll');
 const btnWalkSoloSkip = document.getElementById('btnWalkSoloSkip');
+const walkDirPadEl = document.getElementById('walkDirPad');
 
 let soloGraph = null;
 let soloPlayer = null;
@@ -42,6 +43,7 @@ let soloPendingBoost = false;   // Stuwstoot/Stuwlading: deze beurt een 3e loops
 let soloUsedBoots = false;
 let soloUsedJump = false;
 let soloBootsOptions = [];
+let soloCurrentLegalMoves = [];  // { key, dir }[] — de opties die het richtingskruis nu toont
 
 function soloRefreshStartOptions(){
   if (!walkStartSoloSel) return;
@@ -261,6 +263,7 @@ function soloEnterBootsDirection(){
   }
   soloBootsOptions = options;
   soloPhase = 'boots-direction';
+  soloHideDirPad();
   btnWalkSoloSkip.hidden = true;
   const names = ['Noord', 'Oost', 'Zuid', 'West'];
   walkSoloActionsEl.innerHTML = `<div class="action-card-row">` + options.map(o =>
@@ -303,6 +306,7 @@ function soloResolveBoots(dir){
 function soloEnterJumpTarget(){
   soloPhase = 'jump-target';
   walkSoloActionsEl.innerHTML = '';
+  soloHideDirPad();
   btnWalkSoloSkip.hidden = true;
   btnWalkSoloRoll.hidden = true;
   const stamp = simBfsDistances(soloGraph, soloPlayer.pos);
@@ -346,8 +350,36 @@ function renderSoloDicePending(){
     `<span class="walk-die">?</span><span class="walk-die">?</span>` +
     `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
 }
+// het richtingskruis boven het bord: dezelfde stap als een klik op het vakje, alleen een
+// stuk groter te raken op een telefoon. Beide manieren blijven naast elkaar werken — een
+// klik op een knop roept dezelfde soloHandleMoveClick() aan als een klik op de cel zelf.
+function soloRenderDirPad(legal){
+  if (!walkDirPadEl) return;
+  soloCurrentLegalMoves = legal;
+  walkDirPadEl.hidden = false;
+  const legalDirs = new Set(legal.map(l => l.dir));
+  for (const btn of walkDirPadEl.querySelectorAll('button[data-dir]')){
+    btn.disabled = !legalDirs.has(parseInt(btn.dataset.dir, 10));
+  }
+}
+function soloHideDirPad(){
+  if (walkDirPadEl) walkDirPadEl.hidden = true;
+  soloCurrentLegalMoves = [];
+}
+if (walkDirPadEl){
+  walkDirPadEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'moving') return;
+    const btn = e.target.closest('button[data-dir]');
+    if (!btn || btn.disabled) return;
+    const dir = parseInt(btn.dataset.dir, 10);
+    const match = soloCurrentLegalMoves.find(l => l.dir === dir);
+    if (match) soloHandleMoveClick(match.key);
+  });
+}
+
 function soloProceedToRoll(){
   walkSoloActionsEl.innerHTML = '';
+  soloHideDirPad();
   btnWalkSoloSkip.hidden = true;
   btnWalkSoloRoll.hidden = false;
   btnWalkSoloRoll.textContent = soloPendingBoost ? '🎲 Gooi 3 dobbelstenen' : '🎲 Gooi de dobbelstenen';
@@ -374,12 +406,14 @@ if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
 function soloAdvanceMovePhase(){
   const legal = soloLegalNextCells(soloGraph, soloPlayer.pos, soloMove.lastDir);
   if (!legal.length){
+    soloHideDirPad();
     walkLog(`Doodlopend — geen vervolgstap meer mogelijk.`, null, soloPlayer);
     soloFinishTurn(false);
     return;
   }
   soloPhase = 'moving';
   soloMarkClickable(soloGraph, legal.map(l => l.key));
+  soloRenderDirPad(legal);
   renderSoloMeta(soloMove.stepsLeft);
 }
 function soloHandleMoveClick(key){
@@ -409,6 +443,7 @@ function soloHandleMoveClick(key){
 // ---------- beurt afronden ----------
 function soloFinishTurn(banked){
   soloClearClickable();
+  soloHideDirPad();
   const { d1, d2, d3, roll } = soloMove;
   const stepsUsed = soloMove.path.length - 1;
   const rollText = soloUsedBoots
@@ -492,6 +527,7 @@ function stopSoloGame(){
   soloPhase = 'idle';
   soloGraph = null; soloPlayer = null; soloMove = null;
   soloClearClickable();
+  soloHideDirPad();
   if (walkSoloActionsEl) walkSoloActionsEl.innerHTML = '';
   if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
   if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
