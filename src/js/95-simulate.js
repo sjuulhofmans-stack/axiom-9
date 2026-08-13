@@ -769,6 +769,12 @@ const simCountEl = document.getElementById('simCount');
 const simStatusEl = document.getElementById('simStatus');
 const simResultsEl = document.getElementById('simResults');
 const btnSimulate = document.getElementById('btnSimulate');
+const simProgressEl = document.getElementById('simProgress');
+const simProgressFillEl = document.getElementById('simProgressFill');
+const simProgressTextEl = document.getElementById('simProgressText');
+let simRunning = false;   // voorkomt twee overlappende potjes-reeksen bij dubbelklikken
+let simRunId = 0;         // verhoogd bij elke nieuwe run/bordwijziging; een verouderde
+                           // in-brokken-lopende run herkent hieraan dat hij moet stoppen
 
 // wordt aangeroepen door alles wat de indeling wijzigt (genereren, herstellen,
 // slepen, draaien, tegel-editor) — de cijfers horen bij een specifieke indeling en
@@ -778,6 +784,13 @@ function clearSimResults(){
   // een lopende stap-voor-stap-pion hoort niet op een bord dat onder hem vandaan verandert
   stopWalkSimulation();
   stopSoloGame();
+  // de batch-simulatie rekent nu in brokken (zie runSimulationBatch), dus loopt niet meer
+  // per se blokkerend af vóórdat de gebruiker iets anders kan aanklikken — een lopende reeks
+  // potjes voor de OUDE indeling mag straks niet alsnog deze melding overschrijven
+  simRunId++;
+  if (simProgressEl) simProgressEl.hidden = true;
+  simRunning = false;
+  if (btnSimulate) btnSimulate.disabled = false;
   if (!simResultsEl) return;
   simResultsEl.innerHTML = '';
   simStatusEl.innerHTML = `<span class="sub">Indeling gewijzigd — draai de simulatie opnieuw voor cijfers die bij dit bord horen.</span>`;
@@ -1070,7 +1083,33 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${elapsedMs.toFixed(0)} ms</span>`;
 }
 
+// richttijd per brok werk vóór we de klok checken (ononderbroken doorrekenen, dan pas
+// performance.now() aanroepen) — zo blijft het klok-uitlezen zelf verwaarloosbaar
+const SIM_PROGRESS_CHECK_EVERY = 64;
+// hoe lang een brok werk maximaal ononderbroken doorrekent voordat we een frame teruggeven
+// aan de browser — 30ms geeft de voortgangsbalk een vloeiende, ~30fps-achtige update zonder
+// dat de duizenden setTimeout-overgangen zelf noemenswaardige tijd kosten
+const SIM_CHUNK_BUDGET_MS = 30;
+
+function formatSimSeconds(ms){
+  const s = ms / 1000;
+  return s < 10 ? `${s.toFixed(1)}s` : `${Math.round(s)}s`;
+}
+
+function updateSimProgress(done, n, elapsedMs){
+  if (!simProgressEl) return;
+  const pct = n ? Math.min(100, (done / n) * 100) : 0;
+  simProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  const perGame = done ? elapsedMs / done : 0;
+  const etaMs = perGame * (n - done);
+  simProgressTextEl.innerHTML =
+    `<span><b>${done}</b> / ${n} potjes (${pct.toFixed(0)}%)</span>` +
+    `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${done > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
+}
+
 function runSimulationBatch(){
+  if (simRunning) return;   // een dubbele klik mag geen tweede reeks potjes tegelijk starten
+
   const reach = analyseCellReachability();
   if (reach.unreachable.length > 0){
     simStatusEl.innerHTML = `<span class="bad">✕ Dit bord heeft ${reach.unreachable.length} onbereikbare vakjes (roze omrand op de kaart) — pas de indeling aan voordat je simuleert.</span>`;
@@ -1095,10 +1134,19 @@ function runSimulationBatch(){
   n = Math.max(100, Math.min(20000, n));
   simCountEl.value = n;
 
-  simStatusEl.innerHTML = `<span class="sub">Simuleren…</span>`;
+  simRunning = true;
+  const runId = ++simRunId;   // deze run herkennen als "nog geldig" bij elke terugkeer naar de browser
+  btnSimulate.disabled = true;
+  simStatusEl.innerHTML = '';
   simResultsEl.innerHTML = '';
+  if (simProgressEl){
+    simProgressEl.hidden = false;
+    updateSimProgress(0, n, 0);
+  }
 
-  setTimeout(() => {
+  // de voortgangsbalk moet minstens één frame zichtbaar zijn vóórdat het (blokkerende)
+  // rekenwerk per brok begint, anders verschijnt hij nooit echt op 0% voor kleine n
+  setTimeout(async () => {
     try {
       const graph = buildSimGraph();
       const rand = mulberry32(Math.floor(Math.random() * 4294967296));
@@ -1127,29 +1175,54 @@ function runSimulationBatch(){
       };
       let stuckCount = 0;
 
-      for (let i = 0; i < n; i++){
-        const result = simulateOneGame(graph, rand, heatmap, questStats, extra);
-        if (result.stuck){ stuckCount++; continue; }
-        for (const p of result.players){
-          startRanks[p.startLabel][p.rank - 1]++;
-          const st = strategyStats[p.strategy];
-          st.games++;
-          st.rankSum += p.rank;
-          st.uses += p.actionUses;
-          if (p.rank === 1) st.wins++;
-          if (p.rank <= 2) st.top2++;
+      // in brokken doorrekenen i.p.v. één ononderbroken lus: na elk brok geven we de
+      // controle terug aan de browser (await setTimeout) zodat die de voortgangsbalk kan
+      // schilderen. Zonder dit zou de hele simulatie de pagina bevriezen tot ze klaar is.
+      let i = 0;
+      while (i < n){
+        const chunkStart = performance.now();
+        while (i < n){
+          const result = simulateOneGame(graph, rand, heatmap, questStats, extra);
+          i++;
+          if (result.stuck){ stuckCount++; }
+          else {
+            for (const p of result.players){
+              startRanks[p.startLabel][p.rank - 1]++;
+              const st = strategyStats[p.strategy];
+              st.games++;
+              st.rankSum += p.rank;
+              st.uses += p.actionUses;
+              if (p.rank === 1) st.wins++;
+              if (p.rank <= 2) st.top2++;
+            }
+            const winner = result.players.find(p => p.rank === 1);
+            startWins[winner.startLabel]++;
+            startTurnsSum[winner.startLabel] += winner.finishTurn;
+            seatWins[winner.seat]++;
+            gameLengths.push(result.turns);
+          }
+          if (i % SIM_PROGRESS_CHECK_EVERY === 0 && performance.now() - chunkStart > SIM_CHUNK_BUDGET_MS) break;
         }
-        const winner = result.players.find(p => p.rank === 1);
-        startWins[winner.startLabel]++;
-        startTurnsSum[winner.startLabel] += winner.finishTurn;
-        seatWins[winner.seat]++;
-        gameLengths.push(result.turns);
+        // het bord kan gewijzigd zijn terwijl deze reeks nog bezig was (dat kon voorheen niet
+        // — de pagina was dan bevroren — maar nu de simulatie in brokken loopt wel). Een
+        // verouderde run mag de nieuwere "indeling gewijzigd"-melding niet overschrijven.
+        if (runId !== simRunId) return;
+        updateSimProgress(i, n, performance.now() - t0);
+        if (i < n) await new Promise(res => setTimeout(res, 0));
       }
+      if (runId !== simRunId) return;
 
       const elapsedMs = performance.now() - t0;
+      if (simProgressEl) simProgressEl.hidden = true;
       renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks, strategyStats, seatWins, gameLengths, questStats, extra, graph, heatmap, elapsedMs });
     } catch (err){
-      simStatusEl.innerHTML = `<span class="bad">✕ Simulatie mislukt: ${err.message}</span>`;
+      if (runId === simRunId) simStatusEl.innerHTML = `<span class="bad">✕ Simulatie mislukt: ${err.message}</span>`;
+      if (simProgressEl) simProgressEl.hidden = true;
+    } finally {
+      if (runId === simRunId){
+        simRunning = false;
+        btnSimulate.disabled = false;
+      }
     }
   }, 20);
 }

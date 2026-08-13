@@ -126,11 +126,19 @@ Check minimaal:
 3. Een tegel selecteren → draaiknoppen gaan per **90°** (niet 180).
 4. Een tegel over een andere slepen → wisselt om, rood kader = niet toegestaan.
 5. Browserconsole moet leeg zijn.
-6. Paneel Simulatie → "Draai simulatie" → 4 startposities laten allemaal winst
-   zien, "vastgelopen potjes" is 0 of bijna 0. In "Eindklassering per
-   startpositie" moet elke kolom (1e/2e/3e/4e) over de vier startposities
-   optellen tot 100% en de gemiddelde plaats over alle vier precies 2,50 zijn —
-   dat is een rekenkundige controle op de klassering, geen balanstest.
+6. Paneel Simulatie → "Draai simulatie" → een voortgangsbalk met "X / Y potjes
+   (Z%) · verstreken ... · nog ongeveer ..." moet meebewegen (test dit met een
+   groot aantal, bv. 15000, anders is de run te snel voorbij om te zien); de
+   knop moet tijdens het rekenen uitgeschakeld zijn en de balk moet na afloop
+   weer verdwijnen. Wijzig je de indeling (Genereer indeling) terwijl er nog
+   gerekend wordt, dan moet die lopende reeks stilletjes afbreken — de
+   "indeling gewijzigd"-melding mag NIET later alsnog overschreven worden door
+   de verouderde run (`simRunId` in `95-simulate.js` bewaakt dit). 4
+   startposities laten allemaal winst zien, "vastgelopen potjes" is 0 of bijna
+   0. In "Eindklassering per startpositie" moet elke kolom (1e/2e/3e/4e) over
+   de vier startposities optellen tot 100% en de gemiddelde plaats over alle
+   vier precies 2,50 zijn — dat is een rekenkundige controle op de
+   klassering, geen balanstest.
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
@@ -235,6 +243,15 @@ Check minimaal:
   - Sectie "Beloningskaarten" in het simulatiepaneel: keer getrokken, keer
     gebruikt per kaart, en het aandeel trekkansen dat verloren ging aan een
     volle hand.
+  - `runSimulationBatch()` rekent in brokken (`SIM_CHUNK_BUDGET_MS` = 30ms per
+    brok) i.p.v. één ononderbroken lus, en toont ondertussen een
+    voortgangsbalk (`#simProgress`). Zonder dit bevriest de pagina bij grote
+    aantallen potjes tot de hele run klaar is. Omdat de pagina nu tussentijds
+    wél reageert, kan de gebruiker de indeling wijzigen terwijl er nog wordt
+    gerekend — `simRunId` (verhoogd in zowel `runSimulationBatch()` als
+    `clearSimResults()`) zorgt dat zo'n verouderde run zichzelf stilletjes
+    afbreekt in plaats van straks de nieuwere "indeling gewijzigd"-melding te
+    overschrijven met cijfers die niet meer bij het bord horen.
   - Kaart-illustraties (`95-simulate.js`, `ACTION_CARD_ICONS`/`ACTION_CARD_TINTS`/
     `renderActionCardFace`): elke kaart is een klein lijntekening-icoon in inline
     SVG (geen losse plaatjes — dat zou het éénbestands-HTML flink opblazen),
