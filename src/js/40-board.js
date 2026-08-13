@@ -131,6 +131,8 @@ function renderBoard(){
   }
   layoutCodeEl.textContent = layout.join(',');
 
+  updateQualityHud();
+
   // naad-markeringen
   const conn = computeConnectivity();
   for (const seam of conn.seams){
@@ -176,6 +178,26 @@ function renderBoard(){
   renderSelectedBox();
   renderPalette();
   renderQuestRegister();
+}
+
+// vaste, altijd-zichtbare kwaliteitscijfers van de huidige indeling — apart van swapHint zodat
+// de hoogte van het besturingspaneel niet meer schokt bij elke nieuwe seed (zie CLAUDE.md)
+function updateQualityHud(){
+  const dead = deadTileCount(layout);
+  const isolation = roomIsolationScore(layout);
+  const spacing = questSpacingScore(layout);
+  const coverage = questCoverageScore(layout);
+  const balance = startBalanceScore(layout);
+
+  const deadEl = document.getElementById('hudDead');
+  deadEl.textContent = dead === 0 ? '0' : dead;
+  deadEl.classList.toggle('ok', dead === 0);
+  deadEl.classList.toggle('bad', dead > 0);
+
+  document.getElementById('hudIsolation').textContent = `${isolation} gang(en)`;
+  document.getElementById('hudSpacing').textContent = `${spacing.minDist} vakjes`;
+  document.getElementById('hudBalance').textContent = `±${balance.toFixed(1)} vakjes`;
+  document.getElementById('hudCoverage').textContent = `${coverage.maxDist} stappen`;
 }
 
 function renderSelectedBox(){

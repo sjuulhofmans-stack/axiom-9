@@ -137,6 +137,25 @@
 
   .hint{font-size:12.5px; color:var(--text-dim); line-height:1.5; margin:0;}
   .hint b{color:var(--text);}
+  /* ruimte voor de langste statusregel gereserveerd en verticaal gecentreerd, zodat korte en
+     lange meldingen (bv. na "Herstel origineel" vs. na dobbelen) het paneel niet op en neer
+     laten schokken — vaste "readout"-doos in plaats van los lopende tekst */
+  #swapHint{
+    min-height:116px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:4px; padding:9px 10px;
+  }
+
+  /* ---------- kwaliteits-HUD (vaste hoogte, geen layoutschok bij opnieuw genereren) ---------- */
+  .hud{
+    display:flex; flex-direction:column; gap:4px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:4px;
+    padding:9px 10px; font-family:var(--font-mono); font-size:11.5px;
+  }
+  .hud-row{display:flex; justify-content:space-between; gap:8px;}
+  .hud-label{color:var(--text-dim);}
+  .hud-value{color:var(--amber); font-weight:700;}
+  .hud-value.ok{color:var(--start);}
+  .hud-value.bad{color:var(--danger);}
 
   .legend{display:flex; flex-direction:column; gap:8px; margin-top:4px;}
   .legend-row{
@@ -635,6 +654,14 @@
         </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
+
+        <div class="hud" id="qualityHud">
+          <div class="hud-row"><span class="hud-label">Dode tegels</span><span class="hud-value" id="hudDead">–</span></div>
+          <div class="hud-row"><span class="hud-label">Kamer-isolatie</span><span class="hud-value" id="hudIsolation">–</span></div>
+          <div class="hud-row"><span class="hud-label">Opdracht-afstand</span><span class="hud-value" id="hudSpacing">–</span></div>
+          <div class="hud-row"><span class="hud-label">Eerlijkheid start</span><span class="hud-value" id="hudBalance">–</span></div>
+          <div class="hud-row"><span class="hud-label">Dekking (max)</span><span class="hud-value" id="hudCoverage">–</span></div>
+        </div>
 
         <div class="legend" id="legend">
           <div class="legend-row" data-key="walk"><span class="swatch" style="background:var(--walk)"></span>Loopbaar vakje</div>
@@ -1223,6 +1250,8 @@ function renderBoard(){
   }
   layoutCodeEl.textContent = layout.join(',');
 
+  updateQualityHud();
+
   // naad-markeringen
   const conn = computeConnectivity();
   for (const seam of conn.seams){
@@ -1268,6 +1297,26 @@ function renderBoard(){
   renderSelectedBox();
   renderPalette();
   renderQuestRegister();
+}
+
+// vaste, altijd-zichtbare kwaliteitscijfers van de huidige indeling — apart van swapHint zodat
+// de hoogte van het besturingspaneel niet meer schokt bij elke nieuwe seed (zie CLAUDE.md)
+function updateQualityHud(){
+  const dead = deadTileCount(layout);
+  const isolation = roomIsolationScore(layout);
+  const spacing = questSpacingScore(layout);
+  const coverage = questCoverageScore(layout);
+  const balance = startBalanceScore(layout);
+
+  const deadEl = document.getElementById('hudDead');
+  deadEl.textContent = dead === 0 ? '0' : dead;
+  deadEl.classList.toggle('ok', dead === 0);
+  deadEl.classList.toggle('bad', dead > 0);
+
+  document.getElementById('hudIsolation').textContent = `${isolation} gang(en)`;
+  document.getElementById('hudSpacing').textContent = `${spacing.minDist} vakjes`;
+  document.getElementById('hudBalance').textContent = `±${balance.toFixed(1)} vakjes`;
+  document.getElementById('hudCoverage').textContent = `${coverage.maxDist} stappen`;
 }
 
 function renderSelectedBox(){
@@ -1989,17 +2038,8 @@ function applyGeneratedLayout(seed){
   selectedSlot = null; highlightTile = null;
   statSeed.textContent = seed;
   const conn = computeConnectivity();
-  const balance = startBalanceScore(layout);
-  const coverage = questCoverageScore(layout);
-  const dead = deadTileCount(layout);
-  const isolation = roomIsolationScore(layout);
-  const spacing = questSpacingScore(layout);
-  const deadNote = dead === 0
-    ? ` Geen dode tegels — elke tegel ligt op een route tussen opdrachten.`
-    : ` <span style="color:var(--danger)">${dead} dode tegel(s)</span> — daar komt vrijwel nooit een speler.`;
-  const qualityNote = ` Hoogstens <b>${isolation}</b> gang(en) tussen twee kamers, opdrachten minstens <b>${spacing.minDist}</b> vakjes uit elkaar, eerlijkheid startposities ±<b>${balance.toFixed(1)}</b> vakjes, verste vakje <b>${coverage.maxDist}</b> stappen van een opdracht.` + deadNote;
   if (conn.groups.length === 1 && conn.brokenCount === 0){
-    swapHint.innerHTML = `Indeling gegenereerd met seed <b>${seed}</b> — strak aaneengesloten, geen doodlopende doorgangen, alle 20 tegels bereikbaar.` + qualityNote;
+    swapHint.innerHTML = `Indeling gegenereerd met seed <b>${seed}</b> — strak aaneengesloten, geen doodlopende doorgangen, alle 20 tegels bereikbaar. Cijfers hieronder.`;
   } else {
     swapHint.innerHTML = `Indeling gegenereerd met seed <b>${seed}</b> — beste poging: ${conn.brokenCount} doodlopende naad/naden, ${conn.groups.length} sectie(s). Probeer een andere seed voor een strakkere indeling.`;
   }
