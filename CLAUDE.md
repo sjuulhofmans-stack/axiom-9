@@ -324,19 +324,31 @@ Check minimaal:
    `clamp(...)`-formule voor `--cell` in `styles.css` niet meer met de werkelijke
    marges van `body`/`.panel` op dat breakpoint.
 13. Tabblad "Stap voor stap" → "Zelf spelen": alleen de solo-besturing
-   (Startpositie/Potje starten/Nieuw potje) mag zichtbaar zijn, niet de
-   automatische besturing (Aantal spelers/Energie-inzet/Tempo/Simulatie starten)
-   — en andersom bij "Automatisch". Wisselen van modus of het bord bewerken
-   (Genereer indeling) terwijl een solo-potje loopt moet dat potje stilletjes
-   afbreken (`stopSoloGame()`), niet laten hangen of crashen. Een potje uitspelen:
-   dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-vakjes zijn
-   niet aanklikbaar) **of** een van de vier richtingsknoppen boven het bord
-   gebruiken (die alleen ingeschakeld zijn in een toegestane richting) → bij 6/6
-   een winmelding. Beide manieren van bewegen moeten door elkaar blijven werken
-   binnen dezelfde beurt. Kortsluiting/Blinde Vlek/Duwstoot/Prioriteitspas staan
-   altijd uitgeschakeld in het actiepaneel (tooltip legt uit waarom); de overige
-   kaarten en alle drie de energie-acties moeten wél werken, inclusief de
-   richtingskeuze bij Zwaartekracht-laarzen en de vakjeskeuze bij Noodtransport.
+   (Aantal spelers/Aantal bots/per-mens startpositie-keuze/Potje starten/Nieuw
+   potje) mag zichtbaar zijn, niet de automatische besturing (Energie-inzet/
+   Tempo/Simulatie starten) — en andersom bij "Automatisch". Wisselen van modus
+   of het bord bewerken (Genereer indeling) terwijl een solo-potje loopt moet
+   dat potje stilletjes afbreken (`stopSoloGame()`), niet laten hangen of
+   crashen. Aantal bots loopt van 0 t/m (aantal spelers − 1); de resterende
+   plekken zijn mens (hotseat, om de beurt achter hetzelfde scherm) — dus zowel
+   1 speler solo, 1-tegen-3-bots als 1-tegen-1-tegen-een-vriend (2 spelers,
+   0 bots) moeten werken. Elke menselijke plek krijgt vóór "Potje starten" een
+   eigen startpositie-keuze mét voorproefje van de eerste opdrachtkaart; kiezen
+   twee mensen dezelfde plek, dan wisselen die twee eenvoudig om. Een potje
+   uitspelen: dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-
+   vakjes en bezette vakjes van andere spelers zijn niet aanklikbaar) **of** een
+   van de vier richtingsknoppen boven het bord gebruiken (die alleen
+   ingeschakeld zijn in een toegestane richting) → bij 6/6 een winmelding. Beide
+   manieren van bewegen moeten door elkaar blijven werken binnen dezelfde beurt.
+   Bot-beurten spelen zichzelf meteen door (geen animatie/wachttijd), mens-
+   beurten blijven volledig interactief. Met 1 speler staan Kortsluiting/Blinde
+   Vlek/Duwstoot/Prioriteitspas nog altijd permanent uitgeschakeld (geen
+   tegenstanders); met 2+ spelers werken Kortsluiting/Duwstoot/Prioriteitspas
+   via een klikbare doelwit-kiezer (een kaart-knop per tegenstander), en Blinde
+   Vlek wordt vanzelf aangeboden (ja/nee) zodra je route door een tegenstander
+   geblokkeerd wordt — nooit los klikbaar in het actiepaneel. Bij een gedeelde
+   score op het eind (gelijke energie én evenveel actiekaarten) moet de melding
+   "delen de winst/Ne plaats" tonen, net als in "Automatisch".
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -413,10 +425,73 @@ Check minimaal:
     kaarten in de solo-modus (`size:'lg'`, `interactive:true`). Nieuwe kaart
     toevoegen? Voeg 'm toe aan `ACTION_CARDS`/`ACTION_CARD_IDS` in `95-simulate.js`
     én teken een icoon in `ACTION_CARD_ICONS` — zonder icoon crasht de render.
-- **Stap voor stap, zelf spelen** (`97-solo.js`): los tabblad-modusje, geen bots.
-  Jij dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje om
-  naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse). Boven
-  het bord staat ook een richtingskruis (N/O/Z/W, `#walkDirPad`) dat exact
+- **Stap voor stap, zelf spelen** (`97-solo.js`): tabblad-modusje voor **1 t/m 4
+  spelers, mens én bot gemengd** (gebruikersverzoek: "ik wil een 1 tegen 1
+  potje kunnen spelen tegen een vriend, maar ook een potje 1 tegen 3 bots").
+  Twee losse keuzevelden boven het bord: "Aantal spelers" (1-4) en "Aantal
+  bots" (0 t/m spelers−1, `soloSyncBotOptions()` vult de opties en zet 'm
+  standaard op "alle overige plekken zijn bot"). De eerste `spelers−bots`
+  plekken zijn altijd mens (hotseat, om de beurt achter hetzelfde scherm,
+  generiek "Speler N" — geen aparte "jij"/"vriend"-styling nodig want beide
+  gebruiken dezelfde interactieve UI); de rest is bot met een `ENERGY_STRATEGIES`-
+  strategie, round-robin toegewezen. Bot-beurten spelen zichzelf **meteen**
+  door zonder animatie (`soloResolveBotTurn()`) — dat was expliciet de wens
+  ("meteen doorspelen"), mens-beurten blijven volledig interactief via de
+  bestaande dobbel/klik/actiepaneel-UI.
+  - **Startpositie kiezen, mét voorproefje**: vóór "Potje starten" toont
+    `soloRenderSetupUI()` per menselijke plek een dropdown met startpositie
+    én "eerste opdracht: X — naam" ernaast — dat voorproefje was een expliciete
+    eis ("voordat je start mag je je eigen eerste opdrachtkaart bekijken").
+    Om dat kloppend te houden schudt `soloRebuildSetup()` bij het intekenen van
+    het scherm ieders opdrachtstapel al met een eigen `soloSetupRand`, en die
+    ZELFDE stapels/objecten (niet opnieuw geschud) worden hergebruikt zodra het
+    potje echt start — anders zou het voorproefje kunnen liegen. Kiezen twee
+    mensen dezelfde plek, dan wisselt een simpele paarsgewijze swap ze om (geen
+    cascaderende resolutie nodig bij hooguit 4 plekken).
+  - **Doelwit zelf kiezen** (expliciete eis, i.p.v. auto-selectie zoals de
+    bot-AI): Kortsluiting/Duwstoot/Prioriteitspas openen een nieuwe fase
+    `'target-pick'` (`soloEnterTargetPicker()`) met een knop per in aanmerking
+    komende tegenstander (Duwstoot alleen aangrenzende, de andere twee alle
+    nog-niet-binnen spelers) — dezelfde `.action-card--lg.action-card--plain`-
+    stijl als de bestaande richtingskiezer voor Zwaartekracht-laarzen.
+    `soloResolveTargetCard()` voert 'm daarna uit; Duwstoot hergebruikt niet
+    letterlijk `pickShoveMove()` (die kiest zelf een willekeurige tegenstander)
+    maar dezelfde "welke lege buur vergroot zijn afstand tot zijn eigen doel het
+    meest"-berekening, toegepast op precies het gekozen doelwit.
+  - **Blinde Vlek is puur reactief**, nooit los klikbaar: staat in het gewone
+    actiepaneel altijd uitgeschakeld met tooltip "wordt vanzelf aangeboden
+    zodra je route geblokkeerd wordt". `soloAdvanceMovePhase()` biedt 'm pas
+    aan (nieuwe fase `'blind-offer'`, ja/nee-knoppen) op het exacte moment dat
+    de volgende stap alleen geblokkeerd wordt door een tegenstander (niet door
+    een muur) én de kaart nog in de hand zit én er deze beurt nog geen andere
+    actie gebruikt is. Bewuste vereenvoudiging t.o.v. de bot-AI: bezette
+    vakjes tellen na een "ja" alleen voor de REST van deze beurt niet meer mee
+    (herberekend vanaf de huidige positie), geen volledige herstart van de hele
+    beurt vanaf het startpunt — dat sluit aan bij de eigen hint-tekst van de
+    kaart ("bezette vakjes tellen deze beurt niet mee").
+  - **Ronde-lus deelt dezelfde eerlijkheidslogica als de batch/animatie**:
+    `soloFinishRound()`/`soloContinueLoop()`/`soloAdvanceLoop()` roepen dezelfde
+    `resolveRoundFinishers()`/`simFinishTarget()` aan als `95-simulate.js` en
+    `96-walk.js` — een ronde wordt altijd afgemaakt vóórdat rangen definitief
+    worden, gedeelde plekken bij gelijke energie én evenveel actiekaarten. Een
+    derde, niet-geanimeerde kopie van de bot-beurt-logica (`soloResolveBotTurn`)
+    was hier nodig naast de al bestaande twee in `95-simulate.js`/`96-walk.js`
+    — bewust geaccepteerde duplicatie, zie de noot hierboven bij "Beloningskaarten"
+    over de `target.order || target.deck`-valkuil.
+  - **Gevonden en gefixt tijdens het bouwen**: `soloResolveBotTurn()` riep
+    `energyReorderTarget()` eerst rechtstreeks aan met het bot-spelerobject,
+    maar die functie leest hardcoded `player.order[player.nextIdx]` terwijl
+    solo-spelers alleen `.deck` hebben (dezelfde valkuil als hierboven bij
+    Duwstoot) — crashte meteen zodra een bot Herkalibratie
+    of de Herprioritering-strategie probeerde te gebruiken. Fix: een `shim =
+    { order: player.deck, nextIdx: player.nextIdx }` doorgeven in plaats van
+    `player` — omdat arrays by reference gaan, lopen mutaties gewoon terug in
+    de echte `.deck`. Ook `soloRenderActionPanel()` liet Blinde Vlek aanvankelijk
+    klikbaar-maar-inert staan i.p.v. 'm hard uit te schakelen — beide gevonden
+    en gefixt vóór het testen, niet erna.
+  Elke mens dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje
+  om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
+  zijn bezette vakjes van andere spelers uitgesloten). Boven
   dezelfde stap zet als een klik op de cel — op een telefoon zijn de kleine
   vakjes lastig te raken, deze knoppen zijn 58×58px. Ernaast (op smalle
   schermen: eronder, via `flex-wrap`) staat een stappenteller (gezet/nog) die
@@ -437,11 +512,12 @@ Check minimaal:
   swapt alleen als het dichterbij is, maar een mens mag zelf kiezen ook als het
   niet optimaal is — vandaar `soloUnconditionalSwap()` in plaats van het
   hergebruiken van `energyReorderTarget()` voor de daadwerkelijke uitvoering.
-  - Geen tegenstanders → Kortsluiting, Blinde Vlek, Duwstoot en Prioriteitspas
-    hebben altijd een doelwit nodig dat er in solo niet is; ze staan daarom
-    permanent uitgeschakeld in het actiepaneel (`WALK_SOLO_NO_OPPONENT_CARDS`),
-    met een tooltip die uitlegt waarom — niet stilzwijgend verbergen, dat oogt
-    als een bug.
+  - Met **1 speler** (geen bots, geen medespelers) hebben Kortsluiting, Blinde
+    Vlek, Duwstoot en Prioriteitspas nooit een doelwit; ze staan dan permanent
+    uitgeschakeld in het actiepaneel (`WALK_SOLO_NO_OPPONENT_CARDS`), met een
+    tooltip die uitlegt waarom — niet stilzwijgend verbergen, dat oogt als een
+    bug. Met 2+ spelers werken ze wél, via de doelwit-kiezer/reactieve
+    aanbieding hierboven.
   - Zwaartekracht-laarzen laat de speler zelf een richting kiezen (N/O/Z/W) in
     plaats van de bot-AI die automatisch de beste richting bepaalt;
     `gravityBootsOptions()` in `95-simulate.js` geeft alle (tot 4) rechte lijnen

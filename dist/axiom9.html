@@ -279,6 +279,31 @@
   }
   .walk-solo-panel[hidden]{display:none;}
 
+  /* opzetscherm bij "zelf spelen" met meerdere spelers: per menselijke speler een
+     startpositie-keuze + voorproefje van de eerste opdracht, zodat je een weloverwogen
+     keuze kunt maken vóórdat het potje echt begint */
+  .walk-solo-setup{
+    display:flex; flex-direction:column; gap:8px; margin:14px 0 0;
+  }
+  .walk-solo-setup[hidden], .walk-solo-setup:empty{display:none;}
+  .walk-solo-setup-player{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
+    border-radius:5px; padding:8px 11px;
+  }
+  .walk-solo-setup-name{
+    font-family:var(--font-mono); font-size:12px; color:var(--text); min-width:70px;
+  }
+  .walk-solo-setup-preview{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
+  }
+  .walk-solo-setup-preview b{color:var(--quest);}
+
+  /* doelwit kiezen voor Kortsluiting/Duwstoot/Prioriteitspas: dezelfde kaart-knoppenrij als
+     de richtingskeuze bij Zwaartekracht-laarzen, maar dan met tegenstanders als opties */
+  .walk-target-picker{display:flex; flex-direction:column; gap:8px; margin:10px 0 0;}
+  .walk-target-picker-hint{font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);}
+
   /* richtingsknoppen tijdens het lopen in de solo-modus: hetzelfde als op een vakje
      klikken, maar een stuk makkelijker te raken op een telefoon dan de kleine cellen
      op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast
@@ -996,15 +1021,27 @@
 
         <div class="walk-controls" id="walkSoloControls" hidden>
           <div class="field">
-            <label for="walkStartSolo">Startpositie</label>
-            <select id="walkStartSolo"></select>
+            <label for="walkSoloPlayers">Aantal spelers</label>
+            <select id="walkSoloPlayers">
+              <option value="1">1 speler (alleen)</option>
+              <option value="2">2 spelers</option>
+              <option value="3">3 spelers</option>
+              <option value="4" selected>4 spelers</option>
+            </select>
           </div>
+          <div class="field">
+            <label for="walkSoloBots">Aantal bots</label>
+            <select id="walkSoloBots"></select>
+          </div>
+        </div>
+        <div id="walkSoloSetupPlayers" class="walk-solo-setup"></div>
+        <div class="walk-controls" id="walkSoloStartRow" hidden>
           <div class="btn-row">
             <button id="btnWalkSoloStart" class="primary">Potje starten</button>
             <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
           </div>
         </div>
-        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf, alleen op het bord: gooi de stenen, kies na elke worp zelf een aangrenzend vakje om naartoe te lopen, en zet een energie-actie of handkaart in wanneer jij dat wilt (hooguit één per beurt). Niemand blokkeert je — je speelt tegen de klok van je eigen 6 opdrachten.</p>
+        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf via de knoppen/vakjes hieronder — de bots spelen meteen door zodra zij aan de beurt zijn. Kies per menselijke speler een startpositie; je ziet meteen welke opdracht je als eerste krijgt. Met meer dan 1 speler blokkeer je elkaar net als in "Automatisch", en werken Kortsluiting, Duwstoot en Prioriteitspas ook (met een doelwit dat je zelf kiest).</p>
 
         <div class="walk-hud">
           <div class="walk-dice" id="walkDice"></div>
@@ -4503,10 +4540,15 @@ function renderWalkScore(players, activeIdx){
         : `<span class="lost">verloren — ${walkRankLabel(p.rank)}</span>`
       : `${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}`;
     const cls = 'walk-player' + (p.idx === activeIdx ? ' active' : '') + (p.rank ? ' done' : '');
+    // p.strategy is leeg voor een mens in de solo-modus (die kiest zelf elke beurt, geen
+    // vaste bot-strategie) — de ENERGY_ACTIONS-opzoeking overslaan voorkomt een crash daar
+    const stratBadge = p.strategy
+      ? `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>`
+      : (p.isHuman ? `<span class="walk-player-strat" title="jij kiest zelf een energie-actie of kaart">jij kiest</span>` : '');
     return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-dot"></span>` +
       `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-      `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>` +
+      stratBadge +
       walkCardBadges(p) +
       `<span class="walk-player-goal">${goal}</span>` +
       `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
@@ -4944,16 +4986,19 @@ syncWalkStartEnabled();
 
 
 // ===== 97-solo.js =====
-// ---------- stap voor stap: zelf spelen (solo) ----------
-// Geen bots, geen animatietempo — jij dobbelt zelf, kiest zelf elke stap een aangrenzend
-// vakje, en zet zelf een energie-actie of handkaart in. Hergebruikt dezelfde spelregels als
-// de batch/auto-modus (resolveMove-achtige geen-U-turn-logica, ENERGY_ACTIONS, ACTION_CARDS,
-// buildActionDeck), maar zonder de bot-AI: er wordt niets automatisch beslist behalve de
-// worpen zelf, die blijven random.
+// ---------- stap voor stap: zelf spelen (1 t/m 4 spelers, mix van mens/bot) ----------
+// Jij dobbelt zelf, kiest zelf elke stap een aangrenzend vakje, en zet zelf een energie-actie
+// of handkaart in. Hergebruikt dezelfde spelregels als de batch/auto-modus (resolveMove,
+// ENERGY_ACTIONS, ACTION_CARDS, buildActionDeck, resolveRoundFinishers), maar zonder bot-AI
+// voor JOUW beurten — de bot-beurten (als je die toevoegt) worden wél automatisch en meteen
+// afgehandeld (`soloResolveBotTurn`, een niet-geanimeerde kopie van de bot-logica uit
+// 96-walk.js), zodat jij niet op ze hoeft te wachten.
 //
-// Omdat je alleen speelt, is er niemand die je blokkeert — Kortsluiting, Blinde Vlek, Duwstoot
-// en Prioriteitspas hebben allemaal een tegenstander nodig en staan daarom altijd uit als je
-// ze trekt (net zoals Prioriteitspas ook in de bot-simulatie geen effect heeft).
+// Met 1 speler (geen bots) is er niemand die je blokkeert, en hebben Kortsluiting, Blinde Vlek,
+// Duwstoot en Prioriteitspas allemaal een tegenstander nodig — die staan dan uit, net als
+// Prioriteitspas ook in de bot-simulatie geen effect heeft. Zodra er wél andere spelers zijn
+// (mens of bot) blokkeren jullie elkaars vakjes net als in "Automatisch", en werken die vier
+// kaarten ook — met een doelwit dat JIJ zelf kiest via een klein keuzepaneel.
 const WALK_SOLO_NO_OPPONENT_CARDS = ['short', 'blind', 'shove', 'scan'];
 
 const walkModeAutoBtn = document.getElementById('walkModeAuto');
@@ -4962,7 +5007,10 @@ const walkAutoControlsEl = document.getElementById('walkAutoControls');
 const walkSoloControlsEl = document.getElementById('walkSoloControls');
 const walkAutoHintEl = document.getElementById('walkAutoHint');
 const walkSoloHintEl = document.getElementById('walkSoloHint');
-const walkStartSoloSel = document.getElementById('walkStartSolo');
+const walkSoloPlayersSel = document.getElementById('walkSoloPlayers');
+const walkSoloBotsSel = document.getElementById('walkSoloBots');
+const walkSoloSetupEl = document.getElementById('walkSoloSetupPlayers');
+const walkSoloStartRowEl = document.getElementById('walkSoloStartRow');
 const btnWalkSoloStart = document.getElementById('btnWalkSoloStart');
 const btnWalkSoloReset = document.getElementById('btnWalkSoloReset');
 const walkSoloPanelEl = document.getElementById('walkSoloPanel');
@@ -4974,12 +5022,106 @@ const walkStepDoneEl = document.getElementById('walkStepDone');
 const walkStepLeftEl = document.getElementById('walkStepLeft');
 
 let soloGraph = null;
-let soloPlayer = null;
-let soloDeck = null;
+let soloDeck = null;         // gedeelde actiekaart-stapel voor dit potje
 let soloRand = null;
-let soloTurn = 0;
+let soloTurn = 0;            // totaal aantal beurten in dit potje, over alle spelers samen
+
+// ---------- opzet: aantal spelers/bots kiezen, per mens een startpositie + voorproefje ----------
+let soloSetupRand = null;
+let soloSetupPlayers = [];   // { idx, isHuman, name, color, deck, startLabel, strategy, ... }
+
+function soloSetupHumans(){ return soloSetupPlayers.filter(p => p.isHuman); }
+
+function soloSyncBotOptions(){
+  if (!walkSoloPlayersSel || !walkSoloBotsSel) return;
+  const total = Math.max(1, Math.min(WALK_MAX_PLAYERS, parseInt(walkSoloPlayersSel.value, 10) || 1));
+  const maxBots = Math.max(0, total - 1);
+  const prev = parseInt(walkSoloBotsSel.value, 10);
+  const opts = [];
+  for (let b = 0; b <= maxBots; b++){
+    opts.push(`<option value="${b}">${b === 0 ? 'geen bots' : b + (b === 1 ? ' bot' : ' bots')}</option>`);
+  }
+  walkSoloBotsSel.innerHTML = opts.join('');
+  // standaard: alle overige plekken zijn bots (dus "speel tegen bots") — lager zetten geeft
+  // plek aan medespelers op hetzelfde scherm ("1 tegen 1 tegen een vriend" = 2 spelers, 0 bots)
+  walkSoloBotsSel.value = Number.isFinite(prev) && prev <= maxBots ? String(prev) : String(maxBots);
+}
+
+function soloRebuildSetup(){
+  stopSoloGame();
+  const total = Math.max(1, Math.min(WALK_MAX_PLAYERS, parseInt(walkSoloPlayersSel ? walkSoloPlayersSel.value : '1', 10) || 1));
+  const bots = Math.max(0, Math.min(total - 1, parseInt(walkSoloBotsSel ? walkSoloBotsSel.value : '0', 10) || 0));
+  const humanCount = total - bots;
+
+  soloSetupRand = mulberry32(Math.floor(Math.random() * 4294967296));
+  soloSetupPlayers = [];
+  for (let i = 0; i < total; i++){
+    const isHuman = i < humanCount;   // eerste plekken zijn mens, de rest bot
+    soloSetupPlayers.push({
+      idx: i,
+      isHuman,
+      name: `Speler ${i + 1}`,
+      color: WALK_PLAYER_COLORS[i],
+      deck: simShuffle(SIM_QUEST_LABELS, soloSetupRand),
+      nextIdx: 0, completed: 0, energy: 0, cards: [], rank: 0, doneCells: [],
+      strategy: isHuman ? null : ENERGY_STRATEGIES[i % ENERGY_STRATEGIES.length],
+      startLabel: isHuman ? SIM_START_LABELS[i] : null,   // mens: alvast een unieke standaardplek
+      pos: null,
+      skipEnergyRoll: false, actionUses: 0,
+    });
+  }
+  soloRenderSetupUI();
+}
+
+function soloRenderSetupUI(){
+  if (!walkSoloSetupEl) return;
+  const humans = soloSetupHumans();
+  if (!humans.length){
+    walkSoloSetupEl.innerHTML = '';
+    if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = true;
+    return;
+  }
+  walkSoloSetupEl.innerHTML = humans.map(p => {
+    const opts = SIM_START_LABELS.map(l => `<option value="${l}"${l === p.startLabel ? ' selected' : ''}>${l}</option>`).join('');
+    const firstQuest = p.deck[0];
+    return `<div class="walk-solo-setup-player" style="--pc:${p.color}">` +
+      `<span class="walk-solo-setup-name">${p.name}</span>` +
+      `<select data-seat="${p.idx}">${opts}</select>` +
+      `<span class="walk-solo-setup-preview">eerste opdracht: <b>${firstQuest} — ${QUEST_NAMES[firstQuest] || ''}</b></span>` +
+    `</div>`;
+  }).join('');
+  if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = false;
+}
+if (walkSoloSetupEl){
+  walkSoloSetupEl.addEventListener('change', (e) => {
+    const sel = e.target.closest('select[data-seat]');
+    if (!sel) return;
+    const seat = parseInt(sel.dataset.seat, 10);
+    const p = soloSetupPlayers[seat];
+    if (!p) return;
+    const value = sel.value;
+    // twee mensen mogen niet dezelfde startpositie kiezen — wissel de conflicterende speler
+    // gewoon om naar de plek die deze speler net had, in plaats van iets ingewikkelders
+    const clash = soloSetupHumans().find(h => h.idx !== seat && h.startLabel === value);
+    if (clash) clash.startLabel = p.startLabel;
+    p.startLabel = value;
+    soloRenderSetupUI();
+  });
+}
+if (walkSoloPlayersSel) walkSoloPlayersSel.addEventListener('change', () => { soloSyncBotOptions(); soloRebuildSetup(); });
+if (walkSoloBotsSel) walkSoloBotsSel.addEventListener('change', soloRebuildSetup);
+
+// ---------- het lopende potje ----------
+let soloPlayers = [];
+let soloTurnOrder = [];
+let soloRoundPos = 0;         // positie binnen soloTurnOrder van de HUIDIGE ronde
+let soloRoundFinishers = [];  // spelers die deze ronde hun 6e opdracht voltooien
+let soloFinished = 0;
+let soloFinishTarget = 1;
+let soloActiveIdx = -1;       // wie van soloPlayers nu interactief aan zet is (mens)
 let soloTargetKey = null;
-// 'idle' | 'choose-action' | 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
+// 'idle' | 'choose-action' | 'target-pick' | 'blind-offer' | 'rolling' | 'moving' |
+// 'boots-direction' | 'jump-target' | 'game-over'
 let soloPhase = 'idle';
 let soloRunId = 0;
 let soloMove = null;            // { d1, d2, d3, roll, stepsLeft, lastDir, path }
@@ -4992,14 +5134,13 @@ let soloUsedBoots = false;
 let soloUsedJump = false;
 let soloBootsOptions = [];
 let soloCurrentLegalMoves = [];  // { key, dir }[] — de opties die het richtingskruis nu toont
+let soloBlindOfferAvailable = false; // deze stap geblokkeerd door een tegenstander + Blinde Vlek in de hand
 
-function soloRefreshStartOptions(){
-  if (!walkStartSoloSel) return;
-  const prev = walkStartSoloSel.value;
-  walkStartSoloSel.innerHTML = SIM_START_LABELS.map(l => `<option value="${l}">${l}</option>`).join('')
-    + `<option value="?">willekeurig</option>`;
-  walkStartSoloSel.value = SIM_START_LABELS.includes(prev) || prev === '?' ? prev : '?';
-}
+function solo(){ return soloPlayers[soloActiveIdx]; }
+function soloActionUsed(){ return !!(soloUsedEnergyId || soloUsedCardId); }
+// alle andere spelers die nog meespelen — voor blokkeren en doelwit-keuzes
+function soloOthers(){ return soloPlayers.filter(p => p.idx !== soloActiveIdx && !p.rank); }
+function soloOccupied(){ return new Set(soloOthers().map(p => p.pos)); }
 
 // ---------- modus wisselen ----------
 function setWalkMode(mode){
@@ -5010,6 +5151,8 @@ function setWalkMode(mode){
   if (walkModeSoloBtn){ walkModeSoloBtn.classList.toggle('active', !isAuto); walkModeSoloBtn.setAttribute('aria-selected', String(!isAuto)); }
   if (walkAutoControlsEl) walkAutoControlsEl.hidden = !isAuto;
   if (walkSoloControlsEl) walkSoloControlsEl.hidden = isAuto;
+  if (walkSoloSetupEl) walkSoloSetupEl.hidden = isAuto;
+  if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = true;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
   if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
@@ -5019,6 +5162,7 @@ function setWalkMode(mode){
   if (walkScoreEl) walkScoreEl.innerHTML = '';
   if (walkStatusEl) walkStatusEl.innerHTML = '';
   if (walkLogEl) walkLogEl.innerHTML = '';
+  if (!isAuto) soloRebuildSetup();
 }
 
 // ---------- bord: welke vakjes zijn nu aanklikbaar ----------
@@ -5049,52 +5193,36 @@ if (walkBoardEl){
 }
 
 // welke vervolgstappen mag je zetten vanaf `pos`, gegeven de richting van je vorige stap
-// (-1 = eerste stap van de beurt, geen beperking) — zelfde geen-U-turn-regel als resolveMove()
-function soloLegalNextCells(graph, pos, lastDir){
+// (-1 = eerste stap van de beurt, geen beperking) — zelfde geen-U-turn-regel als resolveMove().
+// `occupied` sluit vakjes uit waar een andere nog-meespelende speler op staat (blokkeren).
+function soloLegalNextCells(graph, pos, lastDir, occupied){
   const neigh = graph.adjKey[pos], dirs = graph.adjDir[pos];
   const out = [];
   for (let j = 0; j < neigh.length; j++){
     const d = dirs[j];
     if (lastDir !== -1 && d === (lastDir + 2) % 4) continue;
+    if (occupied && occupied.has(neigh[j])) continue;
     out.push({ key: neigh[j], dir: d });
   }
   return out;
 }
 
 // ---------- score/meta ----------
-// eigen (simpele) variant van renderWalkScore(): geen strategie-badge, want in solo kies je
-// zelf wat je speelt in plaats van vast te zitten aan één bot-strategie
-function renderSoloScore(){
-  if (!walkScoreEl || !soloPlayer) return;
-  const p = soloPlayer;
-  const targetLabel = p.deck[p.nextIdx];
-  const goal = p.completed >= SIM_QUESTS_TO_WIN
-    ? '<span class="hit">alle opdrachten voltooid</span>'
-    : `${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}`;
-  walkScoreEl.innerHTML = `<div class="walk-player active" style="--pc:${p.color}">` +
-    `<span class="walk-player-dot"></span>` +
-    `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-    walkCardBadges(p) +
-    `<span class="walk-player-goal">${goal}</span>` +
-    `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
-    `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
-  `</div>`;
-}
-// renderWalkMeta() + een regel met je eigen (zichtbare) opdrachtstapel, zodat je Herkalibratie/
-// Herprioritering weloverwogen kunt inzetten — je stapel is nooit geheim in een solo-potje
 function renderSoloMeta(stepsLeft){
-  renderWalkMeta({ player: soloPlayer, turn: soloTurn, stepsLeft });
-  if (!walkMetaEl || !soloPlayer || soloPlayer.completed >= SIM_QUESTS_TO_WIN) return;
-  const upcoming = soloPlayer.deck.slice(soloPlayer.nextIdx, soloPlayer.nextIdx + 3)
+  renderWalkMeta({ player: solo(), turn: soloTurn, stepsLeft });
+  if (!walkMetaEl || !solo() || solo().completed >= SIM_QUESTS_TO_WIN) return;
+  const p = solo();
+  const upcoming = p.deck.slice(p.nextIdx, p.nextIdx + 3)
     .map((l, i) => i === 0 ? `<b>${l}</b>` : l).join(' → ');
   walkMetaEl.insertAdjacentHTML('beforeend', `<span>Volgende: ${upcoming} …</span>`);
 }
 function soloRefreshTarget(){
-  const label = soloPlayer.deck[soloPlayer.nextIdx];
+  const p = solo();
+  const label = p.deck[p.nextIdx];
   soloTargetKey = soloGraph.questCells[label];
   walkClearClass('walk-target');
   const el = walkCellDiv(soloGraph, soloTargetKey);
-  el.style.setProperty('--pc', soloPlayer.color);
+  el.style.setProperty('--pc', p.color);
   el.classList.add('walk-target');
 }
 
@@ -5110,14 +5238,21 @@ function renderEnergySoloButton(id, disabled, reason){
 }
 function soloRenderActionPanel(){
   if (!walkSoloActionsEl) return;
-  const p = soloPlayer;
+  const p = solo();
   const energyBtns = ['boost', 'reorder', 'jump'].map(id =>
     renderEnergySoloButton(id, p.energy < ENERGY_ACTIONS[id].cost)
   ).join('');
 
+  const noOpponents = soloPlayers.length === 1;
   const cardBtns = p.cards.map(id => {
     let disabled = false, reason = null;
-    if (WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in de solo-modus'; }
+    // Blinde Vlek is puur reactief (zie soloOfferBlindSpot) — die kun je nooit vanuit dit
+    // paneel spelen, alleen op het moment dat je route daadwerkelijk geblokkeerd wordt
+    if (id === 'blind'){ disabled = true; reason = 'wordt vanzelf aangeboden zodra je route geblokkeerd wordt'; }
+    else if (noOpponents && WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in dit potje'; }
+    else if (id === 'shove' && !soloShoveTargets().length){ disabled = true; reason = 'geen tegenstander naast je'; }
+    else if (id === 'scan' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
+    else if (id === 'short' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
     else if (id === 'valve' && soloEnergyGain.wasted === 0){ disabled = true; reason = 'er ging deze beurt geen energie verloren'; }
     const titleOverride = reason ? `${ACTION_CARDS[id].name} — ${reason}` : null;
@@ -5139,63 +5274,144 @@ if (walkSoloActionsEl){
 }
 
 function soloUnconditionalSwap(){
-  const cur = soloPlayer.deck[soloPlayer.nextIdx];
-  const alt = soloPlayer.deck[soloPlayer.nextIdx + 1];
-  soloPlayer.deck[soloPlayer.nextIdx] = alt;
-  soloPlayer.deck[soloPlayer.nextIdx + 1] = cur;
+  const p = solo();
+  const cur = p.deck[p.nextIdx];
+  const alt = p.deck[p.nextIdx + 1];
+  p.deck[p.nextIdx] = alt;
+  p.deck[p.nextIdx + 1] = cur;
+}
+
+// ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas ----------
+// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen)
+function soloShoveTargets(){
+  const neigh = new Set(soloGraph.adjKey[solo().pos]);
+  return soloOthers().filter(p => neigh.has(p.pos));
+}
+function soloEnterTargetPicker(cardId){
+  const targets = cardId === 'shove' ? soloShoveTargets() : soloOthers();
+  if (!targets.length) return;
+  soloPhase = 'target-pick';
+  soloHideDirPad();
+  btnWalkSoloSkip.hidden = true;
+  btnWalkSoloRoll.hidden = true;
+  const label = { short: 'Kortsluiting', shove: 'Duwstoot', scan: 'Prioriteitspas' }[cardId];
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Kies een doelwit voor <b>${label}</b>:</div>` +
+    `<div class="action-card-row">` + targets.map(t =>
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-target="${t.idx}" style="--card-tint:${t.color}" title="${t.name}">
+        <span class="action-card-name" style="margin-top:22px;">${t.name}</span>
+        <span class="action-card-hint">${t.startLabel} · ${t.completed}/${SIM_QUESTS_TO_WIN}</span>
+      </button>`
+    ).join('') + `</div>`;
+  walkSoloActionsEl.dataset.pendingCard = cardId;
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'target-pick') return;
+    const btn = e.target.closest('button[data-target]');
+    if (!btn) return;
+    soloResolveTargetCard(walkSoloActionsEl.dataset.pendingCard, parseInt(btn.dataset.target, 10));
+  });
+}
+function soloResolveTargetCard(cardId, targetIdx){
+  const p = solo();
+  const victim = soloPlayers[targetIdx];
+  if (cardId === 'short'){
+    victim.skipEnergyRoll = true;
+    useActionCard(p, 'short', soloDeck);
+    soloUsedCardId = 'short';
+    walkLog(`Je speelt <b>Kortsluiting</b> op ${victim.name}: die mist zijn eerstvolgende energiesteen.`, null, p);
+    soloProceedToRoll();
+  } else if (cardId === 'scan'){
+    const label = victim.deck[victim.nextIdx];
+    useActionCard(p, 'scan', soloDeck);
+    soloUsedCardId = 'scan';
+    walkLog(`Je speelt <b>Prioriteitspas</b>: ${victim.name}'s volgende opdracht is <b>${label} — ${QUEST_NAMES[label] || ''}</b>.`, null, p);
+    soloProceedToRoll();
+  } else if (cardId === 'shove'){
+    // zelfde "welke lege buur vergroot zijn afstand tot ZIJN doel het meest"-logica als de
+    // bot-AI (pickShoveMove), maar dan alleen toegepast op het doelwit dat JIJ net koos
+    const targetLabel = victim.deck[victim.nextIdx];
+    const targetKeyForThem = soloGraph.questCells[targetLabel];
+    const stamp = simBfsDistances(soloGraph, targetKeyForThem);
+    const dBefore = simDistLookup(stamp, victim.pos);
+    const occNow = soloOccupied(); occNow.add(p.pos);
+    const theirNeigh = soloGraph.adjKey[victim.pos];
+    let best = null, bestGain = -Infinity;
+    for (const nk of theirNeigh){
+      if (occNow.has(nk)) continue;
+      const dAfter = simDistLookup(stamp, nk);
+      if (dAfter < 0) continue;
+      const gain = dAfter - dBefore;
+      if (gain > bestGain){ bestGain = gain; best = nk; }
+    }
+    useActionCard(p, 'shove', soloDeck);
+    soloUsedCardId = 'shove';
+    if (best !== null){
+      victim.pos = best;
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name} en duwt die een vakje verderop.`, null, p);
+    } else {
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}, maar er is geen lege plek om naartoe te duwen.`, null, p);
+    }
+    paintWalkPawns(soloGraph, soloPlayers, p.idx);
+    soloProceedToRoll();
+  }
 }
 
 function soloPlayCard(id){
   if (id === 'boots'){ soloEnterBootsDirection(); return; }
+  if (id === 'short' || id === 'shove' || id === 'scan'){ soloEnterTargetPicker(id); return; }
+  const p = solo();
   if (id === 'ration'){
-    simGainEnergy(soloPlayer, 3);
-    useActionCard(soloPlayer, 'ration', soloDeck);
+    simGainEnergy(p, 3);
+    useActionCard(p, 'ration', soloDeck);
     soloUsedCardId = 'ration';
-    walkLog(`Je speelt <b>Noodrantsoen</b>: +3 energie → ${soloPlayer.energy}.`, null, soloPlayer);
+    walkLog(`Je speelt <b>Noodrantsoen</b>: +3 energie → ${p.energy}.`, null, p);
     soloProceedToRoll();
   } else if (id === 'recal'){
     soloUnconditionalSwap();
-    useActionCard(soloPlayer, 'recal', soloDeck);
+    useActionCard(p, 'recal', soloDeck);
     soloUsedCardId = 'recal';
     soloRefreshTarget();
-    walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${soloPlayer.deck[soloPlayer.nextIdx]}.`, null, soloPlayer);
+    walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
     soloProceedToRoll();
   } else if (id === 'boostcell'){
     soloPendingBoost = true;
-    useActionCard(soloPlayer, 'boostcell', soloDeck);
+    useActionCard(p, 'boostcell', soloDeck);
     soloUsedCardId = 'boostcell';
-    walkLog(`Je speelt <b>Stuwlading</b>: deze beurt met 3 loopstenen.`, null, soloPlayer);
+    walkLog(`Je speelt <b>Stuwlading</b>: deze beurt met 3 loopstenen.`, null, p);
     soloProceedToRoll();
   } else if (id === 'valve'){
     const saved = Math.min(3, soloEnergyGain.wasted);
-    soloPlayer.energy += saved;
+    p.energy += saved;
     soloEnergyGain.wasted -= saved;
-    useActionCard(soloPlayer, 'valve', soloDeck);
+    useActionCard(p, 'valve', soloDeck);
     soloUsedCardId = 'valve';
-    walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${soloPlayer.energy}.`, null, soloPlayer);
+    walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${p.energy}.`, null, p);
     soloProceedToRoll();
   } else if (id === 'resupply'){
-    useActionCard(soloPlayer, 'resupply', soloDeck);
+    useActionCard(p, 'resupply', soloDeck);
     const drawn = drawActionCard(soloDeck, soloRand);
-    if (drawn) soloPlayer.cards.push(drawn);
+    if (drawn) p.cards.push(drawn);
     soloUsedCardId = 'resupply';
-    walkLog(`Je speelt <b>Herbevoorrading</b> en trekt meteen <b>${drawn ? ACTION_CARDS[drawn].name : 'niets — stapel leeg'}</b>.`, null, soloPlayer);
+    walkLog(`Je speelt <b>Herbevoorrading</b> en trekt meteen <b>${drawn ? ACTION_CARDS[drawn].name : 'niets — stapel leeg'}</b>.`, null, p);
     soloProceedToRoll();
   }
 }
 function soloUseEnergyAction(id){
+  const p = solo();
   const act = ENERGY_ACTIONS[id];
-  if (soloPlayer.energy < act.cost) return;
-  soloPlayer.energy -= act.cost;
+  if (p.energy < act.cost) return;
+  p.energy -= act.cost;
   soloUsedEnergyId = id;
   if (id === 'boost'){
     soloPendingBoost = true;
-    walkLog(`Je zet <b>Stuwstoot</b> in (−3): deze beurt met 3 loopstenen.`, null, soloPlayer);
+    walkLog(`Je zet <b>Stuwstoot</b> in (−3): deze beurt met 3 loopstenen.`, null, p);
     soloProceedToRoll();
   } else if (id === 'reorder'){
     soloUnconditionalSwap();
     soloRefreshTarget();
-    walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${soloPlayer.deck[soloPlayer.nextIdx]}.`, null, soloPlayer);
+    walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
     soloProceedToRoll();
   } else if (id === 'jump'){
     soloEnterJumpTarget();
@@ -5204,9 +5420,9 @@ function soloUseEnergyAction(id){
 
 // ---------- Zwaartekracht-laarzen: richting kiezen ----------
 function soloEnterBootsDirection(){
-  const options = gravityBootsOptions(soloGraph, soloPlayer.pos, 10, new Set(), soloTargetKey);
+  const options = gravityBootsOptions(soloGraph, solo().pos, 10, soloOccupied(), soloTargetKey);
   if (!options.length){
-    walkLog(`<b>Zwaartekracht-laarzen</b>: in geen enkele richting is een stap mogelijk vanaf hier — de kaart blijft in je hand.`, null, soloPlayer);
+    walkLog(`<b>Zwaartekracht-laarzen</b>: in geen enkele richting is een stap mogelijk vanaf hier — de kaart blijft in je hand.`, null, solo());
     return;
   }
   soloBootsOptions = options;
@@ -5215,7 +5431,7 @@ function soloEnterBootsDirection(){
   btnWalkSoloSkip.hidden = true;
   const names = ['Noord', 'Oost', 'Zuid', 'West'];
   walkSoloActionsEl.innerHTML = `<div class="action-card-row">` + options.map(o =>
-    `<button type="button" class="action-card action-card--lg action-card--plain" data-boots-dir="${o.dir}" title="${names[o.dir]} — ${o.path.length - 1} stappen tot muur/rand">
+    `<button type="button" class="action-card action-card--lg action-card--plain" data-boots-dir="${o.dir}" title="${names[o.dir]} — ${o.path.length - 1} stappen tot muur/rand/tegenstander">
       <span class="action-card-name" style="margin-top:22px;">${names[o.dir]}</span>
       <span class="action-card-hint">${o.path.length - 1} vakjes tot muur/rand${o.bankedAt !== -1 ? ' — raakt je doel!' : ''}</span>
     </button>`
@@ -5232,20 +5448,21 @@ if (walkSoloActionsEl){
 function soloResolveBoots(dir){
   const opt = soloBootsOptions.find(o => o.dir === dir);
   if (!opt) return;
-  useActionCard(soloPlayer, 'boots', soloDeck);
+  const p = solo();
+  useActionCard(p, 'boots', soloDeck);
   soloUsedCardId = 'boots';
   soloUsedBoots = true;
   const banked = opt.bankedAt !== -1;
   const path = banked ? opt.path.slice(0, opt.bankedAt + 1) : opt.path;
 
-  walkLog(`Je speelt <b>Zwaartekracht-laarzen</b>: ${path.length - 1} stappen rechtdoor.`, null, soloPlayer);
+  walkLog(`Je speelt <b>Zwaartekracht-laarzen</b>: ${path.length - 1} stappen rechtdoor.`, null, p);
   for (let i = 1; i < path.length; i++){
-    const leaving = walkCellDiv(soloGraph, soloPlayer.pos);
-    leaving.style.setProperty('--pc', soloPlayer.color);
+    const leaving = walkCellDiv(soloGraph, p.pos);
+    leaving.style.setProperty('--pc', p.color);
     leaving.classList.add('walk-trail', 'walk-jump');
-    soloPlayer.pos = path[i];
+    p.pos = path[i];
   }
-  paintWalkPawns(soloGraph, [soloPlayer], 0);
+  paintWalkPawns(soloGraph, soloPlayers, p.idx);
   soloMove = { d1: 0, d2: 0, d3: null, roll: path.length - 1, stepsLeft: 0, lastDir: -1, path };
   soloFinishTurn(banked);
 }
@@ -5257,50 +5474,46 @@ function soloEnterJumpTarget(){
   soloHideDirPad();
   btnWalkSoloSkip.hidden = true;
   btnWalkSoloRoll.hidden = true;
-  const stamp = simBfsDistances(soloGraph, soloPlayer.pos);
+  const stamp = simBfsDistances(soloGraph, solo().pos);
+  const occ = soloOccupied();
   const keys = [];
   for (let k = 0; k < soloGraph.N; k++){
-    if (k === soloPlayer.pos) continue;
+    if (k === solo().pos || occ.has(k)) continue;
     const d = simDistLookup(stamp, k);
     if (d >= 0 && d <= ENERGY_JUMP_RANGE) keys.push(k);
   }
   soloMarkClickable(soloGraph, keys);
-  walkLog(`<b>Noodtransport</b> ingezet — klik een groen omrand vakje binnen bereik (tot ${ENERGY_JUMP_RANGE} vakjes vrij) om erheen te springen.`, null, soloPlayer);
+  walkLog(`<b>Noodtransport</b> ingezet — klik een groen omrand vakje binnen bereik (tot ${ENERGY_JUMP_RANGE} vakjes vrij) om erheen te springen.`, null, solo());
 }
 function soloHandleJumpClick(key){
   soloClearClickable();
   soloUsedJump = true;
-  const fromEl = walkCellDiv(soloGraph, soloPlayer.pos);
-  fromEl.style.setProperty('--pc', soloPlayer.color);
+  const p = solo();
+  const fromEl = walkCellDiv(soloGraph, p.pos);
+  fromEl.style.setProperty('--pc', p.color);
   fromEl.classList.add('walk-trail', 'walk-jump');
-  soloPlayer.pos = key;
+  p.pos = key;
   const toEl = walkCellDiv(soloGraph, key);
-  toEl.style.setProperty('--pc', soloPlayer.color);
+  toEl.style.setProperty('--pc', p.color);
   toEl.classList.add('walk-trail', 'walk-jump');
-  paintWalkPawns(soloGraph, [soloPlayer], 0);
+  paintWalkPawns(soloGraph, soloPlayers, p.idx);
 
   if (key === soloTargetKey){
     soloMove = { d1: 0, d2: 0, d3: null, roll: 0, stepsLeft: 0, lastDir: -1, path: [key] };
     soloFinishTurn(true);
   } else {
-    walkLog(`Je springt met <b>Noodtransport</b> naar een nieuwe plek — niet op je doel, dus je gooit gewoon door vanaf hier.`, null, soloPlayer);
+    walkLog(`Je springt met <b>Noodtransport</b> naar een nieuwe plek — niet op je doel, dus je gooit gewoon door vanaf hier.`, null, p);
     soloProceedToRoll();
   }
 }
 
 // ---------- dobbelen + lopen ----------
-// alleen de energiesteen is al bekend aan het begin van de beurt; de loopstenen tonen we
-// als "?" i.p.v. ze door renderWalkDice() te laten optellen (die verwacht getallen, geen
-// placeholder-tekens — "–"+"–" zou tekst-aan-elkaar-plakken worden, geen 0)
 function renderSoloDicePending(){
   const e = soloEnergyRoll;
   walkDiceEl.innerHTML =
     `<span class="walk-die">?</span><span class="walk-die">?</span>` +
     `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
 }
-// het richtingskruis boven het bord: dezelfde stap als een klik op het vakje, alleen een
-// stuk groter te raken op een telefoon. Beide manieren blijven naast elkaar werken — een
-// klik op een knop roept dezelfde soloHandleMoveClick() aan als een klik op de cel zelf.
 function soloRenderDirPad(legal){
   if (!walkDirPadEl) return;
   soloCurrentLegalMoves = legal;
@@ -5309,8 +5522,6 @@ function soloRenderDirPad(legal){
   for (const btn of walkDirPadEl.querySelectorAll('button[data-dir]')){
     btn.disabled = !legalDirs.has(parseInt(btn.dataset.dir, 10));
   }
-  // stappenteller naast de knoppen, zodat je niet terug hoeft te scrollen naar de worp
-  // bovenaan om te zien wat je nog hebt staan
   if (walkStepDoneEl) walkStepDoneEl.textContent = soloMove.path.length - 1;
   if (walkStepLeftEl) walkStepLeftEl.textContent = soloMove.stepsLeft;
 }
@@ -5336,7 +5547,7 @@ function soloProceedToRoll(){
   btnWalkSoloRoll.hidden = false;
   btnWalkSoloRoll.textContent = soloPendingBoost ? '🎲 Gooi 3 dobbelstenen' : '🎲 Gooi de dobbelstenen';
   soloPhase = 'rolling';
-  renderSoloScore();
+  renderWalkScore(soloPlayers, soloActiveIdx);
   renderSoloMeta();
 }
 function soloRollDice(){
@@ -5345,7 +5556,7 @@ function soloRollDice(){
   const d3 = soloPendingBoost ? simRollD6(soloRand) : null;
   renderWalkDice(d1, d2, soloEnergyRoll, false, d3);
   const roll = d1 + d2 + (d3 || 0);
-  soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [soloPlayer.pos] };
+  soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [solo().pos] };
   btnWalkSoloRoll.hidden = true;
   soloAdvanceMovePhase();
 }
@@ -5356,10 +5567,22 @@ if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
 });
 
 function soloAdvanceMovePhase(){
-  const legal = soloLegalNextCells(soloGraph, soloPlayer.pos, soloMove.lastDir);
+  const occ = soloOccupied();
+  const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, occ);
   if (!legal.length){
+    // geen vervolgstap: ofwel een muur (echt doodlopend), ofwel puur tegenstanders in de weg
+    // — in dat laatste geval mag Blinde Vlek de blokkade negeren, als je 'm hebt en nog geen
+    // andere actie deze beurt hebt gebruikt
+    const legalIgnoringBlock = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, null);
+    soloBlindOfferAvailable = legalIgnoringBlock.length > 0
+      && solo().cards.includes('blind') && !soloActionUsed();
+    if (soloBlindOfferAvailable){
+      soloOfferBlindSpot();
+      return;
+    }
     soloHideDirPad();
-    walkLog(`Doodlopend — geen vervolgstap meer mogelijk.`, null, soloPlayer);
+    const reason = legalIgnoringBlock.length ? 'liep tegen een bezette route aan' : 'doodlopend';
+    walkLog(`${reason === 'doodlopend' ? 'Doodlopend' : 'Geblokkeerd door een tegenstander'} — geen vervolgstap meer mogelijk.`, null, solo());
     soloFinishTurn(false);
     return;
   }
@@ -5368,18 +5591,59 @@ function soloAdvanceMovePhase(){
   soloRenderDirPad(legal);
   renderSoloMeta(soloMove.stepsLeft);
 }
+// Blinde Vlek is puur reactief: alleen aan te bieden op het moment dat je zet daadwerkelijk
+// door een tegenstander geblokkeerd wordt (net als bij de bots), dus dit is geen kaart in het
+// gewone actiepaneel maar een kort ja/nee-keuzemoment middenin de zet.
+function soloOfferBlindSpot(){
+  soloPhase = 'blind-offer';
+  soloHideDirPad();
+  soloClearClickable();
+  btnWalkSoloRoll.hidden = true;
+  btnWalkSoloSkip.hidden = true;
+  walkLog(`Je route wordt geblokkeerd door een tegenstander.`, null, solo());
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Speel <b>Blinde Vlek</b> om bezette vakjes deze beurt te negeren?</div>` +
+    `<div class="action-card-row">` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-blind="yes"><span class="action-card-name" style="margin-top:22px;">Ja, speel Blinde Vlek</span></button>` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-blind="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>` +
+    `</div>`;
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'blind-offer') return;
+    const btn = e.target.closest('button[data-blind]');
+    if (!btn) return;
+    if (btn.dataset.blind === 'yes'){
+      useActionCard(solo(), 'blind', soloDeck);
+      soloUsedCardId = 'blind';
+      walkLog(`Je speelt <b>Blinde Vlek</b>: bezette vakjes tellen deze beurt niet mee.`, null, solo());
+      walkSoloActionsEl.innerHTML = '';
+      soloPhase = 'moving';
+      const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, null);
+      soloMarkClickable(soloGraph, legal.map(l => l.key));
+      soloRenderDirPad(legal);
+      renderSoloMeta(soloMove.stepsLeft);
+    } else {
+      walkSoloActionsEl.innerHTML = '';
+      walkLog(`Doodlopend — geen vervolgstap meer mogelijk.`, null, solo());
+      soloFinishTurn(false);
+    }
+  });
+}
 function soloHandleMoveClick(key){
-  const legal = soloLegalNextCells(soloGraph, soloPlayer.pos, soloMove.lastDir);
+  const occ = soloOccupied();
+  const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, soloPhase === 'moving' && soloUsedCardId === 'blind' ? null : occ);
   const match = legal.find(l => l.key === key);
   if (!match) return;
-  const leaving = walkCellDiv(soloGraph, soloPlayer.pos);
-  leaving.style.setProperty('--pc', soloPlayer.color);
+  const p = solo();
+  const leaving = walkCellDiv(soloGraph, p.pos);
+  leaving.style.setProperty('--pc', p.color);
   leaving.classList.add('walk-trail');
-  soloPlayer.pos = key;
+  p.pos = key;
   soloMove.lastDir = match.dir;
   soloMove.stepsLeft--;
   soloMove.path.push(key);
-  paintWalkPawns(soloGraph, [soloPlayer], 0);
+  paintWalkPawns(soloGraph, soloPlayers, p.idx);
 
   if (key === soloTargetKey){
     soloClearClickable();
@@ -5396,6 +5660,7 @@ function soloHandleMoveClick(key){
 function soloFinishTurn(banked){
   soloClearClickable();
   soloHideDirPad();
+  const p = solo();
   const { d1, d2, d3, roll } = soloMove;
   const stepsUsed = soloMove.path.length - 1;
   const rollText = soloUsedBoots
@@ -5404,53 +5669,47 @@ function soloFinishTurn(banked){
       ? `⚡ Noodtransport`
       : walkRollText(d1, d2, d3, roll);
   const turnNote = soloUsedEnergyId ? walkActionNote(soloUsedEnergyId) : walkCardNote(soloUsedCardId);
-  const targetLabel = soloPlayer.deck[soloPlayer.nextIdx];
+  const targetLabel = p.deck[p.nextIdx];
 
   if (banked){
-    soloPlayer.completed++;
-    soloPlayer.doneCells.push(soloTargetKey);
+    p.completed++;
+    p.doneCells.push(soloTargetKey);
     walkClearClass('walk-target');
     walkCellDiv(soloGraph, soloTargetKey).classList.add('walk-done');
     const extra = (!soloUsedBoots && !soloUsedJump && stepsUsed < roll) ? ` (na ${stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
-    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, soloPlayer)}${turnNote} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${soloPlayer.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', soloPlayer);
-    soloPlayer.nextIdx++;
+    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, p)}${turnNote} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${p.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', p);
+    p.nextIdx++;
 
-    if (soloPlayer.cards.length < ACTION_CARD_HAND_MAX){
+    if (p.cards.length < ACTION_CARD_HAND_MAX){
       const drawn = drawActionCard(soloDeck, soloRand);
       if (drawn){
-        soloPlayer.cards.push(drawn);
-        walkLog(`Je trekt een beloningskaart: <b>${ACTION_CARDS[drawn].name}</b> — ${ACTION_CARDS[drawn].hint}.`, null, soloPlayer);
+        p.cards.push(drawn);
+        walkLog(`Je trekt een beloningskaart: <b>${ACTION_CARDS[drawn].name}</b> — ${ACTION_CARDS[drawn].hint}.`, null, p);
       }
     } else {
-      walkLog(`Je zou een kaart trekken, maar je hand is al vol.`, null, soloPlayer);
+      walkLog(`Je zou een kaart trekken, maar je hand is al vol.`, null, p);
     }
 
-    if (soloPlayer.completed >= SIM_QUESTS_TO_WIN){
-      soloEndGame();
+    if (p.completed >= SIM_QUESTS_TO_WIN){
+      p.finishTurn = soloTurn;
+      soloRoundFinishers.push(p);
+      walkLog(`Je hebt alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid en verlaat het bord — wacht op de rest van deze ronde.`, 'hit', p);
+      paintWalkPawns(soloGraph, soloPlayers, p.idx);
+      renderWalkScore(soloPlayers, soloActiveIdx);
+      soloContinueLoop();
       return;
     }
   } else {
     const extra = (!soloUsedBoots && !soloUsedJump && stepsUsed < roll) ? ` — kon maar ${stepsUsed} stappen zetten (doodlopend)` : '';
-    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, soloPlayer)}${turnNote} → onderweg naar ${targetLabel}${extra}`, null, soloPlayer);
+    walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, p)}${turnNote} → onderweg naar ${targetLabel}${extra}`, null, p);
   }
-  renderSoloScore();
-  beginSoloTurn();
-}
-function soloEndGame(){
-  soloPhase = 'game-over';
-  walkClearClass('walk-target');
-  walkSoloActionsEl.innerHTML = '';
-  btnWalkSoloRoll.hidden = true;
-  btnWalkSoloSkip.hidden = true;
-  renderSoloScore();
-  if (walkMetaEl) walkMetaEl.innerHTML = '';
-  walkStatusEl.innerHTML = `<span class="ok">✓ Alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid in ${soloTurn} beurten!</span>`;
-  btnWalkSoloStart.disabled = false;
-  walkStartSoloSel.disabled = false;
+  renderWalkScore(soloPlayers, soloActiveIdx);
+  soloContinueLoop();
 }
 
-// ---------- beurt starten ----------
-function beginSoloTurn(){
+// ---------- JOUW beurt starten (interactief) ----------
+function soloBeginHumanTurn(pIdx){
+  soloActiveIdx = pIdx;
   soloTurn++;
   soloUsedEnergyId = null;
   soloUsedCardId = null;
@@ -5459,13 +5718,15 @@ function beginSoloTurn(){
   soloUsedJump = false;
   soloMove = null;
 
+  const p = solo();
   soloEnergyRoll = simRollEnergy(soloRand);
-  soloEnergyGain = simGainEnergy(soloPlayer, soloEnergyRoll);
+  soloEnergyGain = simGainEnergy(p, soloEnergyRoll);
 
   soloRefreshTarget();
   renderSoloDicePending();
-  renderSoloScore();
+  renderWalkScore(soloPlayers, soloActiveIdx);
   renderSoloMeta();
+  paintWalkPawns(soloGraph, soloPlayers, p.idx);
 
   btnWalkSoloRoll.hidden = true;
   btnWalkSoloSkip.hidden = false;
@@ -5473,11 +5734,203 @@ function beginSoloTurn(){
   soloRenderActionPanel();
 }
 
+// ---------- bot-beurt: meteen afgehandeld, geen animatie ----------
+// niet-geanimeerde kopie van de bot-logica uit 96-walk.js/simulateOneGame — zelfde regels,
+// alleen zonder walkTick()/walkPath()-vertragingen, want de bots hoeven niet op jou te wachten
+// en jij niet op hen.
+function soloResolveBotTurn(player){
+  soloTurn++;
+  const pIdx = player.idx;
+  let actionUsed = false;
+
+  let energyRoll = 0, energyGain = { gained: 0, wasted: 0 };
+  if (player.skipEnergyRoll){ player.skipEnergyRoll = false; }
+  else { energyRoll = simRollEnergy(soloRand); energyGain = simGainEnergy(player, energyRoll); }
+
+  if (!actionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
+    const saved = Math.min(3, energyGain.wasted);
+    player.energy += saved;
+    useActionCard(player, 'valve', soloDeck);
+    actionUsed = true;
+  }
+  if (!actionUsed && player.cards.includes('short')){
+    const victim = pickShortCircuitTarget(soloPlayers, pIdx);
+    if (victim){
+      victim.skipEnergyRoll = true;
+      useActionCard(player, 'short', soloDeck);
+      actionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Kortsluiting</b> op ${victim.name}.`, null, player);
+    }
+  }
+  if (!actionUsed && player.cards.includes('ration') && player.energy < ENERGY_MAX){
+    simGainEnergy(player, 3);
+    useActionCard(player, 'ration', soloDeck);
+    actionUsed = true;
+  }
+
+  let targetLabel = player.deck[player.nextIdx];
+  // energyReorderTarget() leest/schrijft player.order — de batch-speler heet zijn stapel zo,
+  // maar hier (net als in 96-walk.js) heet 'ie deck. Een shim die naar dezelfde array wijst
+  // (geen kopie) laat de swap gewoon doorwerken op player.deck. Zie de kanttekening bij
+  // pickShoveMove hierboven — dit is precies de val die daar staat beschreven.
+  const shim = { order: player.deck, nextIdx: player.nextIdx };
+  if (!actionUsed && player.cards.includes('recal')){
+    const swapped = energyReorderTarget(soloGraph, shim, player.pos);
+    if (swapped !== null){ targetLabel = swapped; useActionCard(player, 'recal', soloDeck); actionUsed = true; }
+  }
+  if (!actionUsed && player.cards.includes('shove')){
+    const shove = pickShoveMove(soloGraph, soloPlayers, pIdx);
+    if (shove){
+      shove.player.pos = shove.toKey;
+      useActionCard(player, 'shove', soloDeck);
+      actionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Duwstoot</b> op ${shove.player.name}.`, null, player);
+    }
+  }
+  if (!actionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
+    const swapped = energyReorderTarget(soloGraph, shim, player.pos);
+    if (swapped !== null){ targetLabel = swapped; player.energy -= ENERGY_ACTIONS.reorder.cost; player.actionUses++; actionUsed = true; }
+  }
+  const targetKey = soloGraph.questCells[targetLabel];
+
+  const occupied = new Set();
+  for (const other of soloPlayers) if (other.idx !== pIdx && !other.rank) occupied.add(other.pos);
+
+  let move, roll = 0, usedBoots = false;
+  if (!actionUsed && player.cards.includes('boots')){
+    const bootsMove = resolveGravityBoots(soloGraph, player.pos, 10, occupied, targetKey);
+    if (bootsMove){ move = bootsMove; usedBoots = true; useActionCard(player, 'boots', soloDeck); actionUsed = true; }
+  }
+  if (!usedBoots){
+    roll = simRollD6(soloRand) + simRollD6(soloRand);
+    if (!actionUsed && player.cards.includes('boostcell')){
+      roll += simRollD6(soloRand); useActionCard(player, 'boostcell', soloDeck); actionUsed = true;
+    } else if (!actionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
+      roll += simRollD6(soloRand); player.energy -= ENERGY_ACTIONS.boost.cost; player.actionUses++; actionUsed = true;
+    }
+    move = resolveMove(soloGraph, player.pos, roll, occupied, targetKey, soloRand);
+  }
+
+  if (!move.bankedQuest && !actionUsed && player.cards.includes('blind') && move.wasBlocked){
+    const retry = resolveMove(soloGraph, player.pos, roll, new Set(), targetKey, soloRand);
+    if (retry.key !== move.key){ move = retry; useActionCard(player, 'blind', soloDeck); actionUsed = true; }
+  }
+  if (!move.bankedQuest && !actionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
+    const jump = resolveEnergyJump(soloGraph, player.pos, ENERGY_JUMP_RANGE, targetKey);
+    if (jump){
+      player.energy -= ENERGY_ACTIONS.jump.cost; player.actionUses++; actionUsed = true;
+      move = jump.banked
+        ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
+        : resolveMove(soloGraph, jump.key, roll, occupied, targetKey, soloRand);
+    }
+  }
+  if (!actionUsed && player.cards.includes('resupply')){
+    useActionCard(player, 'resupply', soloDeck);
+    const drawn = drawActionCard(soloDeck, soloRand);
+    if (drawn){ player.cards.push(drawn); walkLog(`${player.name} gebruikt <b>Herbevoorrading</b> en trekt meteen <b>${ACTION_CARDS[drawn].name}</b>.`, null, player); }
+    actionUsed = true;
+  }
+
+  player.pos = move.key;
+  paintWalkPawns(soloGraph, soloPlayers, pIdx);
+
+  if (move.bankedQuest){
+    player.completed++;
+    player.doneCells.push(targetKey);
+    player.nextIdx++;
+    if (player.cards.length < ACTION_CARD_HAND_MAX){
+      const drawn = drawActionCard(soloDeck, soloRand);
+      if (drawn) player.cards.push(drawn);
+    }
+    walkLog(`Beurt ${soloTurn}: <b>${player.name}</b> voltooit <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''}</span> · ${player.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', player);
+    if (player.completed >= SIM_QUESTS_TO_WIN){
+      player.finishTurn = soloTurn;
+      soloRoundFinishers.push(player);
+      walkLog(`<b>${player.name} heeft alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid</b> en verlaat het bord — wacht op de rest van deze ronde.`, 'hit', player);
+    }
+  } else {
+    walkLog(`Beurt ${soloTurn}: <b>${player.name}</b> onderweg naar ${targetLabel}${move.wasBlocked ? ' · liep tegen een bezette route aan' : ''}`, null, player);
+  }
+  renderWalkScore(soloPlayers, -1);
+}
+
+// ---------- de ronde-lus: bots meteen, mensen interactief ----------
+function soloContinueLoop(){
+  soloRoundPos++;
+  soloAdvanceLoop();
+}
+function soloAdvanceLoop(){
+  while (soloRoundPos < soloTurnOrder.length){
+    const pIdx = soloTurnOrder[soloRoundPos];
+    const player = soloPlayers[pIdx];
+    if (player.rank){ soloRoundPos++; continue; }
+    if (player.isHuman){
+      soloBeginHumanTurn(pIdx);
+      return;   // wacht op klik-interactie; soloContinueLoop() gaat verder zodra de beurt klaar is
+    }
+    soloResolveBotTurn(player);
+    soloRoundPos++;
+    if (soloTurn >= SIM_MAX_TURNS) break;
+  }
+  soloFinishRound();
+}
+function soloFinishRound(){
+  if (soloRoundFinishers.length){
+    const groups = resolveRoundFinishers(soloRoundFinishers, soloFinished);
+    for (const group of groups){
+      if (group.length === 1){
+        walkLog(`<b>${group[0].name} is binnen als ${walkRankLabel(group[0].rank)}</b>.`, 'hit', group[0]);
+      } else {
+        const names = group.map(p => p.name).join(' en ');
+        walkLog(`<b>${names} delen de ${walkRankLabel(group[0].rank)} plaats</b> — gelijke energie (${group[0].energy}) en evenveel actiekaarten in de hand (${group[0].cards.length}).`, 'hit', null);
+      }
+    }
+    soloFinished += soloRoundFinishers.length;
+    soloRoundFinishers = [];
+    renderWalkScore(soloPlayers, -1);
+    if (soloFinished >= soloFinishTarget){
+      for (const p of soloPlayers) if (!p.rank) p.rank = soloFinished + 1;
+      soloEndGame(false);
+      return;
+    }
+  }
+  if (soloTurn >= SIM_MAX_TURNS){ soloEndGame(true); return; }
+  soloRoundPos = 0;
+  soloAdvanceLoop();
+}
+function soloEndGame(stuck){
+  soloPhase = 'game-over';
+  walkClearClass('walk-target');
+  walkSoloActionsEl.innerHTML = '';
+  btnWalkSoloRoll.hidden = true;
+  btnWalkSoloSkip.hidden = true;
+  renderWalkScore(soloPlayers, -1);
+  if (walkMetaEl) walkMetaEl.innerHTML = '';
+  if (stuck){
+    walkStatusEl.innerHTML = `<span class="bad">✕ Afgekapt na ${SIM_MAX_TURNS} beurten — niet iedereen was binnen.</span>` +
+      (soloPlayers.length > 1 ? `<span class="walk-standings-row">${walkStandings(soloPlayers)}</span>` : '');
+  } else if (soloPlayers.length === 1){
+    walkStatusEl.innerHTML = `<span class="ok">✓ Alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid in ${solo() ? solo().finishTurn : soloTurn} beurten!</span>`;
+  } else {
+    const winners = soloPlayers.filter(p => p.rank === 1);
+    const winText = winners.length === 1
+      ? (winners[0].isHuman ? `Jij wint vanaf ${winners[0].startLabel} in ${winners[0].finishTurn} beurten` : `${winners[0].name} wint vanaf ${winners[0].startLabel} in ${winners[0].finishTurn} beurten`)
+      : `${winners.map(w => w.isHuman ? 'jij' : w.name).join(' en ')} delen de winst (gelijke energie en actiekaarten)`;
+    walkStatusEl.innerHTML = `<span class="ok">✓ ${winText} — potje uitgespeeld in ${soloTurn} beurten.</span>` +
+      `<span class="walk-standings-row">Eindklassering: ${walkStandings(soloPlayers)}</span>`;
+  }
+  btnWalkSoloStart.disabled = false;
+  if (walkSoloPlayersSel) walkSoloPlayersSel.disabled = false;
+  if (walkSoloBotsSel) walkSoloBotsSel.disabled = false;
+  for (const sel of walkSoloSetupEl ? walkSoloSetupEl.querySelectorAll('select') : []) sel.disabled = false;
+}
+
 // ---------- potje starten/stoppen ----------
 function stopSoloGame(){
   soloRunId++;
   soloPhase = 'idle';
-  soloGraph = null; soloPlayer = null; soloMove = null;
+  soloGraph = null; soloPlayers = []; soloMove = null; soloActiveIdx = -1;
+  soloRoundFinishers = []; soloFinished = 0; soloRoundPos = 0;
   soloClearClickable();
   soloHideDirPad();
   if (walkSoloActionsEl) walkSoloActionsEl.innerHTML = '';
@@ -5485,7 +5938,9 @@ function stopSoloGame(){
   if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
   if (btnWalkSoloStart) btnWalkSoloStart.disabled = false;
   if (btnWalkSoloReset) btnWalkSoloReset.disabled = true;
-  if (walkStartSoloSel) walkStartSoloSel.disabled = false;
+  if (walkSoloPlayersSel) walkSoloPlayersSel.disabled = false;
+  if (walkSoloBotsSel) walkSoloBotsSel.disabled = false;
+  for (const sel of walkSoloSetupEl ? walkSoloSetupEl.querySelectorAll('select') : []) sel.disabled = false;
 }
 function startSoloGame(){
   stopSoloGame();
@@ -5506,30 +5961,52 @@ function startSoloGame(){
     walkStatusEl.innerHTML = `<span class="bad">✕ Deze vakjes ontbreken op het bord: ${missing.join(', ')}.</span>`;
     return;
   }
+  if (!soloSetupPlayers.length) soloRebuildSetup();
 
   soloGraph = graph;
-  soloRand = mulberry32(Math.floor(Math.random() * 4294967296));
-  const startLabel = walkStartSoloSel.value === '?'
-    ? SIM_START_LABELS[Math.floor(soloRand() * SIM_START_LABELS.length)]
-    : walkStartSoloSel.value;
-  soloPlayer = {
-    idx: 0, name: 'Jij', color: WALK_PLAYER_COLORS[0], startLabel,
-    pos: graph.startCells[startLabel],
-    deck: simShuffle(SIM_QUEST_LABELS, soloRand),
-    nextIdx: 0, completed: 0, energy: 0, cards: [], rank: 0, doneCells: [],
-  };
-  soloDeck = buildActionDeck(soloRand);
-  soloTurn = 0;
+  soloRand = soloSetupRand;
+  soloPlayers = soloSetupPlayers;
+  // startposities: mensen hebben net gekozen; bots krijgen de overgebleven posities willekeurig
+  const taken = new Set(soloPlayers.filter(p => p.isHuman).map(p => p.startLabel));
+  const free = simShuffle(SIM_START_LABELS.filter(l => !taken.has(l)), soloRand);
+  let fi = 0;
+  for (const p of soloPlayers){
+    if (!p.isHuman) p.startLabel = free[fi++];
+    p.pos = graph.startCells[p.startLabel];
+  }
 
+  soloTurnOrder = simShuffle(soloPlayers.map(p => p.idx), soloRand);
+  soloFinishTarget = simFinishTarget(soloPlayers.length);
+  soloFinished = 0;
+  soloRoundFinishers = [];
+  soloRoundPos = 0;
+  soloTurn = 0;
+  soloDeck = buildActionDeck(soloRand);
+
+  for (const p of soloPlayers){
+    const who = p.isHuman ? '(jij)' : '(bot)';
+    const stratNote = p.isHuman ? '' : ` · energie: <b>${ENERGY_ACTIONS[p.strategy].name}</b>`;
+    walkLog(`${p.name} ${who} start op <b>${p.startLabel}</b>${stratNote} · stapel: ${p.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, p);
+  }
+  walkLog(`Elke voltooide opdracht levert een beloningskaart op van een gedeelde stapel — max 2 kaarten in de hand.`);
+  if (soloPlayers.length > 1){
+    walkLog(`Beurtvolgorde: ${soloTurnOrder.map(i => soloPlayers[i].name).join(' → ')}.`);
+    walkLog(soloPlayers.length === 2
+      ? `Er wordt gespeeld tot de winnaar binnen is — de ander is dan tweede.`
+      : `Er wordt doorgespeeld tot de <b>${soloFinishTarget}e</b> binnen is; de laatste speler is dan automatisch ${soloPlayers.length}e.`);
+  } else {
+    walkLog(`Solo potje: niemand blokkeert je. Kortsluiting, Duwstoot, Blinde Vlek en Prioriteitspas hebben een tegenstander nodig en doen hier dus niets als je ze trekt.`);
+  }
+
+  if (walkSoloPlayersSel) walkSoloPlayersSel.disabled = true;
+  if (walkSoloBotsSel) walkSoloBotsSel.disabled = true;
+  for (const sel of walkSoloSetupEl ? walkSoloSetupEl.querySelectorAll('select') : []) sel.disabled = true;
   btnWalkSoloStart.disabled = true;
   btnWalkSoloReset.disabled = false;
-  walkStartSoloSel.disabled = true;
 
-  walkLog(`Jij start op <b>${startLabel}</b> · stapel: ${soloPlayer.deck.slice(0, SIM_QUESTS_TO_WIN).join(' → ')} …`, null, soloPlayer);
-  walkLog(`Solo potje: niemand blokkeert je. Kortsluiting, Duwstoot, Blinde Vlek en Prioriteitspas hebben een tegenstander nodig en doen hier dus niets als je ze trekt.`);
-
-  paintWalkPawns(soloGraph, [soloPlayer], 0);
-  beginSoloTurn();
+  renderWalkScore(soloPlayers, soloTurnOrder[0]);
+  paintWalkPawns(soloGraph, soloPlayers, soloTurnOrder[0]);
+  soloAdvanceLoop();
 }
 
 if (walkModeAutoBtn) walkModeAutoBtn.addEventListener('click', () => setWalkMode('auto'));
@@ -5537,7 +6014,8 @@ if (walkModeSoloBtn) walkModeSoloBtn.addEventListener('click', () => setWalkMode
 if (btnWalkSoloStart) btnWalkSoloStart.addEventListener('click', startSoloGame);
 if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', startSoloGame);
 
-soloRefreshStartOptions();
+soloSyncBotOptions();
+soloRebuildSetup();
 
 </script>
 </body>

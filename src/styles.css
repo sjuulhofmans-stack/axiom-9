@@ -272,6 +272,31 @@
   }
   .walk-solo-panel[hidden]{display:none;}
 
+  /* opzetscherm bij "zelf spelen" met meerdere spelers: per menselijke speler een
+     startpositie-keuze + voorproefje van de eerste opdracht, zodat je een weloverwogen
+     keuze kunt maken vóórdat het potje echt begint */
+  .walk-solo-setup{
+    display:flex; flex-direction:column; gap:8px; margin:14px 0 0;
+  }
+  .walk-solo-setup[hidden], .walk-solo-setup:empty{display:none;}
+  .walk-solo-setup-player{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
+    border-radius:5px; padding:8px 11px;
+  }
+  .walk-solo-setup-name{
+    font-family:var(--font-mono); font-size:12px; color:var(--text); min-width:70px;
+  }
+  .walk-solo-setup-preview{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
+  }
+  .walk-solo-setup-preview b{color:var(--quest);}
+
+  /* doelwit kiezen voor Kortsluiting/Duwstoot/Prioriteitspas: dezelfde kaart-knoppenrij als
+     de richtingskeuze bij Zwaartekracht-laarzen, maar dan met tegenstanders als opties */
+  .walk-target-picker{display:flex; flex-direction:column; gap:8px; margin:10px 0 0;}
+  .walk-target-picker-hint{font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);}
+
   /* richtingsknoppen tijdens het lopen in de solo-modus: hetzelfde als op een vakje
      klikken, maar een stuk makkelijker te raken op een telefoon dan de kleine cellen
      op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast

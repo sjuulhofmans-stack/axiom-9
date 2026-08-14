@@ -225,10 +225,15 @@ function renderWalkScore(players, activeIdx){
         : `<span class="lost">verloren — ${walkRankLabel(p.rank)}</span>`
       : `${targetLabel} — ${QUEST_NAMES[targetLabel] || ''}`;
     const cls = 'walk-player' + (p.idx === activeIdx ? ' active' : '') + (p.rank ? ' done' : '');
+    // p.strategy is leeg voor een mens in de solo-modus (die kiest zelf elke beurt, geen
+    // vaste bot-strategie) — de ENERGY_ACTIONS-opzoeking overslaan voorkomt een crash daar
+    const stratBadge = p.strategy
+      ? `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>`
+      : (p.isHuman ? `<span class="walk-player-strat" title="jij kiest zelf een energie-actie of kaart">jij kiest</span>` : '');
     return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-dot"></span>` +
       `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-      `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>` +
+      stratBadge +
       walkCardBadges(p) +
       `<span class="walk-player-goal">${goal}</span>` +
       `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +

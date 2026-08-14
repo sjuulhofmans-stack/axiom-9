@@ -187,15 +187,27 @@
 
         <div class="walk-controls" id="walkSoloControls" hidden>
           <div class="field">
-            <label for="walkStartSolo">Startpositie</label>
-            <select id="walkStartSolo"></select>
+            <label for="walkSoloPlayers">Aantal spelers</label>
+            <select id="walkSoloPlayers">
+              <option value="1">1 speler (alleen)</option>
+              <option value="2">2 spelers</option>
+              <option value="3">3 spelers</option>
+              <option value="4" selected>4 spelers</option>
+            </select>
           </div>
+          <div class="field">
+            <label for="walkSoloBots">Aantal bots</label>
+            <select id="walkSoloBots"></select>
+          </div>
+        </div>
+        <div id="walkSoloSetupPlayers" class="walk-solo-setup"></div>
+        <div class="walk-controls" id="walkSoloStartRow" hidden>
           <div class="btn-row">
             <button id="btnWalkSoloStart" class="primary">Potje starten</button>
             <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
           </div>
         </div>
-        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf, alleen op het bord: gooi de stenen, kies na elke worp zelf een aangrenzend vakje om naartoe te lopen, en zet een energie-actie of handkaart in wanneer jij dat wilt (hooguit één per beurt). Niemand blokkeert je — je speelt tegen de klok van je eigen 6 opdrachten.</p>
+        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf via de knoppen/vakjes hieronder — de bots spelen meteen door zodra zij aan de beurt zijn. Kies per menselijke speler een startpositie; je ziet meteen welke opdracht je als eerste krijgt. Met meer dan 1 speler blokkeer je elkaar net als in "Automatisch", en werken Kortsluiting, Duwstoot en Prioriteitspas ook (met een doelwit dat je zelf kiest).</p>
 
         <div class="walk-hud">
           <div class="walk-dice" id="walkDice"></div>
