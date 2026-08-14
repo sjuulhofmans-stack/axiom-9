@@ -117,20 +117,45 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   het verplaatsen klopt nu altijd.
 - De generator zoekt een indeling **zonder doodlopende naden** en waarbij alle
   20 tegels met elkaar verbonden zijn. Kandidaten (pool van 20) worden daarna
-  gerangschikt op (1) `deadTileCount`; (2) kamers achter een wurgpunt;
-  (3) `roomIsolationScore` — hoeveel gangen je hoogstens moet passeren van een
-  kamer naar de dichtstbijzijnde andere kamer; (4) `roomAdjacencyCount` — bij
-  gelijke `roomIsolationScore` alsnog zoveel mogelijk kamers die ECHT
-  rechtstreeks aan een andere kamer grenzen (`roomIsolationScore` let alleen op
-  het slechtste geval, dus twee kandidaten kunnen daar allebei op 0 staan
-  terwijl de een veel meer kamer-kamer deuren heeft); (5) `questSpacingScore.minDist` —
-  kortste loopafstand tussen twee opdrachtvakjes, zo groot mogelijk;
-  (6) `questCoverageScore`; (7) eerlijkheid startposities. Zie `70-generator.js`.
+  gerangschikt op (1) `deadTileCount`; (2) `minTileBetweenness` — de zwakste
+  tegel z'n steun boven 0 optrekken (zie hieronder); (3) kamers achter een
+  wurgpunt; (4) `roomIsolationScore` — hoeveel gangen je hoogstens moet
+  passeren van een kamer naar de dichtstbijzijnde andere kamer;
+  (5) `roomAdjacencyCount` — bij gelijke `roomIsolationScore` alsnog zoveel
+  mogelijk kamers die ECHT rechtstreeks aan een andere kamer grenzen
+  (`roomIsolationScore` let alleen op het slechtste geval, dus twee
+  kandidaten kunnen daar allebei op 0 staan terwijl de een veel meer
+  kamer-kamer deuren heeft); (6) `questSpacingScore.minDist` — kortste
+  loopafstand tussen twee opdrachtvakjes, zo groot mogelijk; (7) `questCoverageScore`;
+  (8) eerlijkheid startposities. Zie `70-generator.js`.
   **Waarom `deadTileCount` bovenaan staat:** "dicht bij een opdracht" bleek niet
   genoeg — een buitenrand-lus kan 5 stappen van een opdracht liggen en toch 0
   bezoeken krijgen, omdat spelers alleen van opdracht naar opdracht reizen. De
   test is gevalideerd tegen de simulatie: hij wees exact de tegels aan die 0–17
   bezoeken kregen terwijl de rest er 4000+ had.
+  **`deadTileCount === 0` bleek niet genoeg voor de hoek-gangen — `minTileBetweenness`
+  toegevoegd.** `deadTileCount` telt een tegel als "niet dood" zodra ÉÉN van de 78
+  mogelijke opdracht/start-paren er zijn kortste pad doorheen legt — maar tegel 1 en
+  16 (moeten altijd op een hoek liggen, mogen NOOIT een opdracht dragen) haalden dat
+  vaak met precies 1 zo'n paar, en kregen in de simulatie dan ook maar 0,2-0,6%
+  van het verkeer terwijl `deadTileCount` ze prima vond. `tileBetweennessCounts(lay)`
+  telt nu per tegel het AANTAL paren i.p.v. alleen dood/niet-dood, en
+  `minTileBetweenness(lay)` = de zwakste tegel z'n telling — hoe hoger, hoe meer marge
+  boven 0. Toegevoegd als criterium #2, direct na `deadTileCount`.
+  Geanalyseerd over 100 indelingen: gemiddelde `minTileBetweenness` 13,9 → **31,2**
+  (bijna verdubbeld), en de laagste hoek-telling specifiek 15,0 → **33,9**.
+  **Eerlijk over het effect op de ECHTE simulatie** (8 seeds × 3000 potjes, vóór/na
+  vergeleken): het hoek-verkeer ging gemiddeld maar licht omhoog (3,31% → 3,67%) en
+  bij meerdere seeds veranderde er nauwelijks iets — de analytische score verbeterde
+  dus veel sterker dan het werkelijke speelgedrag. Reden: `minTileBetweenness` meet
+  kortste-pad-telling tussen abstracte punten, niet de stochastische AI-realiteit
+  (welk specifiek label toevallig waar staat, energie-acties, blokkades). Wél een
+  reële winst in het slechtste geval (laagst geziene hoek-percentage 0,05% → 0,22%,
+  ruim 4×) en geen enkele regressie (dood-vrij bleef 100% over alle testen). Blijft
+  ook een **structurele** grens: tegel 1 en 16 zijn en blijven de kleinste,
+  opdrachtloze, aan-de-rand-geforceerde tegels van de hele set — enige verdere winst
+  zit waarschijnlijk in een grotere kandidatenpool (nu 20), niet in nóg een
+  scoringscriterium.
   **Niet doen — 4-weg-tegels verplicht binnenin.** Klinkt logisch (meer grid),
   maar is gemeten over 248 indelingen en pakt averechts uit: gemiddeld 4,0-4,4
   dode tegels i.p.v. 2,6-2,9, en het aandeel indelingen zónder dode tegel zakt
