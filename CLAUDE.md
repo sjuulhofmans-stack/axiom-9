@@ -489,6 +489,20 @@ Check minimaal:
     de echte `.deck`. Ook `soloRenderActionPanel()` liet Blinde Vlek aanvankelijk
     klikbaar-maar-inert staan i.p.v. 'm hard uit te schakelen — beide gevonden
     en gefixt vóór het testen, niet erna.
+  - **Gevonden en gefixt ná oplevering — "Nieuw potje" hergebruikte vervuilde
+    spelerobjecten** (gebruikersmelding: "Speler 1 krijgt telkens energie erbij,
+    ook de startposities staan op de verkeerde plek"). Oorzaak: `btnWalkSoloReset`
+    was verkeerd bedraad op `startSoloGame` — dezelfde handler als "Potje
+    starten" — en die functie doet `soloPlayers = soloSetupPlayers` (dezelfde
+    objecten, geen kopie). Bij een tweede potje waren dat dus nog steeds de
+    objecten van het VORIGE potje: energie, voltooide opdrachten, handkaarten
+    en positie stonden nog op de eindstand, en werden nooit teruggezet. Fix:
+    `btnWalkSoloReset` roept nu `soloRebuildSetup()` aan (bouwt frisse
+    spelerobjecten met energie/voortgang op 0, nieuw geschudde stapels via een
+    nieuwe RNG, en toont het startpositie-scherm opnieuw) in plaats van
+    `startSoloGame()` nogmaals. `stopSoloGame()` verbergt daarbij nu ook
+    `#walkSoloPanel` weer (deed dat nog niet), anders bleef er een lege
+    bordered box zichtbaar op het setup-scherm.
   Elke mens dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje
   om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
   zijn bezette vakjes van andere spelers uitgesloten). Boven

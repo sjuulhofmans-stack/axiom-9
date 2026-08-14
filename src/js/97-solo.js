@@ -945,6 +945,7 @@ function stopSoloGame(){
   soloRoundFinishers = []; soloFinished = 0; soloRoundPos = 0;
   soloClearClickable();
   soloHideDirPad();
+  if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
   if (walkSoloActionsEl) walkSoloActionsEl.innerHTML = '';
   if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
   if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
@@ -1024,7 +1025,14 @@ function startSoloGame(){
 if (walkModeAutoBtn) walkModeAutoBtn.addEventListener('click', () => setWalkMode('auto'));
 if (walkModeSoloBtn) walkModeSoloBtn.addEventListener('click', () => setWalkMode('solo'));
 if (btnWalkSoloStart) btnWalkSoloStart.addEventListener('click', startSoloGame);
-if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', startSoloGame);
+// "Nieuw potje" moet een SCHONE lei zijn (energie/opdrachten/posities terug naar 0, nieuwe
+// shuffle) — niet startSoloGame() nogmaals, want die hergebruikt soloPlayers = soloSetupPlayers
+// rechtstreeks (zelfde objecten, geen kopie) zonder ze te resetten. Zonder deze route bleef
+// b.v. Speler 1's energie van het vorige potje gewoon staan en tellen bots' oude startLabel nog
+// mee als "bezet" voor de volgende ronde — vandaar de gemelde bug ("energie blijft oplopen,
+// startposities kloppen niet"). soloRebuildSetup() bouwt frisse spelerobjecten met energie 0,
+// nieuw geschudde stapels en een nieuwe RNG, en toont het startpositie-scherm weer.
+if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', soloRebuildSetup);
 
 soloSyncBotOptions();
 soloRebuildSetup();
