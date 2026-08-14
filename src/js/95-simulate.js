@@ -791,6 +791,11 @@ function clearSimResults(){
   if (simProgressEl) simProgressEl.hidden = true;
   simRunning = false;
   if (btnSimulate) btnSimulate.disabled = false;
+  // zelfde verhaal voor een lopende bord-generatie (zie applyGeneratedLayout in 80-controls.js):
+  // die rekent ook in brokken, dus een tegel slepen/draaien terwijl er nog gegenereerd wordt
+  // moet de balk/knoppen direct resetten — de simRunId-check daar zorgt dat het resultaat van
+  // die verouderde run straks ook niet meer wordt toegepast.
+  if (typeof hideGenProgress === 'function') hideGenProgress();
   if (!simResultsEl) return;
   simResultsEl.innerHTML = '';
   simStatusEl.innerHTML = `<span class="sub">Indeling gewijzigd — draai de simulatie opnieuw voor cijfers die bij dit bord horen.</span>`;

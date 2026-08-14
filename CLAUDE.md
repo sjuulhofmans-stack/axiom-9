@@ -153,9 +153,29 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   reële winst in het slechtste geval (laagst geziene hoek-percentage 0,05% → 0,22%,
   ruim 4×) en geen enkele regressie (dood-vrij bleef 100% over alle testen). Blijft
   ook een **structurele** grens: tegel 1 en 16 zijn en blijven de kleinste,
-  opdrachtloze, aan-de-rand-geforceerde tegels van de hele set — enige verdere winst
-  zit waarschijnlijk in een grotere kandidatenpool (nu 20), niet in nóg een
-  scoringscriterium.
+  opdrachtloze, aan-de-rand-geforceerde tegels van de hele set.
+  **Kandidatenpool vergroot naar 60 (was 20) — `constrainedShuffleAsync`.** Gemeten
+  (gebruikersverzoek) over 40 indelingen per poolgrootte: pool 20 → 40 → 60 → 100 geeft
+  gemiddelde `minTileBetweenness` 34,8 → 43,5 → 47,9 → 60,7 en laagste hoek-telling
+  39,4 → 48,7 → 53,1 → 71,4, tegen ~660ms → 1,35s → 2,0s → 3,5s per klik. Rendement per
+  seconde neemt af naarmate de pool groeit, maar de absolute winst blijft oplopen; 60
+  is de gekozen balans (+35-37% t.o.v. pool 20, ~2s per klik). `MAX_ATTEMPTS` schaalt
+  evenredig mee (240, was 80 — zelfde verhouding van ~4 pogingen per gewenste kandidaat).
+  Bij pool 60 zou een blokkerende versie de pagina zichtbaar laten bevriezen, dus
+  `constrainedShuffle` is omgebouwd naar `constrainedShuffleAsync(seedStr, onProgress)`:
+  een Promise die in brokken van 30ms rekent en na elk brok `onProgress(gevonden, doel,
+  poging, maxPogingen)` aanroept — exact hetzelfde patroon als `runSimulationBatch` in
+  `95-simulate.js`. `applyGeneratedLayout` (`80-controls.js`) toont daarbij een
+  voortgangsbalk (`#genProgress`, hergebruikt de `.sim-progress`-CSS) en schakelt
+  `btnShuffle`/`btnDice` uit tijdens het rekenen. Dezelfde `simRunId`-staleness-guard als
+  bij de simulatie beschermt tegen een race: `clearSimResults()` (aangeroepen door ELKE
+  bordwijziging — slepen, draaien, herstellen, tegel-editor) verhoogt `simRunId` en roept
+  nu ook `hideGenProgress()` aan, zodat de balk direct verdwijnt als het bord op een
+  ANDERE manier verandert terwijl er nog gegenereerd wordt; `applyGeneratedLayout` checkt
+  bij het teruggeven van de Promise of `simRunId` nog hetzelfde is voordat hij het
+  resultaat toepast, anders wordt het stilzwijgend weggegooid. Getest: een "Herstel
+  origineel"-klik tijdens een lopende generatie reset de balk/knoppen meteen en wordt
+  niet alsnog overschreven zodra de verouderde generatie later terugkomt.
   **Niet doen — 4-weg-tegels verplicht binnenin.** Klinkt logisch (meer grid),
   maar is gemeten over 248 indelingen en pakt averechts uit: gemiddeld 4,0-4,4
   dode tegels i.p.v. 2,6-2,9, en het aandeel indelingen zónder dode tegel zakt
@@ -212,7 +232,11 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 
 Na een wijziging altijd `python3 build.py` en dan `dist/axiom9.html` openen.
 Check minimaal:
-1. Dobbelsteenknop → melding "strak aaneengesloten, geen doodlopende doorgangen".
+1. Dobbelsteenknop (of "Genereer indeling") → tijdens het rekenen (~2s) een voortgangsbalk
+   ("X / 60 kandidaten...") en uitgeschakelde Genereer-/dobbelsteenknop; erna de melding
+   "strak aaneengesloten, geen doodlopende doorgangen" en de balk weer verdwenen. "Herstel
+   origineel" klikken TERWIJL er nog gegenereerd wordt moet de balk direct laten verdwijnen
+   en mag niet later alsnog overschreven worden door de verouderde generatie.
 2. Onbereikbare vakjes (bv. na een tegel-bewerking) krijgen een roze/magenta rand
    direct op het bord — geen apart paneel, dit is de enige indicatie.
 3. Een tegel selecteren → draaiknoppen gaan per **90°** (niet 180).

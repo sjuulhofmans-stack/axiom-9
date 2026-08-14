@@ -522,67 +522,93 @@ function applyRandomBoardFlip(lay, flip){
   return flipped;
 }
 
-function constrainedShuffle(seedStr){
-  // BUG die hier zat: attemptSeamlessLayout bouwt kandidaten altijd met de ONGEDRAAIDE brondata
-  // (OPEN_EDGES_STATIC), maar deadTileCount/startBalanceScore/questCoverageScore lezen de
-  // kandidaat-cellen via getDisplayValue(), dat de GLOBALE tileRotation volgt. applyRandomBoardFlip
-  // laat die global aan het eind van elke aanroep op overal-0 of overal-180 staan (en handmatig
-  // draaien met de tegel-editor kan 'm ook per tegel verzetten) — zonder reset hierboven werd de
-  // hele volgende scoringsronde dus de HELFT van de tijd uitgevoerd tegen de verkeerde rotatie.
-  // Gemeten effect: het "beste" kandidaat in de pool leek dan deadTileCount 6-11 te hebben terwijl
-  // schoon scoren gewoon een deadTileCount-0 kandidaat opleverde — de generator koos zo effectief
-  // willekeurig i.p.v. de echte beste indeling, op elke klik die volgde op een geflipt bord.
-  resetRotations();
-  const seedFn = hashSeed(seedStr);
-  const seedInt = Math.floor(seedFn() * 4294967296);
-  const masterRand = mulberry32(seedInt);
+// BUG die hier ooit zat: attemptSeamlessLayout bouwt kandidaten altijd met de ONGEDRAAIDE
+// brondata (OPEN_EDGES_STATIC), maar deadTileCount/startBalanceScore/questCoverageScore lezen de
+// kandidaat-cellen via getDisplayValue(), dat de GLOBALE tileRotation volgt. applyRandomBoardFlip
+// laat die global aan het eind van elke aanroep op overal-0 of overal-180 staan (en handmatig
+// draaien met de tegel-editor kan 'm ook per tegel verzetten) — zonder reset hierboven werd de
+// hele volgende scoringsronde dus de HELFT van de tijd uitgevoerd tegen de verkeerde rotatie.
+// Fix: resetRotations() als allereerste regel.
+//
+// niet zomaar de EERSTE geldige indeling nemen: verzamel een stuk of wat geldige kandidaten en
+// kies daaruit de beste. Pool van 60 (was 20 — gebruikersverzoek voor een gevoeliger criterium
+// tegen bijna-dode hoektegels, zie minTileBetweenness): gemeten over 40 indelingen geeft dat
+// gemiddelde minTileBetweenness 34,8 → 47,9 en laagste hoek-telling 39,4 → 53,1 (+35-37%), tegen
+// ~660ms → ~2000ms per klik. MAX_ATTEMPTS schaalt evenredig mee (4 pogingen per gewenste
+// kandidaat, zelfde verhouding als bij pool 20).
+//
+// Loopt nu in BROKKEN i.p.v. één ononderbroken lus (zelfde patroon als runSimulationBatch in
+// 95-simulate.js) — bij pool 60 zou een blokkerende versie de pagina ~2s laten bevriezen zonder
+// enige terugkoppeling. onProgress(gevonden, doel, poging, maxPogingen) wordt na elk brok
+// aangeroepen zodat de UI een voortgangsbalk kan tonen.
+function constrainedShuffleAsync(seedStr, onProgress){
+  return new Promise((resolve) => {
+    resetRotations();
+    const seedFn = hashSeed(seedStr);
+    const seedInt = Math.floor(seedFn() * 4294967296);
+    const masterRand = mulberry32(seedInt);
 
-  // niet zomaar de EERSTE geldige indeling nemen: verzamel een stuk of wat geldige kandidaten
-  // en kies daaruit de beste. Pool van 20: gemeten haalt maar ~17% van de geldige kandidaten
-  // deadTileCount === 0, dus een kleine pool loopt alsnog tegen een dode buitenrand-lus aan.
-  // Bij 20 zitten er gemiddeld 3-4 dode-vrije kandidaten in, zodat de vervolgcriteria
-  // (kamerkoppeling, opdracht-spreiding) ook echt iets te kiezen hebben. Kosten: ~28 ms zoeken
-  // per geldige kandidaat + ~7 ms scoren, dus rond de 0,7 s per klik.
-  const MAX_ATTEMPTS = 80, STEP_BUDGET = 15000, CANDIDATE_POOL = 20;
-  const candidates = [];
-  let best = null;
-  for (let attempt=0; attempt<MAX_ATTEMPTS && candidates.length<CANDIDATE_POOL; attempt++){
-    const attemptSeed = Math.floor(masterRand() * 4294967296) ^ (attempt * 0x9E3779B1);
-    const rand = mulberry32(attemptSeed);
-    const lay = attemptSeamlessLayout(rand, STEP_BUDGET);
-    if (lay){
-      if (layoutIsConnected(lay)) candidates.push(lay);
-      else if (!best) best = lay;
-    }
-  }
-  let result = candidates.length
-    ? candidates.reduce((a,b) => compareLayoutQuality(b,a) < 0 ? b : a)
-    : best;
+    const MAX_ATTEMPTS = 240, STEP_BUDGET = 15000, CANDIDATE_POOL = 60;
+    const CHUNK_BUDGET_MS = 30;
+    const candidates = [];
+    let best = null;
+    let attempt = 0;
 
-  if (!result){
-    // fallback: regelgetrouwe verdeling zonder naadgarantie (zelden tot nooit nodig)
-    function shuffleWith(arr, rand){
-      const a = arr.slice();
-      for (let i=a.length-1; i>0; i--){ const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-      return a;
+    function step(){
+      const chunkStart = performance.now();
+      while (attempt < MAX_ATTEMPTS && candidates.length < CANDIDATE_POOL){
+        const attemptSeed = Math.floor(masterRand() * 4294967296) ^ (attempt * 0x9E3779B1);
+        const rand = mulberry32(attemptSeed);
+        const lay = attemptSeamlessLayout(rand, STEP_BUDGET);
+        attempt++;
+        if (lay){
+          if (layoutIsConnected(lay)) candidates.push(lay);
+          else if (!best) best = lay;
+        }
+        if (performance.now() - chunkStart > CHUNK_BUDGET_MS) break;
+      }
+      if (onProgress) onProgress(candidates.length, CANDIDATE_POOL, attempt, MAX_ATTEMPTS);
+      if (attempt < MAX_ATTEMPTS && candidates.length < CANDIDATE_POOL){
+        setTimeout(step, 0);
+      } else {
+        finish();
+      }
     }
-    const fallbackRand = mulberry32(seedInt ^ 0x1234567);
-    const lay = new Array(20).fill(null);
-    const used = new Set();
-    for (const slotIdx of solveOrder()){
-      const cands = ALLOWED_TILES[slotIdx].filter(t => !used.has(t));
-      const pick = shuffleWith(cands, fallbackRand)[0];
-      if (pick !== undefined){ lay[slotIdx] = pick; used.add(pick); }
-    }
-    const leftoverTiles = Array.from({length:20},(_,i)=>i+1).filter(t => !used.has(t));
-    let li = 0;
-    for (let s=0; s<20; s++) if (lay[s] === null) lay[s] = leftoverTiles[li++];
-    result = lay;
-  }
 
-  // de rotatie van de GEKOZEN indeling definitief zetten (candidate-scoring hierboven deed dit
-  // zelf al steeds opnieuw per kandidaat via scored(), maar die staat na de laatste .reduce()-
-  // aanroep op de rotatie van welke kandidaat toevallig het laatst gescoord is, niet per se result)
-  applyCornerRotations(result);
-  return applyRandomBoardFlip(result, masterRand() < 0.5);
+    function finish(){
+      let result = candidates.length
+        ? candidates.reduce((a,b) => compareLayoutQuality(b,a) < 0 ? b : a)
+        : best;
+
+      if (!result){
+        // fallback: regelgetrouwe verdeling zonder naadgarantie (zelden tot nooit nodig)
+        function shuffleWith(arr, rand){
+          const a = arr.slice();
+          for (let i=a.length-1; i>0; i--){ const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+          return a;
+        }
+        const fallbackRand = mulberry32(seedInt ^ 0x1234567);
+        const lay = new Array(20).fill(null);
+        const used = new Set();
+        for (const slotIdx of solveOrder()){
+          const cands = ALLOWED_TILES[slotIdx].filter(t => !used.has(t));
+          const pick = shuffleWith(cands, fallbackRand)[0];
+          if (pick !== undefined){ lay[slotIdx] = pick; used.add(pick); }
+        }
+        const leftoverTiles = Array.from({length:20},(_,i)=>i+1).filter(t => !used.has(t));
+        let li = 0;
+        for (let s=0; s<20; s++) if (lay[s] === null) lay[s] = leftoverTiles[li++];
+        result = lay;
+      }
+
+      // de rotatie van de GEKOZEN indeling definitief zetten (candidate-scoring hierboven deed
+      // dit zelf al steeds opnieuw per kandidaat via scored(), maar die staat na de laatste
+      // .reduce()-aanroep op de rotatie van welke kandidaat toevallig het laatst gescoord is,
+      // niet per se result)
+      applyCornerRotations(result);
+      resolve(applyRandomBoardFlip(result, masterRand() < 0.5));
+    }
+
+    step();
+  });
 }
