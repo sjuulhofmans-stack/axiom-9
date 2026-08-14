@@ -67,9 +67,29 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 - Beweging is **horizontaal/verticaal**, nooit diagonaal.
 - Een zijde van een tegel is een **doorgang** als beide deurvakjes gevuld zijn.
   Deurvakjes: N=(0,3)(0,4), Z=(7,3)(7,4), W=(3,0)(4,0), O=(3,7)(4,7).
-- Op een **hoekpositie** (A, E, P, T) mag geen doorgang het bord af wijzen.
-  Daardoor passen tegel 1 en 16 alleen op A en P; E en T kunnen 10/5 resp. 20/5 zijn.
-- **4-weg kruisingen** (tegels 7, 8, 9, 13) liggen altijd binnenin op G/H/I/L/M/N.
+- Op een **hoekpositie** (A, E, P, T) mag geen doorgang het bord af wijzen. Alleen een tegel
+  met precies 2 open zijden die ook nog eens NAAST elkaar liggen (een L-vorm) kan ooit op een
+  hoek terechtkomen — daarom kunnen 4-weg tegels (alle zijden open) hier NOOIT liggen, en
+  gangkruisingen mét 2 open zijden-tegenover-elkaar (een rechtdoor-stuk) ook niet. Gemeten
+  (empirisch, via `ALLOWED_TILES`): hoek A krijgt altijd tegel 1 of 20, hoek T altijd tegel 20
+  of 1 (dezelfde twee, omgewisseld door de 180°-bordflip); hoek E/P kiezen uit tegel 5 en 16
+  (zie hieronder waarom dit er nu nog maar 2 zijn i.p.v. 3).
+- **4-weg kruisingen**: geen vaste regel voor WAAR ze mogen liggen (`DEG4_TILES` in
+  `10-rules.js` is bewust ongebruikte data, zie de "Niet doen"-notitie verderop) — wél een vaste
+  eigenschap van de tegelSET welke tegels dat kunnen zijn. Was tegel 7, 8, 9, 13, 17 (5 stuks);
+  sinds de wijziging hieronder ook 10 en 11 (7 stuks in totaal).
+- **Tegel 10 en 11 omgebouwd naar 4-weg** (was: 10 had alleen Z/W, 11 had N/Z/O). Doel: meer
+  kruispunten voor een strakker/beter verbonden bord (gebruikersverzoek). Vorm: de ontbrekende
+  zijden zijn als natuurlijke verlenging van de bestaande vorm toegevoegd (tegel 10: N+O erbij,
+  29 vakjes i.p.v. 17; tegel 11: alleen W erbij, 31 vakjes i.p.v. 27) — geen kopie van de
+  bestaande kruispunt-tegels 9/13, dus ze behouden hun eigen vorm/karakter. Gemeten effect over
+  150 indelingen: dood-vrij 97,7% → **100%**, kamer-kamer deuren gemiddeld 6,86 → **7,51**,
+  kamers met een kamerbuur 88,7% → **95,1%** — meer kruispunten geeft de backtracking-solver
+  meer speelruimte om alles strak aan te sluiten.
+  **Bijwerking om te onthouden**: tegel 10 was één van de 3 tegels die op hoek E/P konden liggen
+  (samen met 5 en 16). Een 4-weg tegel kan per definitie nooit meer op een hoek (zie hierboven),
+  dus hoek E/P kiest nu nog maar uit **2** tegels (5, 16) i.p.v. 3 — minder hoekvariatie als
+  neveneffect van meer kruispunten. Hoek A/T is ongewijzigd (nog steeds tegel 1 of 20).
 - Tegel **8** (Hibernatie) bevat de vier startposities 3.1–3.4 en hoort ook binnenin.
   Als enige kamertegel heeft hij bewust **geen** opdrachtvakje — de tegel-editor
   staat dat uitzonderlijk toe (zie `tileValidationIssues` in `90-editor.js`).
