@@ -378,8 +378,10 @@ async function runWalkSimulation(){
   let gameOver = false;
 
   while (turn < SIM_MAX_TURNS && !gameOver){
+    const roundFinishers = [];   // spelers die deze ronde hun 6e opdracht voltooien
+    let hitTurnCap = false;
     for (const pIdx of turnOrder){
-      if (gameOver || turn >= SIM_MAX_TURNS) break;
+      if (turn >= SIM_MAX_TURNS){ hitTurnCap = true; break; }
       if (aborted()) return;
 
       const player = players[pIdx];
@@ -594,16 +596,13 @@ async function runWalkSimulation(){
         }
 
         if (player.completed >= SIM_QUESTS_TO_WIN){
-          finished++;
-          player.rank = finished;
+          // rank wordt NIET meteen toegekend — pas ná deze hele ronde (zie resolveRoundFinishers
+          // in 95-simulate.js), zodat wie later in de beurtvolgorde zit deze ronde nog evenveel
+          // kans krijgt om ook zijn 6e opdracht te halen, i.p.v. dat beurtvolgorde de plaats bepaalt
           player.finishTurn = turn;
           walkClearClass('walk-target');
-          walkLog(`<b>${player.name} is binnen als ${walkRankLabel(player.rank)}</b> (beurt ${turn}) en verlaat het bord.`, 'hit', player);
-          if (finished >= finishTarget){
-            // de achterblijver(s) kunnen niets meer bereiken: plaats staat vast
-            for (const p of players) if (!p.rank) p.rank = finished + 1;
-            gameOver = true;
-          }
+          walkLog(`${player.name} heeft alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid (beurt ${turn}) en verlaat het bord — wacht op de rest van deze ronde.`, 'hit', player);
+          roundFinishers.push(player);
           paintWalkPawns(graph, players, pIdx);
         }
       } else {
@@ -614,15 +613,39 @@ async function runWalkSimulation(){
       renderWalkScore(players, pIdx);
       renderWalkMeta({ player, turn });
     }
+
+    if (aborted()) return;
+    if (roundFinishers.length){
+      const groups = resolveRoundFinishers(roundFinishers, finished);
+      for (const group of groups){
+        if (group.length === 1){
+          walkLog(`<b>${group[0].name} is binnen als ${walkRankLabel(group[0].rank)}</b>.`, 'hit', group[0]);
+        } else {
+          const names = group.map(p => p.name).join(' en ');
+          walkLog(`<b>${names} delen de ${walkRankLabel(group[0].rank)} plaats</b> — gelijke energie (${group[0].energy}) en evenveel actiekaarten in de hand (${group[0].cards.length}).`, 'hit', null);
+        }
+      }
+      finished += roundFinishers.length;
+      renderWalkScore(players, turnOrder[0]);
+      if (finished >= finishTarget){
+        // de achterblijver(s) kunnen niets meer bereiken: plaats staat vast
+        for (const p of players) if (!p.rank) p.rank = finished + 1;
+        gameOver = true;
+      }
+    }
+    if (hitTurnCap) break;
   }
 
   if (aborted()) return;
   walkClearClass('walk-target');
   walkClearClass('walk-trail');
-  const winner = players.find(p => p.rank === 1);
-  if (gameOver && winner){
+  const winners = players.filter(p => p.rank === 1);
+  if (gameOver && winners.length){
     const standings = playerCount > 1 ? `<span class="walk-standings-row">Eindklassering: ${walkStandings(players)}</span>` : '';
-    walkStatusEl.innerHTML = `<span class="ok">✓ ${winner.name} wint vanaf ${winner.startLabel} in ${winner.finishTurn} beurten — potje uitgespeeld in ${turn} beurten.</span>${standings}`;
+    const winText = winners.length === 1
+      ? `${winners[0].name} wint vanaf ${winners[0].startLabel} in ${winners[0].finishTurn} beurten`
+      : `${winners.map(w => w.name).join(' en ')} delen de winst (gelijke energie en actiekaarten)`;
+    walkStatusEl.innerHTML = `<span class="ok">✓ ${winText} — potje uitgespeeld in ${turn} beurten.</span>${standings}`;
   } else {
     walkStatusEl.innerHTML = `<span class="bad">✕ Afgekapt na ${SIM_MAX_TURNS} beurten — niet iedereen was binnen.</span><span class="walk-standings-row">${walkStandings(players)}</span>`;
   }

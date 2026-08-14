@@ -220,6 +220,41 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   hetzelfde principe volgt. `SIM_MAX_TURNS` staat daarom op 900 (was 500): een
   potje duurt nu ~115 beurten in plaats van ~90, en die marge houdt het aantal
   vastgelopen potjes op 0.
+- **Gevonden en gefixt — wie als eerste aan zet was won systematisch vaker.**
+  Gemeten vóór de fix (8000 potjes): 1e aan zet 29,6% winst, 2e 25,9%, 3e 23,9%,
+  4e 20,5% — een verschil van 9,1 procentpunt tussen eerste en laatste, puur
+  door beurtvolgorde. Oorzaak: zodra de eerste speler zijn 6e opdracht haalde,
+  kreeg hij meteen rank 1 en liep het potje door naar de volgende in de
+  beurtvolgorde — maar zodra `finishTarget` bereikt werd (bij 4 spelers de
+  nummer 3), stopte het potje MIDDEN in de ronde, dus een speler die later in
+  de beurtvolgorde zat kon soms zijn beurt die ronde niet eens meer spelen.
+  Fix (gebruikersverzoek): plaatsen worden nu pas toegekend nadat de HELE ronde
+  is afgemaakt — iedereen die nog mag spelen krijgt altijd zijn beurt, ook als
+  er al genoeg spelers binnen zijn voor `finishTarget`. Wie in dezelfde ronde
+  als de winnaar zijn 6e opdracht haalt deelt een gelijke stand: eerst de meeste
+  energie beslist, dan de meeste actiekaarten in de hand, en zijn ook die gelijk
+  dan wordt de plek (en dus eventueel de winst) letterlijk gedeeld tussen de
+  betrokken spelers (`resolveRoundFinishers()` in `95-simulate.js`, gebruikt
+  door zowel de batch als `96-walk.js`). Gemeten ná de fix: 25,1% / 26,5% /
+  24,1% / 24,4% — de 9,1-punts kloof is nagenoeg verdwenen. Getest over 5000
+  potjes: ~5,2% van de potjes bevat een gedeelde plek (meestal 2-weg), en de
+  "gemiddelde plaats"-som per potje bleef in alle 5000 gevallen exact 10 (dus
+  de 2,50-controle in de simulatie-uitslag klopt nog steeds).
+  **Statistieken bij een gedeelde plek**: een tie-groep van k spelers krijgt
+  allemaal dezelfde `rank` (skip-stijl: 1,1,3 bij een 2-weg tie op de 1e plek),
+  en voor eerlijke credit in percentages/gemiddeldes wordt dat verdeeld: elke
+  betrokkene telt voor `1/k` mee in bijvoorbeeld winst% en de kolommen van
+  "Eindklassering per startpositie". Dat reduceert bij een niet-gedeelde plek
+  (verreweg de meeste potjes) gewoon tot de oude 0-of-1-uitkomst — puur een
+  uitbreiding, geen gedragswijziging voor een potje zonder tie. Zie
+  `rankOverlapFraction()`.
+  **Bijwerking op de energie-actie-tabel**: doordat het spel nu tot een echt
+  eerlijke ronde-afsluiting speelt in plaats van eerder af te kappen, verschoven
+  de percentages in "Welke energie-actie wint?" licht: Stuwstoot 32-34% → nu
+  **31,2%**, Herprioritering ~26% → nu **26,8%**, Noodtransport 32-34% → nu
+  **34,2%**, geen energie ~7% → nu **7,9%** (15000 potjes). Volgorde en
+  onderlinge verhouding zijn ongewijzigd, dus check 9 hieronder is bijgewerkt
+  met deze nieuwe cijfers.
 - Stap voor stap (`96-walk.js`) speelt hetzelfde potje met **1 t/m 4 zichtbare
   spelers** en roept daarvoor dezelfde `resolveMove()` aan als de batch — dus
   dezelfde U-turn- en blokkeerregels. Bij meerdere spelers is de "bezette
@@ -260,17 +295,20 @@ Check minimaal:
    klopt `deadTileCount` in `70-generator.js` niet meer.
 8. Tabblad "Stap voor stap" → "Simulatie starten" → de pionnen lopen zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y"
-   plus een eindklassering 1e t/m 4e; de pion van wie binnen is verdwijnt, die
-   van de verliezer blijft staan.
+   (of, bij een gelijke stand, "X en Y delen de winst") plus een eindklassering
+   1e t/m 4e; de pion van wie binnen is verdwijnt, die van de verliezer blijft
+   staan. Wie zijn 6e opdracht haalt krijgt eerst de log-melding "... wacht op
+   de rest van deze ronde" — pas als de hele ronde is afgemaakt volgt de
+   definitieve plaatsing (en bij een tie: "X en Y delen de Ne plaats").
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pionnen
    echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
    (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
    stoppen vanuit pauze mag niet blijven hangen.
-9. In "Welke energie-actie wint?" liggen Stuwstoot en Noodtransport rond de
-   32-34%, Herprioritering rond de 26% (lager dan zonder kaarten: Herkalibratie
-   geeft nu iedereen af en toe hetzelfde gratis, wat specifiek Herprioritering's
-   voorsprong opeet) en de speler die nooit uitgeeft rond de 7%. Loopt één
-   actie ver weg van dit patroon, dan is de balans stuk.
+9. In "Welke energie-actie wint?" liggen Stuwstoot rond de 31%, Noodtransport
+   rond de 34%, Herprioritering rond de 27% (lager dan zonder kaarten:
+   Herkalibratie geeft nu iedereen af en toe hetzelfde gratis, wat specifiek
+   Herprioritering's voorsprong opeet) en de speler die nooit uitgeeft rond de
+   8%. Loopt één actie ver weg van dit patroon, dan is de balans stuk.
 10. In "Beloningskaarten" (zelfde paneel) moet elke kaart behalve Prioriteitspas
    op een aantal keer per potje > 0 staan; Prioriteitspas hoort op 0,00 (geen
    mechanisch effect in de bot-simulatie, geen bug). Het aandeel trekkansen

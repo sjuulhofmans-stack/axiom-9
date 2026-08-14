@@ -11,6 +11,12 @@
 // de nummer 3 binnen is stopt het potje: de laatste speler is dan automatisch vierde en
 // er valt niets meer te beslissen.
 //
+// Plaatsen worden pas toegekend nadat de HELE ronde is afgemaakt (iedereen die nog mag
+// spelen krijgt zijn beurt), niet zodra iemand toevallig als eerste in de beurtvolgorde
+// zijn 6e opdracht haalt — zie resolveRoundFinishers() hieronder. Wie in dezelfde ronde
+// finisht deelt een plaats bij gelijke stand (zelfde energie ÉN evenveel actiekaarten in
+// de hand); anders beslist de meeste energie, dan de meeste actiekaarten.
+//
 // Cellen worden als vlakke index (R*W+C) gebruikt en de buren-adjacency wordt één
 // keer per run vooraf berekend (niet per stap opnieuw) — dat is waar bij duizenden
 // potjes de tijd in gaat zitten, dus dat blijft hier bewust plat en allocatie-arm.
@@ -21,6 +27,45 @@ const SIM_START_LABELS = ['3.1', '3.2', '3.3', '3.4'];
 // Bij 4 spelers dus 3. Ook bruikbaar voor de kleinere bezettingen van "stap voor stap":
 // met 2 spelers is de nummer 2 al bekend zodra de winnaar binnen is.
 function simFinishTarget(playerCount){ return Math.max(1, playerCount - 1); }
+
+// ---------- gelijke stand: de ronde wordt afgemaakt vóórdat een plaats vaststaat ----------
+// Vroeger kreeg de eerste speler die zijn 6e opdracht voltooide meteen rank 1, en werd het
+// potje meteen beëindigd zodra genoeg spelers binnen waren — puur op basis van wie toevallig
+// EERDER in de beurtvolgorde zat. Gemeten: de speler die als eerste aan zet is wint daardoor
+// systematisch vaker (29,6% tegen 20,5% voor de laatste, over 8000 potjes) — geen speleigenschap,
+// een artefact van de beurtvolgorde. Nu wordt éérst de HELE ronde afgemaakt (iedereen die nog
+// mag spelen krijgt zijn beurt), en pas daarna worden de plekken van iedereen die deze ronde
+// finishte in één keer verdeeld: bij gelijke stand (zelfde energie ÉN evenveel actiekaarten in de
+// hand) delen ze de plaats, in plaats van dat beurtvolgorde de doorslag geeft.
+//
+// `alreadyFinished` = hoeveel spelers vóór deze ronde al een rank hadden. Kent aan elke speler in
+// `finishers` een `rank` (skip-stijl bij een tie: 1,1,3 bij een 2-weg tie op de 1e plek) en
+// `rankShare` (grootte van de tie-groep, voor eerlijke credit in de statistieken) toe.
+// Geeft de tie-groepen terug (voor logging in 96-walk.js), gesorteerd van beste naar slechtste.
+function resolveRoundFinishers(finishers, alreadyFinished){
+  const sorted = finishers.slice().sort((a, b) => (b.energy - a.energy) || (b.cards.length - a.cards.length));
+  const groups = [];
+  for (const p of sorted){
+    const last = groups[groups.length - 1];
+    if (last && last[0].energy === p.energy && last[0].cards.length === p.cards.length) last.push(p);
+    else groups.push([p]);
+  }
+  let rank = alreadyFinished + 1;
+  for (const group of groups){
+    for (const p of group){ p.rank = rank; p.rankShare = group.length; }
+    rank += group.length;
+  }
+  return groups;
+}
+// welk deel van een tie-groep (grootte `groupSize`, begint op `startRank`) binnen rank <= threshold
+// valt — bv. een 2-weg tie op de 1e/2e plek telt voor precies de helft mee als "gewonnen" (T=1)
+// maar volledig als "top 2" (T=2). Voor een niet-gedeelde plek (groupSize 1) reduceert dit gewoon
+// tot de vertrouwde 0-of-1 boolean-achtige uitkomst.
+function rankOverlapFraction(startRank, groupSize, threshold){
+  const endRank = startRank + groupSize - 1;
+  const overlap = Math.max(0, Math.min(endRank, threshold) - startRank + 1);
+  return overlap / groupSize;
+}
 const SIM_QUEST_LABELS = ['2.1','2.2','2.3','2.4','2.5','2.6','2.7','2.8','2.9'];
 const SIM_HISTOGRAM_BINS = 12;
 
@@ -584,6 +629,8 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
   let turnCount = 0;
 
   while (turnCount < SIM_MAX_TURNS){
+    const roundFinishers = [];   // spelers die deze ronde hun 6e opdracht voltooien
+    let hitTurnCap = false;
     for (const pIdx of turnOrder){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
@@ -738,28 +785,36 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         } else {
           extra.handFullOnBank++;
         }
+        // rank wordt NIET meteen toegekend — pas ná deze hele ronde (zie resolveRoundFinishers
+        // hierboven), zodat wie later in de beurtvolgorde zit deze ronde nog evenveel kans krijgt
         if (player.completed >= SIM_QUESTS_TO_WIN){
-          finished++;
-          player.rank = finished;
           player.finishTurn = turnCount;
-          if (finished === 1){
-            // spanning meten op het moment van de winst, niet aan het eind van het potje
-            let runnerUp = 0;
-            for (let j = 0; j < 4; j++) if (j !== pIdx) runnerUp = Math.max(runnerUp, players[j].completed);
-            const gap = SIM_QUESTS_TO_WIN - runnerUp;
-            extra.winGapSum += gap;
-            extra.winGapCount++;
-            if (gap === 1) extra.nailBiters++;
-          }
-          if (finished >= finishTarget){
-            // de achterblijver(s) hebben verloren zonder dat ze nog iets kunnen doen
-            for (const p of players) if (!p.rank) p.rank = finished + 1;
-            return { stuck: false, turns: turnCount, players };
-          }
+          roundFinishers.push(player);
         }
       }
-      if (turnCount >= SIM_MAX_TURNS) return { stuck: true, turns: turnCount, players };
+      if (turnCount >= SIM_MAX_TURNS){ hitTurnCap = true; break; }
     }
+
+    if (roundFinishers.length){
+      if (finished === 0){
+        // spanning meten bij de EERSTE keer dat iemand deze potje binnenkomt, over de spelers
+        // die deze ronde niet ook al finishten
+        let runnerUp = 0;
+        for (const p of players) if (!roundFinishers.includes(p)) runnerUp = Math.max(runnerUp, p.completed);
+        const gap = SIM_QUESTS_TO_WIN - runnerUp;
+        extra.winGapSum += gap;
+        extra.winGapCount++;
+        if (gap === 1) extra.nailBiters++;
+      }
+      resolveRoundFinishers(roundFinishers, finished);
+      finished += roundFinishers.length;
+      if (finished >= finishTarget){
+        // de achterblijver(s) hebben verloren zonder dat ze nog iets kunnen doen
+        for (const p of players) if (!p.rank) p.rank = finished + 1;
+        return { stuck: false, turns: turnCount, players };
+      }
+    }
+    if (hitTurnCap) return { stuck: true, turns: turnCount, players };
   }
   return { stuck: true, turns: turnCount, players };
 }
@@ -1191,19 +1246,29 @@ function runSimulationBatch(){
           i++;
           if (result.stuck){ stuckCount++; }
           else {
+            // p.rankShare > 1 betekent dat deze speler een plaats DEELT met andere spelers
+            // (gelijke energie én evenveel actiekaarten aan het eind van de ronde waarin ze
+            // finishten) — dan krijgt iedereen in die tie-groep een eerlijk (fractioneel) deel
+            // van de credit i.p.v. dat er willekeurig één "de" winnaar wordt aangewezen.
+            // rankOverlapFraction reduceert bij een niet-gedeelde plek (rankShare 1) gewoon tot
+            // de vertrouwde 0-of-1 uitkomst, dus dit is puur een uitbreiding, geen gedragswijziging
+            // voor de (verreweg meeste) potjes zonder tie.
             for (const p of result.players){
-              startRanks[p.startLabel][p.rank - 1]++;
+              const k = p.rankShare || 1;
+              for (let r = p.rank; r < p.rank + k; r++) startRanks[p.startLabel][r - 1] += 1 / k;
               const st = strategyStats[p.strategy];
               st.games++;
-              st.rankSum += p.rank;
+              st.rankSum += p.rank + (k - 1) / 2;
               st.uses += p.actionUses;
-              if (p.rank === 1) st.wins++;
-              if (p.rank <= 2) st.top2++;
+              st.wins += rankOverlapFraction(p.rank, k, 1);
+              st.top2 += rankOverlapFraction(p.rank, k, 2);
+              const winFrac = rankOverlapFraction(p.rank, k, 1);
+              if (winFrac > 0){
+                startWins[p.startLabel] += winFrac;
+                startTurnsSum[p.startLabel] += p.finishTurn * winFrac;
+                seatWins[p.seat] += winFrac;
+              }
             }
-            const winner = result.players.find(p => p.rank === 1);
-            startWins[winner.startLabel]++;
-            startTurnsSum[winner.startLabel] += winner.finishTurn;
-            seatWins[winner.seat]++;
             gameLengths.push(result.turns);
           }
           if (i % SIM_PROGRESS_CHECK_EVERY === 0 && performance.now() - chunkStart > SIM_CHUNK_BUDGET_MS) break;
