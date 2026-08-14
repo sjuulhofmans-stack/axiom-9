@@ -22,7 +22,7 @@ function layoutIsConnected(lay){
   function find(x){ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; }
   for (let s=0; s<20; s++){
     for (const [dir,n] of SLOT_NEIGHBORS[s]){
-      if (n>s && OPEN_EDGES_STATIC[lay[s]][dir] && OPEN_EDGES_STATIC[lay[n]][OPPOSITE[dir]]){
+      if (n>s && slotOpenDir(s, lay[s], dir) && slotOpenDir(n, lay[n], OPPOSITE[dir])){
         const ra=find(s), rb=find(n); if (ra!==rb) parent[ra]=rb;
       }
     }
@@ -33,7 +33,10 @@ function layoutIsConnected(lay){
 }
 
 // Eén backtracking-poging: elke naad tussen twee tegels moet kloppen (open tegen open, dicht tegen dicht),
-// plus de plaatsingsregels uit ALLOWED_TILES (hoeken, starttegel altijd binnenin).
+// plus de plaatsingsregels uit ALLOWED_TILES (hoeken, starttegel altijd binnenin). Gebruikt
+// slotOpenDir i.p.v. OPEN_EDGES_STATIC rechtstreeks, zodat een hoek-geschikte tegel op ELKE hoek
+// klopt — welke exacte rotatie dat straks wordt, maakt de zoektocht zelf niet uit (zie
+// applyCornerRotations in 10-rules.js, die dat pas ná het vinden van een geldige indeling regelt).
 function attemptSeamlessLayout(rand, stepBudget){
   const SOLVE_ORDER = solveOrder();
   const lay = new Array(20).fill(null);
@@ -42,7 +45,7 @@ function attemptSeamlessLayout(rand, stepBudget){
   function consistent(slotIdx, tid){
     for (const [dir,n] of SLOT_NEIGHBORS[slotIdx]){
       if (lay[n] !== null){
-        if (OPEN_EDGES_STATIC[tid][dir] !== OPEN_EDGES_STATIC[lay[n]][OPPOSITE[dir]]) return false;
+        if (slotOpenDir(slotIdx, tid, dir) !== slotOpenDir(n, lay[n], OPPOSITE[dir])) return false;
       }
     }
     return true;
@@ -451,37 +454,46 @@ function questSpacingScore(lay){
 //     dan nog steeds ~8-12 vakjes uit elkaar binnen de 8x8 tegels.
 //  6-8. afstand tot een opdracht voor het verste vakje, eerlijkheid startposities, en de
 //     gemiddelden als fijnproever.
+// roept fn(lay) aan, maar zet EERST de hoektegel-rotaties voor DEZE kandidaat correct (en al het
+// andere op 0) — nodig omdat deadTileCount/roomIsolationScore/tileAdjacency/questCoverageScore/
+// startBalanceScore de tegelcellen via getDisplayValue()/effectiveOpenEdge() lezen, die de
+// GLOBALE tileRotation volgen. Sinds hoek-geschikte tegels nu via rotatie op elke hoek kunnen
+// liggen (zie applyCornerRotations in 10-rules.js), verschilt de juiste rotatie per kandidaat —
+// zonder deze wrapper zou je exact dezelfde rotatie-vervuiling terugkrijgen die eerder al eens
+// de generator om zeep hielp (zie het commentaar bij constrainedShuffle hieronder).
+function scored(lay, fn){
+  applyCornerRotations(lay);
+  return fn(lay);
+}
 function compareLayoutQuality(a, b){
-  const da = deadTileCount(a), db = deadTileCount(b);
+  const da = scored(a, deadTileCount), db = scored(b, deadTileCount);
   if (da !== db) return da - db;
-  const ta = roomsBehindBridges(a), tb = roomsBehindBridges(b);
+  const ta = scored(a, roomsBehindBridges), tb = scored(b, roomsBehindBridges);
   if (ta !== tb) return ta - tb;
-  const ia = roomIsolationScore(a), ib = roomIsolationScore(b);
+  const ia = scored(a, roomIsolationScore), ib = scored(b, roomIsolationScore);
   if (ia !== ib) return ia - ib;
-  const ra = roomAdjacencyCount(a), rb = roomAdjacencyCount(b);
+  const ra = scored(a, roomAdjacencyCount), rb = scored(b, roomAdjacencyCount);
   if (ra !== rb) return rb - ra;
-  const pa = questSpacingScore(a), pb = questSpacingScore(b);
+  const pa = scored(a, questSpacingScore), pb = scored(b, questSpacingScore);
   if (pa.minDist !== pb.minDist) return pb.minDist - pa.minDist;
-  const qa = questCoverageScore(a), qb = questCoverageScore(b);
+  const qa = scored(a, questCoverageScore), qb = scored(b, questCoverageScore);
   if (qa.maxDist !== qb.maxDist) return qa.maxDist - qb.maxDist;
-  const ba = startBalanceScore(a), bb = startBalanceScore(b);
+  const ba = scored(a, startBalanceScore), bb = scored(b, startBalanceScore);
   if (Math.abs(ba - bb) > 1e-9) return ba - bb;
   if (Math.abs(pa.avgDist - pb.avgDist) > 1e-9) return pb.avgDist - pa.avgDist;
-  return roomSpreadScore(b).avgDist - roomSpreadScore(a).avgDist;
+  return scored(b, roomSpreadScore).avgDist - scored(a, roomSpreadScore).avgDist;
 }
 
-// Tegel 1 en 16 passen door hun vorm uitsluitend op A resp. P (zie canTileGoInSlot):
-// zonder ingreep staan die hoeken dus bij elke seed op dezelfde tegel. Het bord is 4x5,
-// dus geen vierkant, maar een puntspiegeling (180°) behoudt wel de vorm: A<->T en E<->P
-// wisselen dan van tegel, en elke tegel draait mee 180° om alle naden geldig te houden.
+// Elke hoek-geschikte tegel kan nu op elke hoek liggen (zie applyCornerRotations), dus er is geen
+// vaste "tegel 1 hoort op A"-aanname meer. Het bord is 4x5, dus geen vierkant, maar een
+// puntspiegeling (180°) behoudt wel de vorm: A<->T en E<->P wisselen dan van tegel, en elke tegel
+// draait 180° extra mee (BOVENOP een eventuele hoek-rotatie die al gezet was) om alle naden
+// geldig te houden.
 function applyRandomBoardFlip(lay, flip){
-  if (!flip){
-    for (let tid=1; tid<=20; tid++) tileRotation[tid] = 0;
-    return lay;
-  }
+  if (!flip) return lay; // rotaties (incl. eventuele hoek-rotaties) blijven zoals ze al gezet zijn
   const flipped = new Array(20);
   for (let i=0; i<20; i++) flipped[19-i] = lay[i];
-  for (let tid=1; tid<=20; tid++) tileRotation[tid] = 180;
+  for (let tid=1; tid<=20; tid++) tileRotation[tid] = ((tileRotation[tid] || 0) + 180) % 360;
   return flipped;
 }
 
@@ -543,5 +555,9 @@ function constrainedShuffle(seedStr){
     result = lay;
   }
 
+  // de rotatie van de GEKOZEN indeling definitief zetten (candidate-scoring hierboven deed dit
+  // zelf al steeds opnieuw per kandidaat via scored(), maar die staat na de laatste .reduce()-
+  // aanroep op de rotatie van welke kandidaat toevallig het laatst gescoord is, niet per se result)
+  applyCornerRotations(result);
   return applyRandomBoardFlip(result, masterRand() < 0.5);
 }

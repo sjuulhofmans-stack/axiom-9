@@ -59,6 +59,52 @@ function offBoardDirs(slotIdx){
   if (col === TILE_COLS-1) dirs.push('E');
   return dirs;
 }
+// de vaste combinatie van open zijden die een hoek nodig heeft (het complement van offBoardDirs)
+function cornerRequiredOpen(slotIdx){
+  const off = new Set(offBoardDirs(slotIdx));
+  return ['N','S','E','W'].filter(d => !off.has(d));
+}
+// een tegel past via rotatie op ELKE hoek zodra hij precies 2 open zijden heeft die NAAST
+// elkaar liggen (een L-vorm, bv. Z+O). Twee TEGENOVER elkaar liggende zijden (N+Z of W+O) vormen
+// een rechte doorgang en passen nooit op een hoek, hoe je ze ook draait.
+function isCornerCapable(tid){
+  const o = OPEN_EDGES_RAW[tid];
+  if (openDegree(tid) !== 2) return false;
+  return !((o.N && o.S) || (o.E && o.W));
+}
+// welke rotatie (0/90/180/270) een hoek-geschikte tegel nodig heeft om op DEZE hoek te passen —
+// rekent het via de bestaande effectiveOpenEdge/rotatie-logica uit i.p.v. de richtingscyclus met
+// de hand af te leiden, zodat dit altijd matcht met hoe de tegel daadwerkelijk getekend wordt.
+function requiredCornerRotation(tid, slotIdx){
+  const target = new Set(cornerRequiredOpen(slotIdx));
+  const saved = tileRotation[tid];
+  for (const rot of [0, 90, 180, 270]){
+    tileRotation[tid] = rot;
+    const matches = ['N','S','E','W'].every(d => effectiveOpenEdge(tid, d) === target.has(d));
+    if (matches){ tileRotation[tid] = saved; return rot; }
+  }
+  tileRotation[tid] = saved;
+  return 0; // zou nooit moeten gebeuren voor een isCornerCapable-tegel
+}
+// zet de rotatie van de (tot 4) hoektegels in deze SPECIFIEKE indeling correct, en al het andere
+// terug op 0 — puur functioneel op basis van `lay`, dus veilig om vlak vóór elke rotatie-
+// afhankelijke meting opnieuw aan te roepen (zie `scored()` in 70-generator.js).
+function applyCornerRotations(lay){
+  resetRotations();
+  for (const s of CORNER_SLOTS){
+    const tid = lay[s];
+    tileRotation[tid] = requiredCornerRotation(tid, s);
+  }
+}
+// hoe een tegel/hoek-slot zich gedraagt in een bepaalde richting, VOOR DE GENERATOR-ZOEKTOCHT —
+// puur op basis van tegel-ID en slotpositie, dus rotatie-onafhankelijk (geen last van welke
+// globale tileRotation er toevallig op dat moment staat). Voor een hoekslot maakt het niet uit
+// welke hoek-geschikte tegel er komt te liggen: elke geldige kandidaat wordt zo gedraaid dat hij
+// exact cornerRequiredOpen(slotIdx) laat zien, dus dat gebruiken we hier direct.
+function slotOpenDir(slotIdx, tid, dir){
+  if (CORNER_SLOTS.includes(slotIdx)) return cornerRequiredOpen(slotIdx).includes(dir);
+  return OPEN_EDGES_STATIC[tid][dir];
+}
 
 // 10 tegels zijn kamers, de rest zijn gangen
 const ROOM_NAMES = {
@@ -103,10 +149,9 @@ function slotCategory(idx){
 }
 function canTileGoInSlot(tid, slotIdx){
   const cat = slotCategory(slotIdx);
-  // op een hoek mag geen enkele doorgang het bord af wijzen
-  if (cat === 'corner'){
-    for (const dir of offBoardDirs(slotIdx)) if (OPEN_EDGES_STATIC[tid][dir]) return false;
-  }
+  // op een hoek past elke hoek-geschikte (L-vormige, 2 open zijden) tegel — via rotatie kan zo'n
+  // tegel op ELKE hoek terecht, dus dit hangt niet af van de tegel z'n ONGEDRAAIDE oriëntatie
+  if (cat === 'corner') return isCornerCapable(tid);
   // starttegel hoort binnenin
   if (tid === START_TILE) return cat === 'inner';
   return true;
@@ -121,8 +166,11 @@ function recomputeTileMeta(){
   for (let s=0; s<20; s++){
     ALLOWED_TILES[s] = Array.from({length:20},(_,i)=>i+1).filter(t => canTileGoInSlot(t, s));
   }
+  // welke tegels ALLEEN op een hoek kunnen liggen (voor het 🔒-badge in het register) — sinds
+  // hoek-geschikte tegels via rotatie op elke hoek passen, is dit niet meer "op precies 1 hoek
+  // geforceerd" maar "hoek-geschikt", vandaar isCornerCapable i.p.v. ALLOWED_TILES.length===1.
   FORCED_TILES = new Set();
-  for (const s of CORNER_SLOTS) if (ALLOWED_TILES[s].length === 1) FORCED_TILES.add(ALLOWED_TILES[s][0]);
+  for (let tid=1; tid<=20; tid++) if (isCornerCapable(tid)) FORCED_TILES.add(tid);
 }
 recomputeTileMeta();
 function isCornerTile(tid){ return FORCED_TILES.has(tid); }

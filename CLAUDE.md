@@ -69,15 +69,31 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   Deurvakjes: N=(0,3)(0,4), Z=(7,3)(7,4), W=(3,0)(4,0), O=(3,7)(4,7).
 - Op een **hoekpositie** (A, E, P, T) mag geen doorgang het bord af wijzen. Alleen een tegel
   met precies 2 open zijden die ook nog eens NAAST elkaar liggen (een L-vorm) kan ooit op een
-  hoek terechtkomen — daarom kunnen 4-weg tegels (alle zijden open) hier NOOIT liggen, en
-  gangkruisingen mét 2 open zijden-tegenover-elkaar (een rechtdoor-stuk) ook niet. Gemeten
-  (empirisch, via `ALLOWED_TILES`): hoek A krijgt altijd tegel 1 of 20, hoek T altijd tegel 20
-  of 1 (dezelfde twee, omgewisseld door de 180°-bordflip); hoek E/P kiezen uit tegel 5 en 16
-  (zie hieronder waarom dit er nu nog maar 2 zijn i.p.v. 3).
+  hoek terechtkomen (`isCornerCapable` in `10-rules.js`) — daarom kunnen 4-weg tegels (alle
+  zijden open) hier NOOIT liggen, en een rechtdoor-tegel (2 open zijden tegenover elkaar) ook
+  niet, hoe je 'm ook draait. Met de huidige tegelset zijn dat tegel 1, 5, 16, 20 (4 stuks).
+  **Hoek-tegels roteren nu individueel om overal te passen** (`applyCornerRotations`/
+  `requiredCornerRotation` in 10-rules.js): vroeger had elke hoek maar 1-2 vaste kandidaten,
+  puur omdat de generator alleen de ONGEDRAAIDE tegelvorm gebruikte. Nu wordt elke hoek-geschikte
+  tegel gewoon 0/90/180/270° gedraaid tot hij past, dus alle 4 kunnen op alle 4 de hoeken
+  terechtkomen. Gemeten over 150 indelingen: elke hoek zag alle 4 tegels langskomen (roughly
+  25-35% elk), alle 4 rotatiestanden worden echt gebruikt, en geen enkele plaatsing had ooit een
+  doorgang het bord af — dood-vrij bleef 100%, kamer-kamer deuren gemiddeld 7,33 (vergelijkbaar
+  met vóór deze wijziging).
+  **Waarom dit niet dezelfde rotatie-vervuilingsbug herintroduceert**: deadTileCount e.a. lezen
+  nog steeds via de GLOBALE `tileRotation`, en nu is er ECHT per kandidaat een andere rotatie
+  nodig (niet meer alleen 0 of 180 voor het HELE bord tegelijk). Vandaar `scored(lay, fn)` in
+  `70-generator.js`: die roept `applyCornerRotations(lay)` ALTIJD vlak vóór een rotatie-
+  afhankelijke meting aan, per kandidaat, i.p.v. één keer bovenaan `constrainedShuffle()` te
+  resetten (dat werkte toen omdat er toen maar 2 rotatiestanden voor het HELE bord bestonden;
+  nu verschilt de juiste rotatie per hoekslot en per kandidaat). `applyRandomBoardFlip()` (de
+  180°-muntworp) is aangepast om 180° OP TE TELLEN bij de al gezette hoekrotatie in plaats van
+  'm te overschrijven, anders ging de net berekende hoekrotatie bij de helft van de klikken
+  alsnog verloren.
 - **4-weg kruisingen**: geen vaste regel voor WAAR ze mogen liggen (`DEG4_TILES` in
   `10-rules.js` is bewust ongebruikte data, zie de "Niet doen"-notitie verderop) — wél een vaste
   eigenschap van de tegelSET welke tegels dat kunnen zijn. Was tegel 7, 8, 9, 13, 17 (5 stuks);
-  sinds de wijziging hieronder ook 10 en 11 (7 stuks in totaal).
+  sinds de tegel-10/11-wijziging hieronder ook 10 en 11 (7 stuks in totaal).
 - **Tegel 10 en 11 omgebouwd naar 4-weg** (was: 10 had alleen Z/W, 11 had N/Z/O). Doel: meer
   kruispunten voor een strakker/beter verbonden bord (gebruikersverzoek). Vorm: de ontbrekende
   zijden zijn als natuurlijke verlenging van de bestaande vorm toegevoegd (tegel 10: N+O erbij,
@@ -85,11 +101,9 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   bestaande kruispunt-tegels 9/13, dus ze behouden hun eigen vorm/karakter. Gemeten effect over
   150 indelingen: dood-vrij 97,7% → **100%**, kamer-kamer deuren gemiddeld 6,86 → **7,51**,
   kamers met een kamerbuur 88,7% → **95,1%** — meer kruispunten geeft de backtracking-solver
-  meer speelruimte om alles strak aan te sluiten.
-  **Bijwerking om te onthouden**: tegel 10 was één van de 3 tegels die op hoek E/P konden liggen
-  (samen met 5 en 16). Een 4-weg tegel kan per definitie nooit meer op een hoek (zie hierboven),
-  dus hoek E/P kiest nu nog maar uit **2** tegels (5, 16) i.p.v. 3 — minder hoekvariatie als
-  neveneffect van meer kruispunten. Hoek A/T is ongewijzigd (nog steeds tegel 1 of 20).
+  meer speelruimte om alles strak aan te sluiten. Dit haalde tegel 10 tijdelijk uit de
+  hoek-kandidatenpool (een 4-weg tegel kan nooit op een hoek), maar de rotatie-wijziging
+  hierboven lost dat weer op: hoek E/P zijn niet meer aan specifieke tegels gebonden.
 - Tegel **8** (Hibernatie) bevat de vier startposities 3.1–3.4 en hoort ook binnenin.
   Als enige kamertegel heeft hij bewust **geen** opdrachtvakje — de tegel-editor
   staat dat uitzonderlijk toe (zie `tileValidationIssues` in `90-editor.js`).
