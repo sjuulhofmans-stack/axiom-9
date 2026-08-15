@@ -5249,12 +5249,15 @@ function soloRenderActionPanel(){
     // Blinde Vlek is puur reactief (zie soloOfferBlindSpot) — die kun je nooit vanuit dit
     // paneel spelen, alleen op het moment dat je route daadwerkelijk geblokkeerd wordt
     if (id === 'blind'){ disabled = true; reason = 'wordt vanzelf aangeboden zodra je route geblokkeerd wordt'; }
+    // Overdrukklep is nu óók puur reactief: je weet pas of er energie verloren dreigt te gaan
+    // zodra je 'm gegooid hebt (zie soloOfferValveSave), en dat gebeurt nu pas bij het dobbelen
+    // in plaats van automatisch bij het begin van de beurt.
+    else if (id === 'valve'){ disabled = true; reason = 'wordt vanzelf aangeboden na het gooien, als er energie anders verloren zou gaan'; }
     else if (noOpponents && WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in dit potje'; }
     else if (id === 'shove' && !soloShoveTargets().length){ disabled = true; reason = 'geen tegenstander naast je'; }
     else if (id === 'scan' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'short' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
-    else if (id === 'valve' && soloEnergyGain.wasted === 0){ disabled = true; reason = 'er ging deze beurt geen energie verloren'; }
     const titleOverride = reason ? `${ACTION_CARDS[id].name} — ${reason}` : null;
     return renderActionCardFace(id, { size: 'lg', interactive: true, disabled, titleOverride });
   }).join('');
@@ -5381,14 +5384,6 @@ function soloPlayCard(id){
     soloUsedCardId = 'boostcell';
     walkLog(`Je speelt <b>Stuwlading</b>: deze beurt met 3 loopstenen.`, null, p);
     soloProceedToRoll();
-  } else if (id === 'valve'){
-    const saved = Math.min(3, soloEnergyGain.wasted);
-    p.energy += saved;
-    soloEnergyGain.wasted -= saved;
-    useActionCard(p, 'valve', soloDeck);
-    soloUsedCardId = 'valve';
-    walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${p.energy}.`, null, p);
-    soloProceedToRoll();
   } else if (id === 'resupply'){
     useActionCard(p, 'resupply', soloDeck);
     const drawn = drawActionCard(soloDeck, soloRand);
@@ -5510,9 +5505,10 @@ function soloHandleJumpClick(key){
 // ---------- dobbelen + lopen ----------
 function renderSoloDicePending(){
   const e = soloEnergyRoll;
-  walkDiceEl.innerHTML =
-    `<span class="walk-die">?</span><span class="walk-die">?</span>` +
-    `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
+  const energyHtml = e === null
+    ? `<span class="walk-die energy">?</span><span class="walk-die-sum energy">energie bij het gooien</span>`
+    : `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
+  walkDiceEl.innerHTML = `<span class="walk-die">?</span><span class="walk-die">?</span>` + energyHtml;
 }
 function soloRenderDirPad(legal){
   if (!walkDirPadEl) return;
@@ -5550,15 +5546,63 @@ function soloProceedToRoll(){
   renderWalkScore(soloPlayers, soloActiveIdx);
   renderSoloMeta();
 }
+// Rolt en verwerkt de energiesteen voor deze beurt, als dat nog niet gebeurd is. Wordt aangeroepen
+// zodra je daadwerkelijk beweegt — dobbelen (hier), of als vangnet in soloFinishTurn() voor de
+// paden zonder dobbelklik (Zwaartekracht-laarzen, Noodtransport dat exact op je doel landt) — zodat
+// elke beurt precies één keer energie oplevert, ook al zie je die pas ná je beweging verschijnen.
+function soloRollEnergyForTurn(){
+  if (soloEnergyRoll !== null) return;
+  const p = solo();
+  soloEnergyRoll = simRollEnergy(soloRand);
+  soloEnergyGain = simGainEnergy(p, soloEnergyRoll);
+}
 function soloRollDice(){
   if (soloPhase !== 'rolling') return;
   const d1 = simRollD6(soloRand), d2 = simRollD6(soloRand);
   const d3 = soloPendingBoost ? simRollD6(soloRand) : null;
+  soloRollEnergyForTurn();
   renderWalkDice(d1, d2, soloEnergyRoll, false, d3);
   const roll = d1 + d2 + (d3 || 0);
   soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [solo().pos] };
   btnWalkSoloRoll.hidden = true;
+  renderWalkScore(soloPlayers, soloActiveIdx);
+  if (soloEnergyGain.wasted > 0 && solo().cards.includes('valve') && !soloActionUsed()){
+    soloOfferValveSave();
+    return;
+  }
   soloAdvanceMovePhase();
+}
+// Overdrukklep is nu óók puur reactief: je weet pas of er energie verloren dreigt te gaan zodra
+// je 'm gegooid hebt, dus deze aanbieding komt — net als Blinde Vlek — vanzelf, meteen ná de worp.
+function soloOfferValveSave(){
+  soloPhase = 'valve-offer';
+  const p = solo();
+  walkLog(`Je gooide ${soloEnergyRoll} energie, maar ${soloEnergyGain.wasted} ging verloren boven het plafond van ${ENERGY_MAX}.`, null, p);
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Speel <b>Overdrukklep</b> om tot 3 daarvan alsnog te redden?</div>` +
+    `<div class="action-card-row">` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="yes"><span class="action-card-name" style="margin-top:22px;">Ja, speel Overdrukklep</span></button>` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>` +
+    `</div>`;
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'valve-offer') return;
+    const btn = e.target.closest('button[data-valve]');
+    if (!btn) return;
+    const p = solo();
+    if (btn.dataset.valve === 'yes'){
+      const saved = Math.min(3, soloEnergyGain.wasted);
+      p.energy += saved;
+      soloEnergyGain.wasted -= saved;
+      useActionCard(p, 'valve', soloDeck);
+      soloUsedCardId = 'valve';
+      walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${p.energy}.`, null, p);
+      renderWalkScore(soloPlayers, soloActiveIdx);
+    }
+    walkSoloActionsEl.innerHTML = '';
+    soloAdvanceMovePhase();
+  });
 }
 if (btnWalkSoloRoll) btnWalkSoloRoll.addEventListener('click', soloRollDice);
 if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
@@ -5660,6 +5704,12 @@ function soloHandleMoveClick(key){
 function soloFinishTurn(banked){
   soloClearClickable();
   soloHideDirPad();
+  // vangnet voor Zwaartekracht-laarzen / een Noodtransport dat exact op je doel landt: die paden
+  // roepen soloFinishTurn() aan zonder ooit langs soloRollDice() te komen, dus zonder dit zou die
+  // beurt zijn energiesteen helemaal overslaan. Geen Overdrukklep-aanbieding hier nodig — je hebt
+  // deze beurt al een kaart/actie gebruikt (dat is precies waarom je hier via boots/jump bent),
+  // dus een tweede actie zou de "hooguit één actie per beurt"-regel breken.
+  soloRollEnergyForTurn();
   const p = solo();
   const { d1, d2, d3, roll } = soloMove;
   const stepsUsed = soloMove.path.length - 1;
@@ -5719,8 +5769,15 @@ function soloBeginHumanTurn(pIdx){
   soloMove = null;
 
   const p = solo();
-  soloEnergyRoll = simRollEnergy(soloRand);
-  soloEnergyGain = simGainEnergy(p, soloEnergyRoll);
+  // Energie wordt nu pas gegooid zodra je zelf beweegt (dobbelen, Zwaartekracht-laarzen of
+  // Noodtransport) -- niet meer automatisch bij het begin van de beurt (gebruikersverzoek: "de
+  // energie komt er pas bij vanaf de eerste keer dat ze dobbelen"). `null` betekent "nog niet
+  // gegooid deze beurt"; de actiekeuze hierna gebeurt dus met je BESTAANDE energie van vorige
+  // beurten, niet met een bonus die je nog niet hebt gezien. `soloRollEnergyForTurn()` rolt 'm
+  // alsnog vlak vóór de beurt eindigt, voor de gevallen die geen "gooi de dobbelstenen"-klik
+  // hebben (Zwaartekracht-laarzen, of Noodtransport dat exact op je doel landt).
+  soloEnergyRoll = null;
+  soloEnergyGain = { gained: 0, wasted: 0 };
 
   soloRefreshTarget();
   renderSoloDicePending();
@@ -6007,7 +6064,19 @@ function startSoloGame(){
 
   renderWalkScore(soloPlayers, soloTurnOrder[0]);
   paintWalkPawns(soloGraph, soloPlayers, soloTurnOrder[0]);
-  soloAdvanceLoop();
+  // Laat de browser de ECHTE startopstelling (iedereen op zijn gekozen vakje, iedereen 0 energie)
+  // daadwerkelijk tekenen vóórdat we bot-beurten die aan jou voorafgaan meteen doorspelen. Zonder
+  // deze ene frame-yield gebeurt dat hele eerste stuk synchroon in dezelfde taak — dus het EERSTE
+  // wat je ooit te zien krijgt is al een bord waar die bots al verplaatst zijn en al energie
+  // hebben, nooit de echte startpositie. Dat las als "startposities staan op een vreemde plek"/
+  // "iedereen start met energie" (gebruikersmelding), terwijl het gewoon al-gespeelde beurten
+  // waren die je nooit als vertrekpunt had gezien. `soloRunId` bewaakt dat deze uitgestelde stap
+  // zichzelf afbreekt als het potje ondertussen alweer gestopt/herstart is (`stopSoloGame()`).
+  const runId = soloRunId;
+  requestAnimationFrame(() => {
+    if (runId !== soloRunId) return;
+    soloAdvanceLoop();
+  });
 }
 
 if (walkModeAutoBtn) walkModeAutoBtn.addEventListener('click', () => setWalkMode('auto'));

@@ -346,9 +346,18 @@ Check minimaal:
    tegenstanders); met 2+ spelers werken Kortsluiting/Duwstoot/Prioriteitspas
    via een klikbare doelwit-kiezer (een kaart-knop per tegenstander), en Blinde
    Vlek wordt vanzelf aangeboden (ja/nee) zodra je route door een tegenstander
-   geblokkeerd wordt — nooit los klikbaar in het actiepaneel. Bij een gedeelde
-   score op het eind (gelijke energie én evenveel actiekaarten) moet de melding
-   "delen de winst/Ne plaats" tonen, net als in "Automatisch".
+   geblokkeerd wordt — nooit los klikbaar in het actiepaneel. Overdrukklep werkt
+   hetzelfde: permanent uitgeschakeld in het paneel, en verschijnt pas als
+   ja/nee-aanbod vlak ná het gooien, als er energie boven het plafond verloren
+   dreigt te gaan. Bij een gedeelde score op het eind (gelijke energie én
+   evenveel actiekaarten) moet de melding "delen de winst/Ne plaats" tonen, net
+   als in "Automatisch". **Direct na "Potje starten" (of "Nieuw potje" →
+   "Potje starten") moet het EERSTE wat je ziet altijd de echte startopstelling
+   zijn**: iedereen op zijn eigen gekozen/toegewezen startvakje, iedereen op 0
+   energie — ook als een bot vóór jou in de beurtvolgorde zit (die beurten
+   worden pas ná die eerste tekening afgehandeld). Je eigen energie blijft op 0
+   staan tot en met "sla actie over"; pas na de dobbelklik (of Zwaartekracht-
+   laarzen/een Noodtransport dat exact op je doel landt) springt hij omhoog.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -503,6 +512,57 @@ Check minimaal:
     `startSoloGame()` nogmaals. `stopSoloGame()` verbergt daarbij nu ook
     `#walkSoloPanel` weer (deed dat nog niet), anders bleef er een lege
     bordered box zichtbaar op het setup-scherm.
+  - **Gevonden en gefixt — bot-beurten vóór jouw eerste beurt waren al klaar
+    voordat je ook maar iets zag** (gebruikersmelding, ná de vorige fix: "de
+    startposities staan ineens op een vreemde plek op het bord"). Oorzaak:
+    `startSoloGame()` tekent het bord wél eerst met iedereen op zijn echte
+    startvakje, maar roept daarna in dezelfde synchrone taak `soloAdvanceLoop()`
+    aan — en die speelt alle bots die vóór jou in de beurtvolgorde zitten
+    meteen door (`soloResolveBotTurn()`, per ontwerp zonder wachttijd). De
+    browser krijgt dus nooit de kans om de "iedereen op zijn startvakje"-frame
+    daadwerkelijk te tekenen: het EERSTE wat je te zien kreeg was al een bord
+    waar die bots allang verplaatst waren. Fix: die aanroep staat nu achter één
+    `requestAnimationFrame()`, bewaakt door `soloRunId` (zodat 'm niet alsnog
+    afgaat als je intussen opnieuw gereset hebt) — zo ziet elke speler eerst
+    gegarandeerd de echte startopstelling (iedereen op zijn vakje, 0 energie)
+    voordat voorgaande bot-beurten worden afgehandeld. Bevestigd met een test
+    die het EERSTE `requestAnimationFrame`-moment na de klik vastlegt: over 3
+    herhalingen stond iedereen daar altijd op zijn eigen startvakje met 0
+    energie, ook al hadden bots die eerder aan de beurt waren in de daaropvolgende
+    frame allang (correct) een andere positie/energie.
+  - **Gevonden en gefixt — je eigen energie werd al bijgeschreven vóórdat je
+    zelf had gedobbeld** (gebruikersmelding, samen met de vorige: "de energie
+    komt er pas bij vanaf de eerste keer dat ze dobbelen"). Oorzaak:
+    `soloBeginHumanTurn()` rolde en verwerkte de energiesteen automatisch bij
+    het begin van je beurt — vóór je het actiepaneel ziet, laat staan vóór je
+    op "gooi de dobbelstenen" klikt. Bij navraag (welke kant op: gedrag laten
+    staan omdat Overdrukklep dat nodig heeft, of energie pas bij het gooien
+    toevoegen) koos de gebruiker expliciet voor het laatste, ook al kan
+    Overdrukklep dan niet meer proactief in het actiepaneel staan. Fix:
+    `soloEnergyRoll` start een beurt nu op `null` ("nog niet gegooid"); de
+    energiesteen rolt pas in `soloRollDice()`, samen met de loopstenen, zodra
+    je zelf op "gooi de dobbelstenen" klikt — de actiekeuze ervoor gebeurt dus
+    met je BESTAANDE energie van vorige beurten, niet met een bonus die je nog
+    niet hebt gezien. **Overdrukklep is hierdoor omgebouwd naar puur reactief**
+    (`soloOfferValveSave()`), naar het patroon van Blinde Vlek: je weet pas of
+    er energie verloren dreigt te gaan zódra je gegooid hebt, dus die kaart
+    staat nu permanent uitgeschakeld in het actiepaneel ("wordt vanzelf
+    aangeboden na het gooien") en verschijnt in plaats daarvan als een kort
+    ja/nee-keuzemoment vlak ná de worp, als er iets verloren dreigt te gaan.
+    **Vangnet voor de paden zonder dobbelklik**: Zwaartekracht-laarzen en een
+    Noodtransport dat exact op je doel landt roepen `soloFinishTurn()` aan
+    zonder ooit langs `soloRollDice()` te komen — zonder ingreep zou die beurt
+    zijn energiesteen dus stilzwijgend overslaan. `soloRollEnergyForTurn()` is
+    een kleine helper (rolt alleen als `soloEnergyRoll` nog `null` is) die zowel
+    in `soloRollDice()` als bovenaan `soloFinishTurn()` wordt aangeroepen, zodat
+    elke beurt gegarandeerd precies één energiesteen oplevert. Geen Overdrukklep-
+    aanbod nodig in dat vangnet-geval: je hebt die beurt al een kaart/actie
+    gebruikt (dat is precies waarom je via boots/jump daar bent), en een tweede
+    actie zou de "hooguit één actie per beurt"-regel breken. Bevestigd: energie
+    blijft 0 tot en met "sla actie over", springt pas omhoog na de dobbelklik;
+    Overdrukklep-knop staat uitgeschakeld tot een overloop-worp de reactieve
+    aanbieding triggert; Zwaartekracht-laarzen levert alsnog energie op zonder
+    ooit de dobbelknop aan te raken.
   Elke mens dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje
   om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
   zijn bezette vakjes van andere spelers uitgesloten). Boven
