@@ -547,6 +547,21 @@ if (walkDirPadEl){
     if (match) soloHandleMoveClick(match.key);
   });
 }
+// Op een pc mogen de pijltjestoetsen dezelfde stap zetten als een klik op het richtingskruis
+// (gebruikersverzoek). Alleen actief tijdens het lopen (soloPhase === 'moving') en niet terwijl
+// je ergens anders op de pagina aan het typen bent (bv. de seed-invoer op tabblad "Kaart maken"),
+// anders zouden de pijltjes daar niet meer gewoon door de tekst kunnen bewegen.
+const SOLO_ARROW_DIR = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };
+document.addEventListener('keydown', (e) => {
+  const dir = SOLO_ARROW_DIR[e.key];
+  if (dir === undefined || soloPhase !== 'moving') return;
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  const match = soloCurrentLegalMoves.find(l => l.dir === dir);
+  if (!match) return;
+  e.preventDefault();
+  soloHandleMoveClick(match.key);
+});
 
 function soloProceedToRoll(){
   walkSoloActionsEl.innerHTML = '';

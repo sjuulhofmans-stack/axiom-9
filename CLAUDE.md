@@ -338,8 +338,10 @@ Check minimaal:
    uitspelen: dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-
    vakjes en bezette vakjes van andere spelers zijn niet aanklikbaar) **of** een
    van de vier richtingsknoppen boven het bord gebruiken (die alleen
-   ingeschakeld zijn in een toegestane richting) → bij 6/6 een winmelding. Beide
-   manieren van bewegen moeten door elkaar blijven werken binnen dezelfde beurt.
+   ingeschakeld zijn in een toegestane richting) **of** op een pc de pijltjestoetsen
+   gebruiken → bij 6/6 een winmelding. Alle drie de manieren van bewegen moeten
+   door elkaar blijven werken binnen dezelfde beurt, en de pijltjestoetsen mogen
+   elders op de pagina (bv. het seed-invoerveld) niet worden onderschept.
    Bot-beurten spelen zichzelf meteen door (geen animatie/wachttijd), mens-
    beurten blijven volledig interactief. Met 1 speler staan Kortsluiting/Blinde
    Vlek/Duwstoot/Prioriteitspas nog altijd permanent uitgeschakeld (geen
@@ -579,6 +581,13 @@ Check minimaal:
   als `soloClearClickable()`, en het kruis blijft anders zichtbaar tijdens een
   fase waarin het niet hoort (bijv. tijdens het kiezen van een Noodtransport-
   bestemming, die geen 4 maar tot 13 vakjes breed is).
+  - Op een pc werken de **pijltjestoetsen** (gebruikersverzoek) als derde manier om te
+    lopen, naast celklik en richtingskruis: `document`-brede `keydown`-listener die
+    alleen iets doet tijdens `soloPhase === 'moving'` en anders niets onderneemt (geen
+    `preventDefault()`), zodat pijltjes overal elders op de pagina (bv. tekst-cursor in
+    het seed-invoerveld op "Kaart maken") gewoon blijven werken zoals normaal. Roept
+    dezelfde `soloHandleMoveClick()` aan als een klik — dus ook hier gelden geen-U-turn
+    en bezette vakjes gewoon.
   Verder kiest de speler zelf een energie-actie of handkaart aan het begin van
   de beurt — hooguit één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
   staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),
