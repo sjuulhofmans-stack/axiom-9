@@ -5,7 +5,7 @@ in een raster van 4 rijen × 5 kolommen (posities A t/m T, van links naar rechts
 
 ## Belangrijkste regel voor wie hieraan werkt
 
-**Bewerk NOOIT `dist/axiom9.html`.** Dat is het gebouwde eindresultaat (±860 KB,
+**Bewerk NOOIT `dist/axiom9.html`.** Dat is het gebouwde eindresultaat (±1,1 MB,
 waarvan 800 KB het logo). Bewerk altijd de bronbestanden in `src/` en draai daarna:
 
 ```
@@ -14,6 +14,14 @@ python3 build.py
 
 Dit is precies waarom het project is opgesplitst: één wijziging in de knopjes hoeft
 niet het hele logo mee te slepen.
+
+**Als je dit ook als Artifact publiceert:** dat is een aparte, niet-versiebeheerde
+kopie — wijzigingen die je alleen in de live artifact doorvoert (en dus niet via
+`src/` + `build.py` + commit) verdwijnen zodra de sessie/container wordt opgeruimd.
+Werk dus altijd via `src/`, bouw, commit/push, en publiceer daarna pas (opnieuw) de
+artifact vanuit de verse `dist/axiom9.html`. Dit is precies wat er op 2026-08-16 mis
+was: de artifact liep qua functionaliteit ver voor op dit repo (hele solo-modus),
+en is toen alsnog teruggehaald naar `src/`.
 
 ## Structuur
 
@@ -34,9 +42,15 @@ src/
     70-generator.js   backtracking-solver die een geldige indeling zoekt
     80-controls.js    knoppen: seed, dobbelsteen, herstel, draaien, download, legenda
     90-editor.js      tegel-editor (vakjes aan/uit klikken)
-    95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren)
-    96-walk.js        stap-voor-stap: 1 speler zichtbaar over het bord, eigen tabblad
-build.py              plakt alles tot dist/axiom9.html
+    95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren) +
+                      ACTION_CARDS/ENERGY_ACTIONS, gedeeld met 96/97
+    96-walk.js        stap-voor-stap: automatische modus, 1-4 spelers + bots zichtbaar
+                      over het bord, eigen tabblad
+    97-solo.js        stap-voor-stap "zelf spelen": jij bestuurt één menselijke speler
+                      tussen bots, met actiekaarten (Kortsluiting, Duwstoot,
+                      Prioriteitspas, Zwaartekracht-laarzen, Herbevoorrading, ...)
+build.py              plakt alles tot dist/axiom9.html (JS_ORDER bepaalt de volgorde,
+                      dus een nieuw js/-bestand moet je daar ook toevoegen)
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
 ```
 
@@ -58,7 +72,8 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pion, tempo)     | `96-walk.js`          |
+| iets aan "stap voor stap" automatisch (pion, tempo, bots) | `96-walk.js` |
+| iets aan de solo-modus / actiekaarten        | `97-solo.js` (kaartdefinities zelf staan in `95-simulate.js`, `ACTION_CARDS`/`ENERGY_ACTIONS`) |
 
 ## Spelregels die in de code zitten
 
