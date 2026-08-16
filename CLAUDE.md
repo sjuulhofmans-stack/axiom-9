@@ -360,6 +360,19 @@ Check minimaal:
    worden pas ná die eerste tekening afgehandeld). Je eigen energie blijft op 0
    staan tot en met "sla actie over"; pas na de dobbelklik (of Zwaartekracht-
    laarzen/een Noodtransport dat exact op je doel landt) springt hij omhoog.
+14. Tabblad "Stap voor stap" (beide modi, breedte > 880px): het bord staat
+   links, de navigator + het infopaneel (dobbelstenen/doel/standenlijst/
+   actiepaneel/status) staan vast rechts ernaast — controleer met
+   `document.getElementById('walkBoard').getBoundingClientRect()` dat de
+   **x/y-positie van het bord in het document** niet verandert tijdens het
+   spelen (dobbelen, een actiekaart spelen, een stap zetten): alleen `window.
+   scrollY` mag veranderen (bv. doordat een knop rechts in beeld scrolt), de
+   documentpositie van het bord zelf niet. Geen enkele rij in de standenlijst
+   (`.walk-player`) mag over de rand van het rechterpaneel heen lopen. Onder
+   880px breedte valt het terug naar 1 kolom (bord eerst, net als "Kaart
+   maken"). Bij het laden van de pagina (vóórdat je een tab hebt aangeklikt)
+   mag de solo-opzet-UI (spelerskeuze/"Potje starten") niet zichtbaar zijn,
+   want "Automatisch" is de standaard-actieve tab.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -569,11 +582,11 @@ Check minimaal:
   om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
   zijn bezette vakjes van andere spelers uitgesloten). Boven
   dezelfde stap zet als een klik op de cel — op een telefoon zijn de kleine
-  vakjes lastig te raken, deze knoppen zijn 58×58px. Ernaast (op smalle
-  schermen: eronder, via `flex-wrap`) staat een stappenteller (gezet/nog) die
-  in `soloRenderDirPad()` meeschrijft bij elke stap — daarvoor moest je terug
-  scrollen naar de dobbelsteen-HUD bovenaan om te zien hoever je nog kon lopen.
-  Beide manieren werken altijd tegelijk en door elkaar: een knopklik roept
+  vakjes lastig te raken, deze knoppen zijn 58×58px. Eronder staat een
+  stappenteller (gezet/nog) die in `soloRenderDirPad()` meeschrijft bij elke
+  stap — daarvoor moest je terug scrollen naar de dobbelsteen-HUD bovenaan om
+  te zien hoever je nog kon lopen. Beide manieren werken altijd tegelijk en
+  door elkaar: een knopklik roept
   dezelfde `soloHandleMoveClick()` aan als een celklik, en `soloRenderDirPad()`
   schakelt per stap alleen de knoprichtingen in die net als de cellen ook
   daadwerkelijk legaal zijn (geen U-turn, geen muur). Vergeet bij een nieuwe
@@ -588,6 +601,43 @@ Check minimaal:
     het seed-invoerveld op "Kaart maken") gewoon blijven werken zoals normaal. Roept
     dezelfde `soloHandleMoveClick()` aan als een klik — dus ook hier gelden geen-U-turn
     en bezette vakjes gewoon.
+  - **Layout: bord links, navigator + speler-/beurtinfo vast rechts ernaast**
+    (gebruikersverzoek: "als je op dobbelen klikt, verschuift de hele tabel
+    continu"). Vóór deze wijziging stonden dobbelstenen/doel, standenlijst,
+    actiepaneel, statusregel en richtingskruis allemaal ÓÓK boven het bord in
+    één kolom — elke fasewisseling (actiekaarten die verschijnen/verdwijnen,
+    het richtingskruis dat aan/uit gaat) veranderde de hoogte van dat blok en
+    duwde het bord dus letterlijk op en neer. Fix: `.walk-play-layout` is een
+    2-koloms grid (`.walk-board-col` / `.walk-side-col`, zelfde patroon als
+    `.grid-layout`/`.right-col` op "Kaart maken") met `align-items:start`, zodat
+    elke kolom onafhankelijk van de ander groeit — het bord (links, met legenda
+    en log eronder) verandert niet meer mee met wat er rechts gebeurt. Rechts
+    staat bovenaan de navigator (`#walkDirPad`), en daaronder de "grote tab"
+    `.walk-info-panel` met dobbelstenen/doel/standenlijst/actiepaneel/
+    statusregel. Die krijgt een vaste `min-height:440px` (plus `overflow-y:auto`
+    als vangnet) zodat hij niet zichtbaar in- en uitklapt terwijl je een beurt
+    speelt — de instelvelden bovenaan (aantal spelers/bots, Potje starten) blijven
+    wél gewoon full-width boven het speelveld staan, die veranderen niet per beurt.
+    Onder 880px breedte (zelfde grens als `.grid-layout`) valt het terug naar 1
+    kolom, bord eerst — net als "Kaart maken" op mobiel.
+    **Gevonden en gefixt tijdens het testen**: `.walk-player` (een rij in de
+    standenlijst) gebruikt in de brede layout `flex:1 1 210px`, maar in de
+    nieuwe 300px-brede kolom werd dat met `flex:none` teruggezet naar zijn
+    intrinsieke inhoudsbreedte (~440px) — de rij liep dus letterlijk over de
+    rand van het paneel heen. Fix: `width:100%; min-width:0; flex-wrap:wrap;`
+    zodat alleen `.walk-player-goal` (die al een ellipsis heeft) krimpt en de
+    rest (strategienaam-badge, energie, kaarten, score) desnoods naar een
+    tweede regel wrapt in plaats van afgekapt te worden — bij een lange naam
+    als "Herprioritering" paste er anders geen "0/6" meer naast.
+    **Apart gevonden en gefixt, niet gerelateerd aan de layout zelf**: de
+    solo-opzet-UI (spelerskeuze + "Potje starten"/"Nieuw potje") bleef zichtbaar
+    staan bij het laden van de pagina, ook al is "Automatisch" de standaard-
+    actieve tab. Oorzaak: de allerlaatste regel van `97-solo.js` riep
+    onvoorwaardelijk `soloRebuildSetup()` aan, en die vult/toont die UI zonder
+    ooit te checken welke tab actief is. Fix: die aanroep is vervangen door
+    `setWalkMode('auto')`, dezelfde functie die al gebruikt werd om alle
+    mode-afhankelijke zichtbaarheid correct te zetten bij een klik op de
+    mode-knoppen — nu ook bij het laden van de pagina zelf.
   Verder kiest de speler zelf een energie-actie of handkaart aan het begin van
   de beurt — hooguit één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
   staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),

@@ -1085,7 +1085,12 @@ function startSoloGame(){
 
   if (walkSoloPlayersSel) walkSoloPlayersSel.disabled = true;
   if (walkSoloBotsSel) walkSoloBotsSel.disabled = true;
-  for (const sel of walkSoloSetupEl ? walkSoloSetupEl.querySelectorAll('select') : []) sel.disabled = true;
+  // De per-mens startpositie-kiezers hebben hun werk gedaan zodra het potje loopt — laten staan
+  // (uitgeschakeld) kostte alleen maar ruimte boven het speelveld en liet het bord bij de eerste
+  // volgende klik met een sprong omhoog schieten toen die rijen alsnog ergens verdwenen.
+  // `.walk-solo-setup:empty{display:none;}` verbergt 'm meteen; soloRenderSetupUI() vult 'm
+  // straks gewoon weer als je op "Nieuw potje" klikt.
+  if (walkSoloSetupEl) walkSoloSetupEl.innerHTML = '';
   btnWalkSoloStart.disabled = true;
   btnWalkSoloReset.disabled = false;
 
@@ -1118,5 +1123,10 @@ if (btnWalkSoloStart) btnWalkSoloStart.addEventListener('click', startSoloGame);
 // nieuw geschudde stapels en een nieuwe RNG, en toont het startpositie-scherm weer.
 if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', soloRebuildSetup);
 
+// "Automatisch" is de standaard-actieve tab (zie de HTML), maar zonder deze aanroep bleef de
+// solo-opzet-UI (spelerskeuze + "Potje starten"/"Nieuw potje") gewoon zichtbaar bij het laden
+// van de pagina — soloRebuildSetup() vult en toont 'm namelijk onvoorwaardelijk, ongeacht welke
+// tab actief is. setWalkMode('auto') zet alle mode-afhankelijke zichtbaarheid meteen goed (en
+// bouwt de solo-spelerobjecten pas op zodra je écht naar "Zelf spelen" wisselt).
 soloSyncBotOptions();
-soloRebuildSetup();
+setWalkMode('auto');

@@ -263,11 +263,23 @@
   .walk-controls[hidden]{display:none;}
   .walk-controls .field{margin:0; min-width:170px;}
   .walk-controls .btn-row{margin-bottom:1px;}
+
+  /* bord links, navigator + speler-/beurtinfo vast rechts ernaast — zodat een dobbelklik het
+     bord niet meer op en neer laat springen. `align-items:start` is de kern: elke kolom groeit
+     onafhankelijk van de ander, dus het bord (links) blijft op zijn plek ongeacht hoe hoog het
+     infopaneel (rechts) op dat moment is. */
+  .walk-play-layout{
+    display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:20px; align-items:start;
+    margin-top:16px;
+  }
+  .walk-board-col{min-width:0;}
+  .walk-side-col{display:flex; flex-direction:column; gap:16px; min-width:0;}
+  @media (max-width: 880px){ .walk-play-layout{grid-template-columns:1fr;} }
   input[type=range]{width:100%; accent-color:var(--quest); cursor:pointer;}
 
   /* jouw beurt in de solo-modus: kies hooguit één actie, of gooi meteen */
   .walk-solo-panel{
-    display:flex; flex-direction:column; gap:10px; margin:14px 0;
+    display:flex; flex-direction:column; gap:10px;
     background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:12px;
   }
   .walk-solo-panel[hidden]{display:none;}
@@ -302,7 +314,8 @@
      op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast
      een stappenteller, zodat je niet terug hoeft te scrollen naar de worp bovenaan. */
   .walk-dirpad-row{
-    display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin:0 0 14px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:14px;
   }
   .walk-dirpad-row[hidden]{display:none;}
   .walk-dirpad{
@@ -353,6 +366,27 @@
     z-index:5; position:relative;
   }
   .cell.walk-clickable:hover{box-shadow:0 0 0 2px #fff, 0 0 10px rgba(85,214,138,.9) !important;}
+
+  /* de "grote tab" met alle info over de speler die aan zet is en welke stap dit is (dobbelstenen,
+     doel, standenlijst, actiepaneel, statusregel) — vast rechts naast het bord (zie
+     .walk-play-layout hierboven). `min-height` reserveert alvast ruimte voor de volste stand
+     (4 spelers + actiekaarten + statusregel), zodat het paneel niet zichtbaar in- en uitklapt
+     terwijl je een beurt speelt; `overflow-y:auto` vangt het zeldzame geval op dat de inhoud
+     daar toch overheen groeit, zonder de rest van de pagina mee te laten schuiven. */
+  .walk-info-panel{
+    display:flex; flex-direction:column; gap:12px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:14px;
+    min-height:440px; max-height:min(680px, calc(100vh - 220px)); overflow-y:auto;
+  }
+  @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
+  /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
+     breedte hier valt `.walk-player` terug op zijn intrinsieke inhoudsbreedte (véél breder dan
+     de 300px kolom) omdat `flex:none` de 210px-minimumbreedte van de brede-rij-variant negeert.
+     Alleen `.walk-player-goal` mag krimpen (ellipsis) — de rest (badge/energie/kaarten/score) is
+     met opzet niet-krimpbaar, dus laat die desnoods naar een tweede regel wrappen i.p.v. ze af
+     te kappen: bij een lange strategienaam ("Herprioritering") paste er anders geen "0/6" meer. */
+  .walk-info-panel .walk-score{flex-direction:column;}
+  .walk-info-panel .walk-player{flex:none; width:100%; min-width:0; flex-wrap:wrap; row-gap:4px;}
 
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -406,7 +440,7 @@
 
   /* stand van alle spelers; --pc is per rij de spelerskleur */
   .walk-score{
-    display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;
+    display:flex; gap:8px; flex-wrap:wrap;
   }
   .walk-score:empty{display:none;}
   .walk-player{

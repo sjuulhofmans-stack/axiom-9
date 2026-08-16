@@ -270,11 +270,23 @@
   .walk-controls[hidden]{display:none;}
   .walk-controls .field{margin:0; min-width:170px;}
   .walk-controls .btn-row{margin-bottom:1px;}
+
+  /* bord links, navigator + speler-/beurtinfo vast rechts ernaast — zodat een dobbelklik het
+     bord niet meer op en neer laat springen. `align-items:start` is de kern: elke kolom groeit
+     onafhankelijk van de ander, dus het bord (links) blijft op zijn plek ongeacht hoe hoog het
+     infopaneel (rechts) op dat moment is. */
+  .walk-play-layout{
+    display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:20px; align-items:start;
+    margin-top:16px;
+  }
+  .walk-board-col{min-width:0;}
+  .walk-side-col{display:flex; flex-direction:column; gap:16px; min-width:0;}
+  @media (max-width: 880px){ .walk-play-layout{grid-template-columns:1fr;} }
   input[type=range]{width:100%; accent-color:var(--quest); cursor:pointer;}
 
   /* jouw beurt in de solo-modus: kies hooguit één actie, of gooi meteen */
   .walk-solo-panel{
-    display:flex; flex-direction:column; gap:10px; margin:14px 0;
+    display:flex; flex-direction:column; gap:10px;
     background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:12px;
   }
   .walk-solo-panel[hidden]{display:none;}
@@ -309,7 +321,8 @@
      op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast
      een stappenteller, zodat je niet terug hoeft te scrollen naar de worp bovenaan. */
   .walk-dirpad-row{
-    display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin:0 0 14px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:14px;
   }
   .walk-dirpad-row[hidden]{display:none;}
   .walk-dirpad{
@@ -360,6 +373,27 @@
     z-index:5; position:relative;
   }
   .cell.walk-clickable:hover{box-shadow:0 0 0 2px #fff, 0 0 10px rgba(85,214,138,.9) !important;}
+
+  /* de "grote tab" met alle info over de speler die aan zet is en welke stap dit is (dobbelstenen,
+     doel, standenlijst, actiepaneel, statusregel) — vast rechts naast het bord (zie
+     .walk-play-layout hierboven). `min-height` reserveert alvast ruimte voor de volste stand
+     (4 spelers + actiekaarten + statusregel), zodat het paneel niet zichtbaar in- en uitklapt
+     terwijl je een beurt speelt; `overflow-y:auto` vangt het zeldzame geval op dat de inhoud
+     daar toch overheen groeit, zonder de rest van de pagina mee te laten schuiven. */
+  .walk-info-panel{
+    display:flex; flex-direction:column; gap:12px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:14px;
+    min-height:440px; max-height:min(680px, calc(100vh - 220px)); overflow-y:auto;
+  }
+  @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
+  /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
+     breedte hier valt `.walk-player` terug op zijn intrinsieke inhoudsbreedte (véél breder dan
+     de 300px kolom) omdat `flex:none` de 210px-minimumbreedte van de brede-rij-variant negeert.
+     Alleen `.walk-player-goal` mag krimpen (ellipsis) — de rest (badge/energie/kaarten/score) is
+     met opzet niet-krimpbaar, dus laat die desnoods naar een tweede regel wrappen i.p.v. ze af
+     te kappen: bij een lange strategienaam ("Herprioritering") paste er anders geen "0/6" meer. */
+  .walk-info-panel .walk-score{flex-direction:column;}
+  .walk-info-panel .walk-player{flex:none; width:100%; min-width:0; flex-wrap:wrap; row-gap:4px;}
 
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -413,7 +447,7 @@
 
   /* stand van alle spelers; --pc is per rij de spelerskleur */
   .walk-score{
-    display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;
+    display:flex; gap:8px; flex-wrap:wrap;
   }
   .walk-score:empty{display:none;}
   .walk-player{
@@ -1043,51 +1077,59 @@
         </div>
         <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf via de knoppen/vakjes hieronder — de bots spelen meteen door zodra zij aan de beurt zijn. Kies per menselijke speler een startpositie; je ziet meteen welke opdracht je als eerste krijgt. Met meer dan 1 speler blokkeer je elkaar net als in "Automatisch", en werken Kortsluiting, Duwstoot en Prioriteitspas ook (met een doelwit dat je zelf kiest). Op een pc kun je tijdens het lopen ook gewoon de pijltjestoetsen gebruiken.</p>
 
-        <div class="walk-hud">
-          <div class="walk-dice" id="walkDice"></div>
-          <div class="walk-meta" id="walkMeta"></div>
-          <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
-        </div>
+        <div class="walk-play-layout">
+          <div class="walk-board-col">
+            <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
+            <div class="board-outer">
+              <div id="walkBoard"></div>
+            </div>
 
-        <div class="walk-score" id="walkScore"></div>
+            <div class="walk-legend">
+              <span class="walk-key"><i class="walk-swatch pawn p1"></i><i class="walk-swatch pawn p2"></i><i class="walk-swatch pawn p3"></i><i class="walk-swatch pawn p4"></i>pionnen (speler 1–4)</span>
+              <span class="walk-key"><i class="walk-swatch target"></i>doel van wie aan zet is</span>
+              <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt (kleur van wie aan zet is)</span>
+              <span class="walk-key"><i class="walk-swatch done"></i>al voltooid door wie aan zet is</span>
+              <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
+            </div>
 
-        <div class="walk-solo-panel" id="walkSoloPanel" hidden>
-          <div class="walk-solo-actions" id="walkSoloActions"></div>
-          <div class="btn-row">
-            <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
-            <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
+            <div id="walkLog" class="walk-log"></div>
+          </div>
+
+          <div class="walk-side-col">
+            <div class="walk-dirpad-row" id="walkDirPad" hidden>
+              <div class="walk-dirpad">
+                <button type="button" class="walk-dir-btn walk-dir-n" data-dir="0" title="Noord">▲<span>N</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-w" data-dir="3" title="West">◀<span>W</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-o" data-dir="1" title="Oost">▶<span>O</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-z" data-dir="2" title="Zuid">▼<span>Z</span></button>
+              </div>
+              <div class="walk-step-counter">
+                <div class="walk-step-box"><span class="walk-step-num" id="walkStepDone">0</span><span class="walk-step-lbl">gezet</span></div>
+                <div class="walk-step-box"><span class="walk-step-num" id="walkStepLeft">0</span><span class="walk-step-lbl">nog</span></div>
+              </div>
+            </div>
+
+            <div class="walk-info-panel">
+              <div class="walk-hud">
+                <div class="walk-dice" id="walkDice"></div>
+                <div class="walk-meta" id="walkMeta"></div>
+                <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+              </div>
+
+              <div class="walk-score" id="walkScore"></div>
+
+              <div class="walk-solo-panel" id="walkSoloPanel" hidden>
+                <div class="walk-solo-actions" id="walkSoloActions"></div>
+                <div class="btn-row">
+                  <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+                  <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
+                </div>
+              </div>
+
+              <div id="walkStatus" class="reach-status"></div>
+            </div>
           </div>
         </div>
-
-        <div id="walkStatus" class="reach-status"></div>
-
-        <div class="walk-dirpad-row" id="walkDirPad" hidden>
-          <div class="walk-dirpad">
-            <button type="button" class="walk-dir-btn walk-dir-n" data-dir="0" title="Noord">▲<span>N</span></button>
-            <button type="button" class="walk-dir-btn walk-dir-w" data-dir="3" title="West">◀<span>W</span></button>
-            <button type="button" class="walk-dir-btn walk-dir-o" data-dir="1" title="Oost">▶<span>O</span></button>
-            <button type="button" class="walk-dir-btn walk-dir-z" data-dir="2" title="Zuid">▼<span>Z</span></button>
-          </div>
-          <div class="walk-step-counter">
-            <div class="walk-step-box"><span class="walk-step-num" id="walkStepDone">0</span><span class="walk-step-lbl">gezet</span></div>
-            <div class="walk-step-box"><span class="walk-step-num" id="walkStepLeft">0</span><span class="walk-step-lbl">nog</span></div>
-          </div>
-        </div>
-
-        <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
-        <div class="board-outer">
-          <div id="walkBoard"></div>
-        </div>
-
-        <div class="walk-legend">
-          <span class="walk-key"><i class="walk-swatch pawn p1"></i><i class="walk-swatch pawn p2"></i><i class="walk-swatch pawn p3"></i><i class="walk-swatch pawn p4"></i>pionnen (speler 1–4)</span>
-          <span class="walk-key"><i class="walk-swatch target"></i>doel van wie aan zet is</span>
-          <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt (kleur van wie aan zet is)</span>
-          <span class="walk-key"><i class="walk-swatch done"></i>al voltooid door wie aan zet is</span>
-          <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
-        </div>
-
-        <div id="walkLog" class="walk-log"></div>
       </div>
     </div>
   </div>
@@ -6073,7 +6115,12 @@ function startSoloGame(){
 
   if (walkSoloPlayersSel) walkSoloPlayersSel.disabled = true;
   if (walkSoloBotsSel) walkSoloBotsSel.disabled = true;
-  for (const sel of walkSoloSetupEl ? walkSoloSetupEl.querySelectorAll('select') : []) sel.disabled = true;
+  // De per-mens startpositie-kiezers hebben hun werk gedaan zodra het potje loopt — laten staan
+  // (uitgeschakeld) kostte alleen maar ruimte boven het speelveld en liet het bord bij de eerste
+  // volgende klik met een sprong omhoog schieten toen die rijen alsnog ergens verdwenen.
+  // `.walk-solo-setup:empty{display:none;}` verbergt 'm meteen; soloRenderSetupUI() vult 'm
+  // straks gewoon weer als je op "Nieuw potje" klikt.
+  if (walkSoloSetupEl) walkSoloSetupEl.innerHTML = '';
   btnWalkSoloStart.disabled = true;
   btnWalkSoloReset.disabled = false;
 
@@ -6106,8 +6153,13 @@ if (btnWalkSoloStart) btnWalkSoloStart.addEventListener('click', startSoloGame);
 // nieuw geschudde stapels en een nieuwe RNG, en toont het startpositie-scherm weer.
 if (btnWalkSoloReset) btnWalkSoloReset.addEventListener('click', soloRebuildSetup);
 
+// "Automatisch" is de standaard-actieve tab (zie de HTML), maar zonder deze aanroep bleef de
+// solo-opzet-UI (spelerskeuze + "Potje starten"/"Nieuw potje") gewoon zichtbaar bij het laden
+// van de pagina — soloRebuildSetup() vult en toont 'm namelijk onvoorwaardelijk, ongeacht welke
+// tab actief is. setWalkMode('auto') zet alle mode-afhankelijke zichtbaarheid meteen goed (en
+// bouwt de solo-spelerobjecten pas op zodra je écht naar "Zelf spelen" wisselt).
 soloSyncBotOptions();
-soloRebuildSetup();
+setWalkMode('auto');
 
 </script>
 </body>
