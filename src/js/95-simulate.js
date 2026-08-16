@@ -178,14 +178,16 @@ function energyReorderTarget(graph, player, fromKey){
 // opdrachtkaarten blijven gewoon staan — je moet nog steeds je 6 opdrachten voltooien, de
 // kaarten zijn een bonus onderweg, geen vervanging.
 //
-// Een kaart spelen is JE ACTIE VOOR DIE BEURT: hooguit één ding per beurt, of dat nu een
-// energie-actie is of een kaart. Kaarten zijn gratis, dus een bot geeft ze voorrang boven het
-// uitgeven van energie — waarom betalen als hetzelfde gratis kan? Binnen die voorrang is de
-// volgorde: eerst de energie-kaarten (ze horen bij de worp die net gevallen is), dan de
+// Een kaart spelen en een energie-actie inzetten zijn TWEE LOSSE sloten per beurt (max 1 van
+// elk) — vroeger deelden ze één gezamenlijk slot. Zie de uitgebreide toelichting bij
+// `energyActionUsed`/`cardActionUsed` in simulateOneGame() voor de drie paren (Stuwlading/
+// Stuwstoot, Herkalibratie/Herprioritering, Blinde Vlek/Noodtransport) die elkaar nog wél
+// uitsluiten omdat ze hetzelfde mechanische effect hebben. Binnen het kaart-slot is de
+// voorrangsvolgorde: eerst de energie-kaarten (ze horen bij de worp die net gevallen is), dan de
 // doelkaarten, dan de bewegingskaarten, dan de reactieve kaart, en Herbevoorrading als sluitstuk
-// voor beurten waarin verder niets speelde. Prioriteitspas heeft geen meetbaar effect in deze
-// bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit actief
-// gespeeld — hij kan dus een handslot permanent bezet houden; zie extra.cardDeadHand.
+// voor beurten waarin geen ANDERE kaart speelde. Prioriteitspas heeft geen meetbaar effect in
+// deze bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit
+// actief gespeeld door bots — een mens kan 'm wel altijd zelf spelen of afleggen.
 const ACTION_CARDS = {
   boots:     { name: 'Zwaartekracht-laarzen', hint: '10 stappen rechtdoor, geen bochten' },
   ration:    { name: 'Noodrantsoen',          hint: '+3 energie direct' },
@@ -635,7 +637,17 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
-      let actionUsed = false;   // hooguit 1 actie per beurt, of dat nu een kaart is of energie
+      // Energie-acties en kaarten hebben ELK hun eigen actie-slot per beurt (max 1 van elk) —
+      // vroeger deelden ze één gezamenlijk slot ("hooguit 1 actie per beurt, kaart of energie").
+      // Drie kaarten hebben echter een GRATIS variant van een energie-actie (Stuwlading↔Stuwstoot:
+      // allebei een 3e loopsteen; Herkalibratie↔Herprioritering: allebei dezelfde
+      // energyReorderTarget()-swap; Blinde Vlek↔Noodtransport: allebei een uitweg uit een
+      // blokkade) — die drie blijven elkaar binnen hún ene bewegingsmoment uitsluiten (kaart gaat
+      // voor, is gratis), ook al staan ze nu op verschillende sloten. Zonder die uitsluiting zou
+      // je bv. gratis Herkalibratie én betaalde Herprioritering in dezelfde beurt kunnen stapelen
+      // voor een dubbele/onzinnige swap.
+      let energyActionUsed = false;   // hooguit 1 energie-actie per beurt
+      let cardActionUsed = false;     // hooguit 1 kaart spelen per beurt
 
       // 1. energiesteen rolt mee (tenzij Kortsluiting die deze beurt blokkeert). Het niveau
       //    wordt geteld NA het bijschrijven, want dat is wat deze speler deze beurt kan inzetten.
@@ -652,52 +664,56 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
 
       // 1b. energie-kaarten horen bij de worp die net gevallen is: Overdrukklep redt wat
       //     anders over het plafond ging, Kortsluiting raakt de leider, Noodrantsoen vult aan.
-      if (!actionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
+      if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
         const saved = Math.min(3, energyGain.wasted);
         player.energy += saved;
         extra.energyWasted -= saved;
         useActionCard(player, 'valve', deck, extra);
-        actionUsed = true;
+        cardActionUsed = true;
       }
-      if (!actionUsed && player.cards.includes('short')){
+      if (!cardActionUsed && player.cards.includes('short')){
         const victim = pickShortCircuitTarget(players, pIdx);
         if (victim){
           victim.skipEnergyRoll = true;
           useActionCard(player, 'short', deck, extra);
-          actionUsed = true;
+          cardActionUsed = true;
         }
       }
-      if (!actionUsed && player.cards.includes('ration') && player.energy < ENERGY_MAX){
+      if (!cardActionUsed && player.cards.includes('ration') && player.energy < ENERGY_MAX){
         simGainEnergy(player, 3);
         useActionCard(player, 'ration', deck, extra);
-        actionUsed = true;
+        cardActionUsed = true;
       }
 
-      // 2. doel bepalen: Herkalibratie (gratis, kaart) gaat vóór de betaalde Herprioritering
+      // 2. doel bepalen: Herkalibratie (gratis, kaart) en Herprioritering (betaald, energie)
+      //    doen hetzelfde (energyReorderTarget) en blijven daarom elkaar uitsluiten via
+      //    `targetSwapped`, los van de brede kaart/energie-sloten hierboven.
       let targetLabel = player.order[player.nextIdx];
-      if (!actionUsed && player.cards.includes('recal')){
+      let targetSwapped = false;
+      if (!cardActionUsed && player.cards.includes('recal')){
         const swapped = energyReorderTarget(graph, player, player.pos);
         if (swapped !== null){
           targetLabel = swapped;
           useActionCard(player, 'recal', deck, extra);
-          actionUsed = true;
+          cardActionUsed = true;
+          targetSwapped = true;
         }
       }
-      if (!actionUsed && player.cards.includes('shove')){
+      if (!cardActionUsed && player.cards.includes('shove')){
         const shove = pickShoveMove(graph, players, pIdx);
         if (shove){
           shove.player.pos = shove.toKey;
           useActionCard(player, 'shove', deck, extra);
-          actionUsed = true;
+          cardActionUsed = true;
         }
       }
-      if (!actionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
+      if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
         const swapped = energyReorderTarget(graph, player, player.pos);
         if (swapped !== null){
           targetLabel = swapped;
           player.energy -= ENERGY_ACTIONS.reorder.cost;
           player.actionUses++;
-          actionUsed = true;
+          energyActionUsed = true;
         }
       }
       const targetKey = graph.questCells[targetLabel];
@@ -706,50 +722,57 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
 
       // 3. beweging: Zwaartekracht-laarzen vervangt de worp helemaal; anders de gewone
-      //    loopstenen met Stuwlading (kaart) of Stuwstoot (energie) als derde steen
+      //    loopstenen met Stuwlading (kaart) of Stuwstoot (energie) als derde steen — die twee
+      //    doen hetzelfde (een 3e loopsteen) en blijven daarom via else-if elkaar uitsluiten.
       let move, roll = 0, usedBoots = false;
-      if (!actionUsed && player.cards.includes('boots')){
+      if (!cardActionUsed && player.cards.includes('boots')){
         const bootsMove = resolveGravityBoots(graph, player.pos, 10, occupied, targetKey);
         if (bootsMove){
           move = bootsMove;
           usedBoots = true;
           useActionCard(player, 'boots', deck, extra);
-          actionUsed = true;
+          cardActionUsed = true;
         }
       }
       if (!usedBoots){
         roll = simRollD6(rand) + simRollD6(rand);
-        if (!actionUsed && player.cards.includes('boostcell')){
+        if (!cardActionUsed && player.cards.includes('boostcell')){
           roll += simRollD6(rand);
           useActionCard(player, 'boostcell', deck, extra);
-          actionUsed = true;
-        } else if (!actionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
+          cardActionUsed = true;
+        } else if (!energyActionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
           roll += simRollD6(rand);
           player.energy -= ENERGY_ACTIONS.boost.cost;
           player.actionUses++;
-          actionUsed = true;
+          energyActionUsed = true;
         }
         move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
       }
 
-      // 4. Blinde Vlek reageert op een geblokkeerde poging; Noodtransport mag TUSSENTIJDS, dus
-      //    ná een geslaagde deblokkering alsnog. Alleen ná de zet springen maakt Noodtransport
-      //    veel zwakker — dat is gemeten (26,7% winst tegen 32,4% voor de goedkoopste actie)
-      //    en was een fout, geen ontwerpkeuze.
-      if (!move.bankedQuest && !actionUsed && player.cards.includes('blind') && move.wasBlocked){
+      // 4. Blinde Vlek (kaart) lost een blokkade op door de zet te herberekenen vanaf de
+      //    ORIGINELE positie; Noodtransport (energie) doet dat ook (springt eerst, herberekent
+      //    dan de al-gerolde worp vanaf de sprongbestemming) — gebruikt Blinde Vlek de blokkade
+      //    al op, dan zou Noodtransport dat resultaat gewoon overschrijven, dus blijven ook zij
+      //    elkaar uitsluiten binnen dit ene bewegingsmoment (`blindResolvedBlock`).
+      //    Noodtransport mag TUSSENTIJDS, dus ná een geslaagde deblokkering alsnog. Alleen ná de
+      //    zet springen maakt Noodtransport veel zwakker — dat is gemeten (26,7% winst tegen
+      //    32,4% voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
+      let blindResolvedBlock = false;
+      if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
         const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
         if (retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck, extra);
-          actionUsed = true;
+          cardActionUsed = true;
+          blindResolvedBlock = true;
         }
       }
-      if (!move.bankedQuest && !actionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
+      if (!blindResolvedBlock && !move.bankedQuest && !energyActionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
         const jump = resolveEnergyJump(graph, player.pos, ENERGY_JUMP_RANGE, targetKey);
         if (jump){
           player.energy -= ENERGY_ACTIONS.jump.cost;
           player.actionUses++;
-          actionUsed = true;
+          energyActionUsed = true;
           for (let p = 0; p < jump.path.length; p++) heatmap[jump.path[p]]++;
           // de sprong kan de opdracht zelf al pakken; anders loop je vanaf daar verder
           move = jump.banked
@@ -757,12 +780,13 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
             : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
         }
       }
-      // 5. Herbevoorrading als sluitstuk: alleen als er verder niets te doen viel deze beurt
-      if (!actionUsed && player.cards.includes('resupply')){
+      // 5. Herbevoorrading als sluitstuk: alleen als er verder geen ANDERE kaart te spelen viel
+      //    deze beurt — energiegebruik telt niet meer mee, dat is nu een apart slot.
+      if (!cardActionUsed && player.cards.includes('resupply')){
         useActionCard(player, 'resupply', deck, extra);
         const drawn = drawActionCard(deck, rand);
         if (drawn){ player.cards.push(drawn); extra.cardDraws++; }
-        actionUsed = true;
+        cardActionUsed = true;
       }
 
       player.pos = move.key;

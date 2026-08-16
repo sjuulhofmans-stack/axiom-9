@@ -573,6 +573,9 @@
   .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
 
   .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
+  /* een kaart-knop met een los "Afleggen"-knopje eronder (zie soloCardWithDiscard in 97-solo.js) */
+  .action-card-wrap{display:flex; flex-direction:column; align-items:stretch; gap:4px; width:108px;}
+  .action-card-wrap button.small{padding:5px 8px; font-size:11px; width:100%;}
 
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}

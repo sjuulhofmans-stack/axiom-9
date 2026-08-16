@@ -769,6 +769,82 @@ Check minimaal:
     de solo-modus): zoek naar bestaande `[hidden]`-regels in `styles.css` als
     voorbeeld voordat je een nieuw element toggle je via `.hidden = true/false`.
 
+- **Energie-actie en kaartactie zijn TWEE LOSSE sloten per beurt geworden (gebruikersverzoek:
+  "Energie extra's inzetten indien mogelijk, dobbelen, lopen, tijdens het zetten van je stappen mag
+  je ergens je actiekaart nog spelen. Het is ook mogelijk om een actiekaart weg te gooien... maar 1
+  actiekaart spelen per beurt of 1 kaart afleggen").** Vóór deze wijziging deelden een energie-actie
+  en een kaart spelen ÉÉN gezamenlijk actie-slot per beurt ("hooguit één ding per beurt, kaart of
+  energie"). Nu zijn het twee onafhankelijke sloten (max 1 energie-actie ÉN max 1 kaartactie in
+  dezelfde beurt), en geldt dit voor **alle spelers, mens én bots** (expliciet gevraagd i.p.v. alleen
+  voor "Zelf spelen"). De beurtvolgorde is nu: (1) energie-actie inzetten indien gewenst, (2) dobbelen,
+  (3) lopen — en tijdens dat lopen mag je op elk moment nog een kaart spelen **of** afleggen (niet
+  allebei — die twee delen het kaart-slot).
+  - **Drie paren houden elkaar WEL nog uit, ondanks de losse sloten** — omdat ze letterlijk hetzelfde
+    mechanische effect hebben en dus niet zinvol te stapelen zijn: Stuwlading (kaart) ↔ Stuwstoot
+    (energie), allebei een 3e loopsteen; Herkalibratie (kaart) ↔ Herprioritering (energie), allebei
+    dezelfde `energyReorderTarget()`/`soloUnconditionalSwap()`-doelwissel; Blinde Vlek (kaart) ↔
+    Noodtransport (energie), allebei een uitweg uit een blokkade (bij bots zou Noodtransport de al
+    opgeloste blokkade van Blinde Vlek gewoon overschrijven, omdat het de zet vanaf de OORSPRONKELIJKE
+    positie herberekent). In de bot-AI (`95-simulate.js`, `96-walk.js`, `soloResolveBotTurn` in
+    `97-solo.js`) regelen lokale per-beurt vlaggen (`targetSwapped`, `blindResolvedBlock`) dit, naast
+    de twee nieuwe `energyActionUsed`/`cardActionUsed`-vlaggen die de oude gezamenlijke `actionUsed`
+    vervangen. Bots leggen nooit af — dat is een puur menselijke mogelijkheid (zie hieronder) — dus
+    voor bots is `cardActionUsed` simpelweg "heeft deze beurt al een kaart gespeeld".
+  - **Welke kaarten blijven per se vóór de worp** (ze werken op het mechanisme van de worp zelf) **en
+    welke mogen wachten tot tijdens het lopen**: alleen Zwaartekracht-laarzen (vervangt de worp
+    helemaal) en Stuwlading (voegt een 3e loopsteen toe aan de worp) moeten vóór het dobbelen beslist
+    zijn. Alle andere kaarten (Noodrantsoen, Herkalibratie, Kortsluiting, Duwstoot, Prioriteitspas,
+    Herbevoorrading) raken de worp niet en mogen dus op elk moment tijdens het lopen gespeeld worden —
+    exact zoals de gebruiker het beschreef ("tijdens het zetten van je stappen"). Blinde Vlek en
+    Overdrukklep blijven zoals ze al waren: puur reactief, nooit uit een lijst te kiezen.
+  - **Mens-interactieve flow (`97-solo.js`) kreeg een nieuwe tussenfase `'choose-preroll'`** tussen
+    de energie-keuze en het dobbelen, speciaal voor Zwaartekracht-laarzen/Stuwlading
+    (`soloProceedToPrerollCard()` — slaat 'm automatisch over als geen van beide in de hand zit of
+    het kaart-slot al gebruikt is). De oude `'choose-action'`-fase toont nu ALLEEN nog de drie
+    energie-knoppen (`soloRenderActionPanel()` is vereenvoudigd, de kaarten zijn eruit). Tijdens
+    `'moving'` staat een nieuwe, na elke stap opnieuw getekende kaartenrij (`soloRenderMoveCardRow()`,
+    aangeroepen vanuit `soloAdvanceMovePhase()` zodat alle aanroepers — dobbelen, elke losse stap, ná
+    Overdrukklep/Blinde Vlek/de doelwit-kiezer — 'm automatisch meekrijgen) met alle overige kaarten,
+    inclusief per kaart een **afleg-knop** (`soloCardWithDiscard()` — de speel-knop kan om
+    spelinhoudelijke redenen uitgeschakeld zijn, bijvoorbeeld Herkalibratie nadat Herprioritering al
+    gewisseld heeft, maar de afleg-knop nooit: afleggen is altijd mogelijk voor elke kaart in de hand,
+    alleen het kaart-slot zelf gate 't). Nieuwe routeringsfunctie `soloAfterCardAction()` stuurt een
+    gespeelde/afgelegde kaart naar de juiste vervolgstap: is er al gedobbeld (`soloMove` bestaat), dan
+    wordt de bewegingsfase herberekend (bv. na Duwstoot verschuift een blokkade); anders gaat het
+    gewoon door naar het dobbelen. De doelwit-kiezer (Kortsluiting/Duwstoot/Prioriteitspas) kan nu ook
+    MIDDENIN het lopen geopend worden — `soloEnterTargetPicker()` ruimt daarom nu ook expliciet de
+    aanklikbare vakjes van vóór de klik op (`soloClearClickable()`), anders bleef de oude groene
+    highlight zichtbaar naast de doelwit-knoppen.
+  - **Dezelfde ternary-only-shows-one-bug gevonden en gefixt op alle drie de plekken** waar de
+    beurt-samenvatting in de log wordt opgebouwd: `usedEnergyAction ? walkActionNote(...) :
+    walkCardNote(...)` kon vanzelfsprekend maar één van de twee tonen — een directe consequentie van
+    de nieuwe onafhankelijke sloten, want nu kunnen beide waar zijn in dezelfde beurt. Gefixt door
+    string-concatenatie i.p.v. een ternary in zowel `96-walk.js` (bot-AI) als `soloFinishTurn()` in
+    `97-solo.js` (mens) — beide helper-functies gaven toch al `''` terug bij een lege id, dus
+    concatenatie is veilig. Voor de mens is er ook een derde, nieuwe notitie
+    (`soloDiscardNote(soloDiscardedCardId)`, "🗑 naam afgelegd") toegevoegd aan diezelfde regel, want
+    afleggen is een geheel nieuwe, puur-menselijke actie zonder bot-equivalent.
+  - **Herijkte cijfers na de wijziging** (15.000 potjes, `runSimulationBatch`): de energie-actie-
+    winstpercentages bleken **nagenoeg ongewijzigd** t.o.v. vóór deze wijziging — Stuwstoot 31,2% →
+    **31,3%**, Herprioritering 26,8% → **27,0%**, Noodtransport 34,2% → **34,1%**, geen energie 7,9% →
+    **7,5%** (alle verschillen ruim binnen de foutmarge van ±0,7-0,8 procentpunt). Dat is geen
+    meetfout maar een logisch gevolg: welke energie-actie wint is een apart "toernooi" tussen de vier
+    `ENERGY_STRATEGIES` (één strategie per speler, geloot over de startposities) — of kaarten
+    dezelfde beurt óók gespeeld mogen worden verandert niets aan de relatieve sterkte van die vier
+    strategieën t.o.v. elkaar, het geeft ze allemaal ongeveer evenveel extra kansen. Balans-checks
+    blijven kloppen: eerlijkheid per startpositie binnen foutmarge (spreiding 0,5 procentpunt),
+    eindklassering per startpositie telt op tot 100% per kolom met gem. plaats 2,49-2,52, dood-vrij
+    bleef 100% (geen enkele "koudste tegel" op 0,0% verkeer), en elke beloningskaart behalve
+    Prioriteitspas staat ruim boven 0 (Duwstoot met 0,52 per potje het laagst — logisch, vereist een
+    aangrenzende tegenstander). Kortom: deze wijziging maakt kaarten en energie samen soepeler te
+    combineren voor de speler, zonder de bestaande, al uitgebreid gemeten balans tussen de
+    energie-strategieën te verstoren.
+  - **Bots leggen bewust nooit af** (zelf gekozen scope, niet expliciet gevraagd): een bot die een
+    kaart niet nuttig vindt laat 'm gewoon ongebruikt in de hand zitten, precies zoals vóór deze
+    wijziging — er is geen proactieve "leg maar af als de kaart toch niet gebruikt wordt"-logica
+    toegevoegd aan de bot-AI. Afleggen is dus uitsluitend een keuze die een mens in "Zelf spelen"
+    heeft.
+
 ## Nog te doen
 
 - Elke opdracht (2.1–2.9) heeft nu een naam (`QUEST_NAMES` in `10-rules.js`,
