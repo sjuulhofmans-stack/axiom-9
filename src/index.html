@@ -207,10 +207,10 @@
             <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
           </div>
         </div>
-        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf via de knoppen/vakjes hieronder — de bots spelen meteen door zodra zij aan de beurt zijn. Kies per menselijke speler een startpositie; je ziet meteen welke opdracht je als eerste krijgt. Met meer dan 1 speler blokkeer je elkaar net als in "Automatisch", en werken Kortsluiting, Duwstoot en Prioriteitspas ook (met een doelwit dat je zelf kiest). Op een pc kun je tijdens het lopen ook gewoon de pijltjestoetsen gebruiken.</p>
-
         <div class="walk-play-layout">
           <div class="walk-board-col">
+            <div class="walk-score" id="walkScore"></div>
+
             <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
             <div class="board-outer">
               <div id="walkBoard"></div>
@@ -241,20 +241,21 @@
               </div>
             </div>
 
-            <div class="walk-info-panel">
-              <div class="walk-hud">
-                <div class="walk-dice" id="walkDice"></div>
-                <div class="walk-meta" id="walkMeta"></div>
-                <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+            <div class="walk-hud">
+              <div class="walk-dice" id="walkDice"></div>
+              <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+              <div class="btn-row">
+                <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+                <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
               </div>
+            </div>
 
-              <div class="walk-score" id="walkScore"></div>
+            <div class="walk-info-panel">
+              <div class="walk-meta" id="walkMeta"></div>
+
+              <div class="walk-score" id="walkScoreActive"></div>
 
               <div class="walk-solo-panel" id="walkSoloPanel" hidden>
-                <div class="btn-row">
-                  <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
-                  <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
-                </div>
                 <div class="walk-solo-actions" id="walkSoloActions"></div>
               </div>
 

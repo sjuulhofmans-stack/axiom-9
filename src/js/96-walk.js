@@ -34,6 +34,7 @@ const walkSpeedLabelEl = document.getElementById('walkSpeedLabel');
 const walkDiceEl = document.getElementById('walkDice');
 const walkMetaEl = document.getElementById('walkMeta');
 const walkScoreEl = document.getElementById('walkScore');
+const walkScoreActiveEl = document.getElementById('walkScoreActive');
 const walkStatusEl = document.getElementById('walkStatus');
 const walkLogEl = document.getElementById('walkLog');
 const walkPanelEl = document.getElementById('tabWalk');
@@ -215,9 +216,13 @@ function walkEnergyNote(roll, gain, player){
 // speler krijgt zijn plaats toebedeeld omdat het potje stopt, niet omdat hij binnenkwam.
 function walkIsIn(p){ return p.completed >= SIM_QUESTS_TO_WIN; }
 
+// boven het bord staan de ANDERE spelers (#walkScore), in het paneel rechts staat ALLEEN wie
+// aan zet is (#walkScoreActive, gebruikersverzoek) — beide krijgen dezelfde volledige lijst,
+// gefilterd via CSS op de `.active`-klasse (`#walkScore .walk-player.active{display:none}` en
+// omgekeerd voor `#walkScoreActive`), zodat er maar één render-pad nodig is
 function renderWalkScore(players, activeIdx){
-  if (!walkScoreEl) return;
-  walkScoreEl.innerHTML = players.map(p => {
+  if (!walkScoreEl && !walkScoreActiveEl) return;
+  const html = players.map(p => {
     const targetLabel = p.deck[p.nextIdx];
     const goal = p.rank
       ? walkIsIn(p)
@@ -240,6 +245,8 @@ function renderWalkScore(players, activeIdx){
       `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
     `</div>`;
   }).join('');
+  if (walkScoreEl) walkScoreEl.innerHTML = html;
+  if (walkScoreActiveEl) walkScoreActiveEl.innerHTML = html;
 }
 
 function walkLog(html, cls, player){

@@ -361,23 +361,31 @@ Check minimaal:
    staan tot en met "sla actie over"; pas na de dobbelklik (of Zwaartekracht-
    laarzen/een Noodtransport dat exact op je doel landt) springt hij omhoog.
 14. Tabblad "Stap voor stap" (beide modi, breedte > 880px): het bord staat
-   links, de navigator + het infopaneel (dobbelstenen/doel/standenlijst/
-   actiepaneel/status) staan vast rechts ernaast. Controleer met
-   `getBoundingClientRect().top/left + window.scrollY` (dus de DOCUMENT-positie,
-   niet de viewport-positie — een klik kan de pagina laten scrollen, dat is
-   geen bug) dat zowel het bord ALS de navigator (`#walkDirPad`) ALS de
-   "gooi de dobbelstenen"/"sla actie over"-knoppenrij niet verschuiven tijdens
-   een volledig gespeeld potje (actie kiezen, dobbelen, stap zetten, meerdere
-   beurten achter elkaar) — test dit over minstens 20-30 stappen, één enkele
-   meting kan een toevallige stand missen. De navigator blijft in "Zelf spelen"
-   de hele partij zichtbaar (uitgeschakelde knoppen + "–"-teller buiten je
-   eigen zet), niet meer aan/uit per beurtfase. Geen enkele rij in de
-   standenlijst (`.walk-player`) mag over de rand van het rechterpaneel heen
-   lopen, ongeacht welke strategienaam of hoeveel beloningskaarten een speler
-   heeft. Onder 880px breedte valt het terug naar 1 kolom (bord eerst, net als
-   "Kaart maken"). Bij het laden van de pagina (vóórdat je een tab hebt
-   aangeklikt) mag de solo-opzet-UI (spelerskeuze/"Potje starten") niet
-   zichtbaar zijn, want "Automatisch" is de standaard-actieve tab.
+   links, MET de standenlijst van de ANDERE spelers (niet wie aan zet is)
+   erboven — precies zoals vóór de 2-koloms-layout. Rechts, van boven naar
+   onder: de navigator (40×40px richtingsknoppen, kleiner dan vroeger),
+   daaronder een los vast blokje met alleen de dobbelstenen + de "gooi de
+   dobbelstenen"/"sla actie over"-knoppenrij, en daaronder het infopaneel met
+   ALLEEN de speler die op dat moment aan de beurt is (doel/voortgang +
+   actiepaneel/status). Controleer met `getBoundingClientRect().top/left +
+   window.scrollY` (dus de DOCUMENT-positie, niet de viewport-positie — een
+   klik kan de pagina laten scrollen, dat is geen bug) dat zowel het bord ALS
+   de navigator (`#walkDirPad`) ALS de dobbel-/skip-knoppenrij niet
+   verschuiven tijdens een volledig gespeeld potje (actie kiezen, dobbelen,
+   stap zetten, meerdere beurten achter elkaar) — test dit over minstens
+   20-30 stappen, één enkele meting kan een toevallige stand missen. De
+   navigator blijft in "Zelf spelen" de hele partij zichtbaar (uitgeschakelde
+   knoppen + "–"-teller buiten je eigen zet), niet meer aan/uit per
+   beurtfase. In de standenlijst boven het bord (`#walkScore`) mag de actieve
+   speler NOOIT verschijnen, en in het paneel rechts (`#walkScoreActive`)
+   mag ALLEEN de actieve speler verschijnen — bij 1 speler is `#walkScore`
+   dus altijd leeg. Geen enkele rij (`.walk-player`) mag over de rand van
+   zijn container heen lopen, ongeacht welke strategienaam of hoeveel
+   beloningskaarten een speler heeft. Onder 880px breedte valt het terug naar
+   1 kolom (bord eerst, net als "Kaart maken"). Bij het laden van de pagina
+   (vóórdat je een tab hebt aangeklikt) mag de solo-opzet-UI (spelerskeuze/
+   "Potje starten") niet zichtbaar zijn, want "Automatisch" is de
+   standaard-actieve tab.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -586,8 +594,10 @@ Check minimaal:
   Elke mens dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje
   om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
   zijn bezette vakjes van andere spelers uitgesloten). Boven
-  dezelfde stap zet als een klik op de cel — op een telefoon zijn de kleine
-  vakjes lastig te raken, deze knoppen zijn 58×58px. Eronder staat een
+  dezelfde stap zet als een klik op de cel. Waren aanvankelijk 58×58px (bewust
+  groot als enige manier om te lopen), maar met celklik EN pijltjestoetsen
+  erbij oogde dat "veel te groot" in de smalle zijkolom (gebruikersmelding) —
+  nu 40×40px. Eronder staat een
   stappenteller (gezet/nog) die in `soloRenderDirPad()` meeschrijft bij elke
   stap — daarvoor moest je terug scrollen naar de dobbelsteen-HUD bovenaan om
   te zien hoever je nog kon lopen. Beide manieren werken altijd tegelijk en
@@ -669,23 +679,56 @@ Check minimaal:
        `soloHideDirPad()` schakelt tegenwoordig alleen de 4 richtingsknoppen
        uit en zet de stappenteller op een `–`-placeholder, zonder het blok
        zelf uit de layout te halen.
-    3. De rij met "Gooi de dobbelstenen"/"Sla actie over" stond ÓNDER het
-       actiekaartenblok (`.walk-solo-actions`), dat van 0 naar 1-2 rijen
-       kaarten wisselt per beurt — dus verschoof de knop zelf nog steeds mee.
-       Fix: de knoppenrij staat nu VÓÓR de kaarten in de DOM (positie hangt
-       zo alleen nog af van `.walk-hud`/`.walk-score`, die binnen één potje
-       niet meer veranderen). Twee kleinere resterende bronnen binnen
-       diezelfde standenlijst/metatekst zijn met een vaste `min-height` dichtgezet
-       i.p.v. geprobeerd te forceren met `flex-basis:100%` (die truc bleek averechts
-       te werken — een element dat zelf 100% breed wordt, verdringt alles
-       ERNA weer naar een volgende regel in plaats van gewoon een nette
-       regel-afsluiting te zijn): `.walk-info-panel .walk-player{min-height:80px}`
-       (gemeten met alle 4 strategienamen tegelijk + 2 kaartbadges, het
-       zwaarste geval) en `.walk-info-panel .walk-meta{min-height:117px}` (de
-       regel "Voltooid: X/6 · nog Y stap(pen)" is alleen tijdens het lopen
-       lang genoeg om in de smalle kolom naar een 2e regel te wrappen).
-       Bevestigd over 30 volledige beurten: navigator en dobbelknop staan
-       exact op dezelfde document-positie bij elke fase-overgang.
+    3. De rij met "Gooi de dobbelstenen"/"Sla actie over" stond (op dat
+       moment nog) ÓNDER het actiekaartenblok (`.walk-solo-actions`), dat van
+       0 naar 1-2 rijen kaarten wisselt per beurt — dus verschoof de knop zelf
+       nog steeds mee. Eerste fix: de knoppenrij vóór de kaarten in de DOM.
+       Zie de latere wijziging hieronder ("dobbelen als eigen los blok") voor
+       waar die rij inmiddels definitief staat. Twee kleinere resterende
+       bronnen binnen diezelfde standenlijst/metatekst zijn met een vaste
+       `min-height` dichtgezet i.p.v. geprobeerd te forceren met
+       `flex-basis:100%` (die truc bleek averechts te werken op een element
+       met eigen zichtbare inhoud — die neemt dan zelf de HELE regel in beslag
+       i.p.v. alleen een nieuwe regel te starten, met een extra regel tot
+       gevolg; werkt wél op een lege rij, zie hieronder):
+       `.walk-info-panel .walk-player{min-height:80px}` (gemeten met alle 4
+       strategienamen tegelijk + 2 kaartbadges, het zwaarste geval) en
+       `.walk-info-panel .walk-meta{min-height:117px}` (de regel "Voltooid:
+       X/6 · nog Y stap(pen)" is alleen tijdens het lopen lang genoeg om in de
+       smalle kolom naar een 2e regel te wrappen). Bevestigd over 30 volledige
+       beurten: navigator en dobbelknop staan exact op dezelfde
+       document-positie bij elke fase-overgang.
+  - **Vervolgverzoek: navigatorknoppen kleiner, dobbelen als eigen los blok,
+    standenlijst splitsen** (gebruikersverzoek, incl. de solo-hinttekst onder
+    de instelvelden helemaal weghalen — `#walkSoloHint` is verwijderd uit
+    `index.html`, met de bijbehorende JS-referentie).
+    - Navigatorknoppen 58×58px → 40×40px (zie hierboven).
+    - **"Zet het dobbelen vast in een los blok"**: de dobbelstenen (`.walk-hud`)
+      en de "Gooi de dobbelstenen"/"Sla actie over"-knoppenrij staan nu samen
+      in diezelfde `.walk-hud`-box, los van het actiekaartenblok — de
+      knoppenrij krijgt `flex-basis:100%` zodat hij altijd een eigen volle
+      regel onder de dobbelstenen krijgt (in tegenstelling tot de eerdere
+      mislukte poging hierboven: hier is dat WEL de bedoeling, de rij mag
+      gerust de hele breedte innemen). **Gevonden tijdens het testen**: zonder
+      `min-height` op die knoppenrij klapte hij helemaal in tijdens fases
+      waarin BEIDE knoppen verborgen zijn (bv. tijdens het lopen zelf, of het
+      kiezen van een doelwit) — 36px verschil, gemeten — en dat liet
+      `.walk-info-panel` eronder alsnog op en neer springen. Fix:
+      `.walk-hud .btn-row{min-height:40px}`.
+    - **"De informatie van de andere spelers boven de map, de speler die aan
+      de beurt is niet"**: `renderWalkScore()` (`96-walk.js`) schrijft
+      dezelfde volledige spelerslijst nu naar TWEE containers — `#walkScore`
+      (boven het bord, terug in `.walk-board-col`, dus weer de brede
+      rij-per-speler-stijl van vóór de 2-koloms-layout) én het nieuwe
+      `#walkScoreActive` (in `.walk-info-panel`, dus de smalle
+      kolom-per-speler-stijl). Welke rijen zichtbaar zijn is puur CSS: `#walkScore
+      .walk-player.active{display:none}` en omgekeerd
+      `#walkScoreActive .walk-player:not(.active){display:none}` — één
+      render-pad, geen aparte "alleen actieve speler"-functie nodig. Bij 1
+      speler blijft `#walkScore` dus leeg (geen "andere" spelers) en
+      verdwijnt vanzelf. Geldt voor beide modi (`renderWalkScore()` is
+      gedeeld), dus ook "Automatisch" toont nu de andere spelers boven het
+      bord en wie aan zet is in het paneel rechts.
   Verder kiest de speler zelf een energie-actie of handkaart aan het begin van
   de beurt — hooguit één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
   staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),

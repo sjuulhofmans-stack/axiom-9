@@ -333,37 +333,41 @@
     background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:14px;
   }
   .walk-dirpad-row[hidden]{display:none;}
+  /* was 58×58px — expliciet gekozen als groot mobiel tapdoel toen dit de enige manier was om
+     te lopen, maar met celklik EN pijltjestoetsen erbij (zie hieronder) is dat niet meer nodig,
+     en oogde het "veel te groot" in de nu smalle 300px-zijkolom (gebruikersmelding). 40px blijft
+     nog altijd ruim boven de gangbare minimum-tapdoelgrootte. */
   .walk-dirpad{
     display:grid;
     grid-template-areas: ". n ." "w . o" ". z .";
-    grid-template-columns: repeat(3, 58px);
-    grid-auto-rows: 58px;
-    gap:6px;
+    grid-template-columns: repeat(3, 40px);
+    grid-auto-rows: 40px;
+    gap:5px;
   }
   .walk-dir-btn{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:2px; font-size:19px; padding:0; background:var(--panel-2); border:1px solid var(--line);
-    border-radius:8px; color:var(--start);
+    gap:1px; font-size:14px; padding:0; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:7px; color:var(--start);
   }
   .walk-dir-btn span{
-    font-family:var(--font-mono); font-size:9px; letter-spacing:.08em; color:var(--text-dim);
+    font-family:var(--font-mono); font-size:7.5px; letter-spacing:.06em; color:var(--text-dim);
   }
   .walk-dir-btn:hover:not(:disabled){border-color:var(--start); box-shadow:0 0 8px rgba(85,214,138,.3);}
   .walk-dir-btn:disabled{opacity:.25; cursor:not-allowed;}
   .walk-dir-n{grid-area:n;} .walk-dir-w{grid-area:w;} .walk-dir-o{grid-area:o;} .walk-dir-z{grid-area:z;}
 
-  .walk-step-counter{display:flex; gap:10px;}
+  .walk-step-counter{display:flex; gap:8px;}
   .walk-step-box{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-width:56px; padding:8px 10px; background:var(--hull); border:1px solid var(--line-dim);
-    border-radius:8px;
+    min-width:40px; padding:5px 7px; background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:7px;
   }
   .walk-step-num{
-    font-family:var(--font-mono); font-weight:700; font-size:22px; color:var(--amber);
+    font-family:var(--font-mono); font-weight:700; font-size:16px; color:var(--amber);
     line-height:1.1; font-variant-numeric:tabular-nums;
   }
   .walk-step-lbl{
-    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+    font-family:var(--font-mono); font-size:8px; letter-spacing:.08em; text-transform:uppercase;
     color:var(--text-dim);
   }
   .walk-solo-actions{display:flex; gap:8px; flex-wrap:wrap;}
@@ -414,10 +418,18 @@
      meer per beurt. 80px is gemeten met alle 4 strategienamen + 2 kaarten tegelijk. */
   .walk-info-panel .walk-player{min-height:80px;}
 
+  /* "het dobbelen" als eigen vast blokje (gebruikersverzoek): dezelfde box als voorheen,
+     nu met de dobbel-/sla-actie-over-knop er meteen in — die kreeg met flex-basis:100% altijd
+     een eigen volle regel onder de dobbelstenen, in plaats van te concurreren om ruimte met
+     de pauze-vlag ernaast. */
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
     background:var(--hull); border:1px solid var(--line-dim); border-radius:5px; padding:11px 13px;
   }
+  /* min-height: zonder dit klapt de rij helemaal in tijdens fases waarin BEIDE knoppen
+     verborgen zijn (bv. 'moving', of het kiezen van een doelwit) — en dat liet .walk-info-panel
+     eronder alsnog 36px op en neer springen, exact het probleem dat deze hele sectie oplost. */
+  .walk-hud .btn-row{flex-basis:100%; min-height:40px;}
   .walk-dice{display:flex; align-items:center; gap:8px; min-height:38px;}
   .walk-die{
     width:38px; height:38px; border-radius:6px; display:flex; align-items:center; justify-content:center;
@@ -475,6 +487,13 @@
     display:flex; gap:8px; flex-wrap:wrap;
   }
   .walk-score:empty{display:none;}
+  /* #walkScore (boven het bord) en #walkScoreActive (in het paneel rechts) krijgen allebei
+     dezelfde volledige spelerslijst van renderWalkScore() — welke rijen zichtbaar zijn hangt
+     puur van CSS af: boven het bord alleen de ANDERE spelers, rechts alleen wie aan zet is
+     (gebruikersverzoek). Bij 1 speler blijft #walkScore dus leeg (geen "andere" spelers) en
+     collapt vanzelf via het lege-flexcontainer-gedrag hierboven. */
+  #walkScore .walk-player.active{display:none;}
+  #walkScoreActive .walk-player:not(.active){display:none;}
   .walk-player{
     display:flex; align-items:center; gap:8px; flex:1 1 210px;
     font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
@@ -1100,10 +1119,10 @@
             <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
           </div>
         </div>
-        <p class="hint" id="walkSoloHint" hidden>Jij speelt zelf via de knoppen/vakjes hieronder — de bots spelen meteen door zodra zij aan de beurt zijn. Kies per menselijke speler een startpositie; je ziet meteen welke opdracht je als eerste krijgt. Met meer dan 1 speler blokkeer je elkaar net als in "Automatisch", en werken Kortsluiting, Duwstoot en Prioriteitspas ook (met een doelwit dat je zelf kiest). Op een pc kun je tijdens het lopen ook gewoon de pijltjestoetsen gebruiken.</p>
-
         <div class="walk-play-layout">
           <div class="walk-board-col">
+            <div class="walk-score" id="walkScore"></div>
+
             <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
             <div class="board-outer">
               <div id="walkBoard"></div>
@@ -1134,20 +1153,21 @@
               </div>
             </div>
 
-            <div class="walk-info-panel">
-              <div class="walk-hud">
-                <div class="walk-dice" id="walkDice"></div>
-                <div class="walk-meta" id="walkMeta"></div>
-                <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+            <div class="walk-hud">
+              <div class="walk-dice" id="walkDice"></div>
+              <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+              <div class="btn-row">
+                <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+                <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
               </div>
+            </div>
 
-              <div class="walk-score" id="walkScore"></div>
+            <div class="walk-info-panel">
+              <div class="walk-meta" id="walkMeta"></div>
+
+              <div class="walk-score" id="walkScoreActive"></div>
 
               <div class="walk-solo-panel" id="walkSoloPanel" hidden>
-                <div class="btn-row">
-                  <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
-                  <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
-                </div>
                 <div class="walk-solo-actions" id="walkSoloActions"></div>
               </div>
 
@@ -4416,6 +4436,7 @@ const walkSpeedLabelEl = document.getElementById('walkSpeedLabel');
 const walkDiceEl = document.getElementById('walkDice');
 const walkMetaEl = document.getElementById('walkMeta');
 const walkScoreEl = document.getElementById('walkScore');
+const walkScoreActiveEl = document.getElementById('walkScoreActive');
 const walkStatusEl = document.getElementById('walkStatus');
 const walkLogEl = document.getElementById('walkLog');
 const walkPanelEl = document.getElementById('tabWalk');
@@ -4597,9 +4618,13 @@ function walkEnergyNote(roll, gain, player){
 // speler krijgt zijn plaats toebedeeld omdat het potje stopt, niet omdat hij binnenkwam.
 function walkIsIn(p){ return p.completed >= SIM_QUESTS_TO_WIN; }
 
+// boven het bord staan de ANDERE spelers (#walkScore), in het paneel rechts staat ALLEEN wie
+// aan zet is (#walkScoreActive, gebruikersverzoek) — beide krijgen dezelfde volledige lijst,
+// gefilterd via CSS op de `.active`-klasse (`#walkScore .walk-player.active{display:none}` en
+// omgekeerd voor `#walkScoreActive`), zodat er maar één render-pad nodig is
 function renderWalkScore(players, activeIdx){
-  if (!walkScoreEl) return;
-  walkScoreEl.innerHTML = players.map(p => {
+  if (!walkScoreEl && !walkScoreActiveEl) return;
+  const html = players.map(p => {
     const targetLabel = p.deck[p.nextIdx];
     const goal = p.rank
       ? walkIsIn(p)
@@ -4622,6 +4647,8 @@ function renderWalkScore(players, activeIdx){
       `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
     `</div>`;
   }).join('');
+  if (walkScoreEl) walkScoreEl.innerHTML = html;
+  if (walkScoreActiveEl) walkScoreActiveEl.innerHTML = html;
 }
 
 function walkLog(html, cls, player){
@@ -5073,7 +5100,6 @@ const walkModeSoloBtn = document.getElementById('walkModeSolo');
 const walkAutoControlsEl = document.getElementById('walkAutoControls');
 const walkSoloControlsEl = document.getElementById('walkSoloControls');
 const walkAutoHintEl = document.getElementById('walkAutoHint');
-const walkSoloHintEl = document.getElementById('walkSoloHint');
 const walkSoloPlayersSel = document.getElementById('walkSoloPlayers');
 const walkSoloBotsSel = document.getElementById('walkSoloBots');
 const walkSoloSetupEl = document.getElementById('walkSoloSetupPlayers');
@@ -5225,12 +5251,14 @@ function setWalkMode(mode){
   // echt uit de layout haalt.
   if (walkDirPadEl) walkDirPadEl.hidden = isAuto;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
-  if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
+  if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
+  if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
   renderWalkBoard();
   if (walkDiceEl) walkDiceEl.innerHTML = '';
   if (walkMetaEl) walkMetaEl.innerHTML = '';
   if (walkScoreEl) walkScoreEl.innerHTML = '';
+  if (walkScoreActiveEl) walkScoreActiveEl.innerHTML = '';
   if (walkStatusEl) walkStatusEl.innerHTML = '';
   if (walkLogEl) walkLogEl.innerHTML = '';
   if (!isAuto) soloRebuildSetup();

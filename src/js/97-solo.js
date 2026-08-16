@@ -18,7 +18,6 @@ const walkModeSoloBtn = document.getElementById('walkModeSolo');
 const walkAutoControlsEl = document.getElementById('walkAutoControls');
 const walkSoloControlsEl = document.getElementById('walkSoloControls');
 const walkAutoHintEl = document.getElementById('walkAutoHint');
-const walkSoloHintEl = document.getElementById('walkSoloHint');
 const walkSoloPlayersSel = document.getElementById('walkSoloPlayers');
 const walkSoloBotsSel = document.getElementById('walkSoloBots');
 const walkSoloSetupEl = document.getElementById('walkSoloSetupPlayers');
@@ -170,12 +169,14 @@ function setWalkMode(mode){
   // echt uit de layout haalt.
   if (walkDirPadEl) walkDirPadEl.hidden = isAuto;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
-  if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
+  if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
+  if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
   renderWalkBoard();
   if (walkDiceEl) walkDiceEl.innerHTML = '';
   if (walkMetaEl) walkMetaEl.innerHTML = '';
   if (walkScoreEl) walkScoreEl.innerHTML = '';
+  if (walkScoreActiveEl) walkScoreActiveEl.innerHTML = '';
   if (walkStatusEl) walkStatusEl.innerHTML = '';
   if (walkLogEl) walkLogEl.innerHTML = '';
   if (!isAuto) soloRebuildSetup();
