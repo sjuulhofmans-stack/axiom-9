@@ -131,12 +131,12 @@ let soloFinished = 0;
 let soloFinishTarget = 1;
 let soloActiveIdx = -1;       // wie van soloPlayers nu interactief aan zet is (mens)
 let soloTargetKey = null;
-// 'idle' | 'choose-action' | 'choose-preroll' | 'target-pick' | 'valve-offer' | 'blind-offer' |
+// 'idle' | 'choose-action' | 'target-pick' | 'valve-offer' | 'blind-offer' |
 // 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
-// 'choose-action' = energie-actie kiezen (of overslaan); 'choose-preroll' = Zwaartekracht-laarzen/
-// Stuwlading kiezen (of overslaan) — de enige twee kaarten die per se vóór de worp moeten, omdat ze
-// het mechanisme van de worp zelf raken. Alle andere kaarten spelen/afleggen kan op elk moment
-// tijdens 'moving' (zie soloRenderMoveCardRow) — geen aparte fase daarvoor nodig.
+// Beurtvolgorde: 'choose-action' = energie-actie kiezen (of overslaan) — vóór het dobbelen, direct
+// ingezet. Dan 'rolling' = dobbelen. Dan 'moving' = stappen zetten; kaarten spelen/afleggen kan op
+// elk moment tijdens 'moving' (zie soloRenderMoveCardRow), vóór of tussen de stappen door, hooguit
+// 1 kaart per beurt — er is dus geen aparte fase vóór de worp om een kaart te spelen.
 let soloPhase = 'idle';
 let soloRunId = 0;
 let soloMove = null;            // { d1, d2, d3, roll, stepsLeft, lastDir, path }
@@ -263,10 +263,9 @@ function renderEnergySoloButton(id, disabled, reason){
     <span class="action-card-hint">${act.hint}</span>
   </button>`;
 }
-// De 'choose-action'-fase toont voortaan ALLEEN de energie-acties — kaarten spelen/afleggen kan
-// nu op elk moment tijdens het lopen (zie soloRenderMoveCardRow hieronder), en Zwaartekracht-
-// laarzen/Stuwlading krijgen hun eigen tussenfase vlak vóór het dobbelen (soloProceedToPrerollCard),
-// omdat die twee het mechanisme van de worp zelf raken en dus niet kunnen wachten tot je al loopt.
+// De 'choose-action'-fase toont ALLEEN de energie-acties — die moet je immers vóór het dobbelen
+// inzetten. Kaarten spelen/afleggen (inclusief Zwaartekracht-laarzen en Stuwlading) kan pas ná
+// het dobbelen, vóór of tijdens het stappen zetten (zie soloRenderMoveCardRow hieronder).
 function soloRenderActionPanel(){
   if (!walkSoloActionsEl) return;
   const p = solo();
@@ -304,51 +303,16 @@ function soloUnconditionalSwap(){
   p.deck[p.nextIdx + 1] = cur;
 }
 
-// ---------- vóór het dobbelen: Zwaartekracht-laarzen / Stuwlading ----------
-// De enige twee kaarten die per se vóór de worp beslist moeten zijn (ze vervangen 'm resp.
-// werken op de worp zelf) — alle andere kaarten kunnen best wachten tot tijdens het lopen.
-function soloPrerollCardIds(){
-  const p = solo();
-  const ids = [];
-  if (p.cards.includes('boots')) ids.push('boots');
-  if (p.cards.includes('boostcell') && !soloPendingBoost) ids.push('boostcell');
-  return ids;
-}
-function soloProceedToPrerollCard(){
-  if (soloCardActionUsed() || !soloPrerollCardIds().length){
-    soloProceedToRoll();
-    return;
-  }
-  soloPhase = 'choose-preroll';
-  walkSoloActionsEl.innerHTML = `<div class="action-card-row">` +
-    soloPrerollCardIds().map(id => soloCardWithDiscard(id, false, null)).join('') +
-    `</div>`;
-  soloHideDirPad();
-  btnWalkSoloRoll.hidden = true;
-  btnWalkSoloSkip.hidden = false;
-  btnWalkSoloSkip.textContent = 'Geen kaart, gewoon dobbelen';
-}
-if (walkSoloActionsEl){
-  walkSoloActionsEl.addEventListener('click', (e) => {
-    if (soloPhase !== 'choose-preroll') return;
-    const discardBtn = e.target.closest('button[data-discard]');
-    if (discardBtn){ soloDiscardCard(discardBtn.dataset.discard); return; }
-    const btn = e.target.closest('button.action-card');
-    if (!btn || btn.disabled || btn.classList.contains('is-disabled')) return;
-    if (btn.dataset.card) soloPlayCard(btn.dataset.card);
-  });
-}
-// Routeert een gespeelde/afgelegde kaart naar de juiste vervolgstap: is er al gedobbeld
-// (soloMove bestaat), dan zitten we middenin het lopen en moet de bewegingsfase herberekend
-// worden (bv. na Duwstoot verschuift een blokkade, na Herkalibratie verandert het doel) — anders
-// zaten we nog vóór de worp (energie-fase of pre-roll-kaartfase) en gaat het gewoon door naar
-// het dobbelen.
+// Beurtvolgorde: energie (vóór het dobbelen, direct ingezet) → dobbelen → kaart spelen/afleggen
+// (vóór of tijdens het stappen zetten), hooguit 1 kaart per beurt. Er is dus geen apart moment
+// vóór de worp om een kaart te spelen — ook Zwaartekracht-laarzen en Stuwlading niet, die komen
+// hieronder gewoon voor in de altijd-zichtbare kaartenrij tijdens het lopen (soloRenderMoveCardRow).
+// Routeert een gespeelde/afgelegde kaart naar de vervolgstap: er is op dit punt altijd al
+// gedobbeld (kaarten spelen kan pas ná de worp), dus de bewegingsfase wordt herberekend — bv. na
+// Duwstoot verschuift een blokkade, na Herkalibratie verandert het doel, na Stuwlading is er
+// extra stepsLeft.
 function soloAfterCardAction(){
-  if (soloMove){
-    soloAdvanceMovePhase();
-    return;
-  }
-  soloProceedToRoll();
+  soloAdvanceMovePhase();
 }
 function soloDiscardCard(id){
   if (soloCardActionUsed()) return;
@@ -359,9 +323,11 @@ function soloDiscardCard(id){
   soloAfterCardAction();
 }
 // ---------- tijdens het lopen: altijd-zichtbare kaartenrij (spelen óf afleggen) ----------
-// Boots/Stuwlading horen hierboven al bij de pre-roll-fase, en Blinde Vlek/Overdrukklep blijven
-// puur reactief (zie soloOfferBlindSpot/soloOfferValveSave) — die drie dus hier uitsluiten.
-const SOLO_MOVE_ROW_EXCLUDE = ['boots', 'boostcell', 'blind', 'valve'];
+// Blinde Vlek/Overdrukklep blijven puur reactief (zie soloOfferBlindSpot/soloOfferValveSave) —
+// die twee dus hier uitsluiten. Boots/Stuwlading staan hier wél bij: de juiste beurtvolgorde is
+// energie (vóór het dobbelen) → dobbelen → kaart spelen/afleggen (vóór of tijdens het stappen
+// zetten), dus ook deze twee horen pas ná de worp aan de beurt, niet ervoor.
+const SOLO_MOVE_ROW_EXCLUDE = ['blind', 'valve'];
 function soloRenderMoveCardRow(){
   if (!walkSoloActionsEl) return;
   if (soloCardActionUsed()){ walkSoloActionsEl.innerHTML = ''; return; }
@@ -377,6 +343,10 @@ function soloRenderMoveCardRow(){
     else if (id === 'short' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
     else if (id === 'recal' && soloTargetSwapped){ disabled = true; reason = 'je doel is deze beurt al gewisseld'; }
+    // Stuwlading (kaart) en Stuwstoot (energie) zijn allebei een gratis 3e loopsteen — samen
+    // zouden ze een 4e opleveren, dus sluiten ze elkaar uit ook al zitten ze op losse sloten
+    // (zelfde regel als in 95-simulate.js/96-walk.js)
+    else if (id === 'boostcell' && soloUsedEnergyId === 'boost'){ disabled = true; reason = 'je hebt deze beurt al Stuwstoot ingezet'; }
     return soloCardWithDiscard(id, disabled, reason);
   }).join('');
   walkSoloActionsEl.innerHTML = `<div class="action-card-row">${cards}</div>`;
@@ -474,9 +444,7 @@ function soloResolveTargetCard(cardId, targetIdx){
   }
 }
 
-// Kan nu op TWEE plekken vandaan aangeroepen worden: vóór de worp (Boots/Stuwlading, vanuit
-// soloProceedToPrerollCard) of tijdens het lopen (alle andere kaarten, vanuit
-// soloRenderMoveCardRow) — soloAfterCardAction() regelt zelf welke kant op na afloop.
+// Wordt alleen aangeroepen tijdens het lopen (ná de worp), vanuit soloRenderMoveCardRow.
 function soloPlayCard(id){
   if (id === 'boots'){ soloEnterBootsDirection(); return; }
   if (id === 'short' || id === 'shove' || id === 'scan'){ soloEnterTargetPicker(id); return; }
@@ -499,10 +467,16 @@ function soloPlayCard(id){
     walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
     soloAfterCardAction();
   } else if (id === 'boostcell'){
-    soloPendingBoost = true;
+    // Je hebt al gedobbeld (deze kaart kan pas ná de worp gespeeld worden) — dus geen 3e
+    // loopsteen vóóraf zoals bij de energie-actie Stuwstoot, maar een extra worp erbovenop.
+    const d3 = simRollD6(soloRand);
+    soloMove.d3 = (soloMove.d3 || 0) + d3;
+    soloMove.roll += d3;
+    soloMove.stepsLeft += d3;
     useActionCard(p, 'boostcell', soloDeck);
     soloUsedCardId = 'boostcell';
-    walkLog(`Je speelt <b>Stuwlading</b>: deze beurt met 3 loopstenen.`, null, p);
+    renderWalkDice(soloMove.d1, soloMove.d2, soloEnergyRoll, false, soloMove.d3);
+    walkLog(`Je speelt <b>Stuwlading</b>: gratis derde loopsteen (${d3}) → ${soloMove.stepsLeft} stappen te gaan.`, null, p);
     soloAfterCardAction();
   } else if (id === 'resupply'){
     useActionCard(p, 'resupply', soloDeck);
@@ -522,13 +496,13 @@ function soloUseEnergyAction(id){
   if (id === 'boost'){
     soloPendingBoost = true;
     walkLog(`Je zet <b>Stuwstoot</b> in (−3): deze beurt met 3 loopstenen.`, null, p);
-    soloProceedToPrerollCard();
+    soloProceedToRoll();
   } else if (id === 'reorder'){
     soloUnconditionalSwap();
     soloTargetSwapped = true;
     soloRefreshTarget();
     walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
-    soloProceedToPrerollCard();
+    soloProceedToRoll();
   } else if (id === 'jump'){
     soloEnterJumpTarget();
   }
@@ -619,7 +593,7 @@ function soloHandleJumpClick(key){
     soloFinishTurn(true);
   } else {
     walkLog(`Je springt met <b>Noodtransport</b> naar een nieuwe plek — niet op je doel, dus je gooit gewoon door vanaf hier.`, null, p);
-    soloProceedToPrerollCard();
+    soloProceedToRoll();
   }
 }
 
@@ -755,10 +729,8 @@ if (walkSoloActionsEl){
 }
 if (btnWalkSoloRoll) btnWalkSoloRoll.addEventListener('click', soloRollDice);
 if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
-  // 'choose-action' (energie overslaan) gaat door naar de pre-roll-kaartcheck; 'choose-preroll'
-  // (Boots/Stuwlading overslaan) gaat door naar het echte dobbelen.
-  if (soloPhase === 'choose-action') soloProceedToPrerollCard();
-  else if (soloPhase === 'choose-preroll') soloProceedToRoll();
+  // 'choose-action' (energie overslaan) gaat direct door naar het dobbelen.
+  if (soloPhase === 'choose-action') soloProceedToRoll();
 });
 
 function soloAdvanceMovePhase(){

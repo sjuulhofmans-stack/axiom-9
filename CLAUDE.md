@@ -112,6 +112,15 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   en vervalt de rest. Elke speler heeft een eigen geschud stapeltje opdrachten
   1–9 (labels `2.1`–`2.9`); wie als eerste 6 opdrachten voltooit wint. Draait
   altijd op de indeling die op dat moment in de tool staat.
+- **Beurtvolgorde in de solo-modus** (`97-solo.js`, `soloPhase`): eerst je
+  energie-actie kiezen en direct inzetten (`choose-action`, vóór het dobbelen)
+  — dan dobbelen (`rolling`) — dan stappen zetten (`moving`), waarbij je vóór
+  de eerste stap of tussen stappen door hooguit 1 actiekaart mag spelen/afleggen
+  (`soloRenderMoveCardRow`). Er is dus geen apart moment vóór de worp om een
+  kaart te spelen — ook Zwaartekracht-laarzen en Stuwlading niet, ondanks dat
+  die de worp zelf raken (zie de toelichting bij `SOLO_MOVE_ROW_EXCLUDE`). Wie
+  een opdracht bereikt trekt een kaart uit de gedeelde stapel (max 2 op hand) —
+  dat blijft de enige manier om aan actiekaarten te komen.
 
 ## Controleren of het nog werkt
 
