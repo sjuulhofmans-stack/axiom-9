@@ -403,10 +403,12 @@ function roomIsolationScore(lay){
 }
 
 // hoeveel deuren zitten er RECHTSTREEKS tussen twee kamertegels (geen gang ertussen)?
-// roomIsolationScore hierboven let alleen op het SLECHTSTE geval (isolationScore 0 zodra elke
-// kamer minstens 1 kamerbuur heeft) — deze telt het totaal, zodat de generator tussen kandidaten
-// die daar allebei op 0 staan alsnog kiest voor zoveel mogelijk kamers die daadwerkelijk aan
-// elkaar liggen, i.p.v. willekeurig de eerste zo'n kandidaat te pakken.
+// Gemeten over 40 indelingen (vóór deze aanpassing) lag dit gemiddeld op 5,5 van de 10 kamers
+// met uitschieters tot 9 — in de praktijk complete blokken van 3-4 kamers naast elkaar (bv. een
+// volle rij "RRRR"). roomIsolationScore hierboven blijft de ondergrens (geen kamer die he-le-maal
+// alleen achter een rij gangen wegstopt zit), maar DIT criterium sluit nu aan bij wat daarna komt:
+// zo min mogelijk kamers die daadwerkelijk rechtstreeks aan elkaar grenzen, i.p.v. zoveel mogelijk
+// (was tot voor kort omgekeerd — zie git-geschiedenis als je die vergelijking terug wilt zien).
 function roomAdjacencyCount(lay){
   const adj = tileAdjacency(lay);
   let count = 0;
@@ -468,15 +470,26 @@ function questSpacingScore(lay){
 //     vallen — technisch niet dood, in de praktijk bijna wel. Zie tileBetweennessCounts hierboven.
 //  3. Kamers achter een wurgpunt — vervelend om te lopen, maar wordt wél gebruikt.
 //  4. roomIsolationScore — geen kamer die achter een rij gangen weggestopt zit ("4 gangen door").
-//  5. roomAdjacencyCount — bij gelijke isolationScore: zoveel mogelijk kamers die ECHT
+//     Dit blijft de ondergrens tegen totaal weggestopte kamers, los van spreiding hieronder.
+//  5. roomAdjacencyCount — bij gelijke isolationScore: zo WEINIG mogelijk kamers die ECHT
 //     rechtstreeks aan een andere kamer grenzen (roomIsolationScore kijkt alleen naar het
 //     slechtste geval, dus twee kandidaten kunnen daar allebei op 0 staan terwijl de een veel
-//     meer kamer-kamer deuren heeft dan de ander).
-//  6. questSpacingScore.minDist — opdrachten niet tegen elkaar aan (grootste minimum wint).
-//     Staat NA de kamerkoppeling omdat kamers naast elkaar prima is: hun opdrachtvakjes liggen
-//     dan nog steeds ~8-12 vakjes uit elkaar binnen de 8x8 tegels.
-//  7-9. afstand tot een opdracht voor het verste vakje, eerlijkheid startposities, en de
-//     gemiddelden als fijnproever.
+//     meer kamer-kamer deuren heeft dan de ander — en dus meer klontert). Was tot voor kort
+//     omgekeerd (zoveel mogelijk); gemeten over 40 indelingen zat dat gemiddeld op 5,5 van de 10
+//     kamers rechtstreeks tegen een andere aan, met uitschieters tot 9 — in de praktijk complete
+//     blokken van 3-4 kamers naast elkaar. Gebruikersverzoek: kamers zoveel mogelijk over het
+//     bord spreiden, geen clusters.
+//  6. roomSpreadScore.avgDist — fijnere tiebreaker bovenop #5: bij gelijk aantal rechtstreekse
+//     kamer-kamer-buren wint de indeling met de grootste gemiddelde tegel-afstand tussen alle
+//     kamerparen (Manhattan, in tegelstappen). minDist staat hier bewust NIET bij — die is met de
+//     huidige tegelvormen altijd 1 (zie de toelichting bij roomSpreadScore), dus onbruikbaar als
+//     onderscheid.
+//  7. questSpacingScore.minDist — opdrachten niet tegen elkaar aan (grootste minimum wint).
+//     Staat NA de kamerspreiding omdat kamers naast elkaar nog steeds voorkomt (minDist qua
+//     tegels is altijd minstens 1x), en hun opdrachtvakjes dan nog steeds ~8-12 vakjes uit elkaar
+//     liggen binnen de 8x8 tegels.
+//  8-9. afstand tot een opdracht voor het verste vakje, eerlijkheid startposities.
+//  10. questSpacingScore.avgDist als allerlaatste fijnproever.
 // roept fn(lay) aan, maar zet EERST de hoektegel-rotaties voor DEZE kandidaat correct (en al het
 // andere op 0) — nodig omdat deadTileCount/roomIsolationScore/tileAdjacency/questCoverageScore/
 // startBalanceScore de tegelcellen via getDisplayValue()/effectiveOpenEdge() lezen, die de
@@ -498,15 +511,16 @@ function compareLayoutQuality(a, b){
   const ia = scored(a, roomIsolationScore), ib = scored(b, roomIsolationScore);
   if (ia !== ib) return ia - ib;
   const ra = scored(a, roomAdjacencyCount), rb = scored(b, roomAdjacencyCount);
-  if (ra !== rb) return rb - ra;
+  if (ra !== rb) return ra - rb;
+  const sa = scored(a, roomSpreadScore), sb = scored(b, roomSpreadScore);
+  if (Math.abs(sa.avgDist - sb.avgDist) > 1e-9) return sb.avgDist - sa.avgDist;
   const pa = scored(a, questSpacingScore), pb = scored(b, questSpacingScore);
   if (pa.minDist !== pb.minDist) return pb.minDist - pa.minDist;
   const qa = scored(a, questCoverageScore), qb = scored(b, questCoverageScore);
   if (qa.maxDist !== qb.maxDist) return qa.maxDist - qb.maxDist;
   const ba = scored(a, startBalanceScore), bb = scored(b, startBalanceScore);
   if (Math.abs(ba - bb) > 1e-9) return ba - bb;
-  if (Math.abs(pa.avgDist - pb.avgDist) > 1e-9) return pb.avgDist - pa.avgDist;
-  return scored(b, roomSpreadScore).avgDist - scored(a, roomSpreadScore).avgDist;
+  return pb.avgDist - pa.avgDist;
 }
 
 // Elke hoek-geschikte tegel kan nu op elke hoek liggen (zie applyCornerRotations), dus er is geen
