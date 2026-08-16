@@ -619,6 +619,13 @@ Check minimaal:
     het seed-invoerveld op "Kaart maken") gewoon blijven werken zoals normaal. Roept
     dezelfde `soloHandleMoveClick()` aan als een klik — dus ook hier gelden geen-U-turn
     en bezette vakjes gewoon.
+    **Gevonden en gefixt — de pagina scrolde soms toch mee** (gebruikersmelding).
+    Oorzaak: `preventDefault()` stond ná de legale-zet-check, dus een pijltje in een
+    richting die op dat moment niet mag (muur, U-turn) deed niets in het spel maar
+    kreeg wél nog het standaard scrolgedrag van de browser. Fix: `preventDefault()`
+    staat nu meteen zodra je in `soloPhase === 'moving'` zit en niet in een invoerveld
+    typt — vóór de legale-zet-check, dus ook een ongeldige richting scrollt de pagina
+    niet meer.
   - **Layout: bord links, navigator + speler-/beurtinfo vast rechts ernaast**
     (gebruikersverzoek: "als je op dobbelen klikt, verschuift de hele tabel
     continu"). Vóór deze wijziging stonden dobbelstenen/doel, standenlijst,

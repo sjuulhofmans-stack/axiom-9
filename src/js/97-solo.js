@@ -570,9 +570,12 @@ document.addEventListener('keydown', (e) => {
   if (dir === undefined || soloPhase !== 'moving') return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  // preventDefault() moet hier al staan, ook als deze richting (nog) niet legaal is (muur,
+  // U-turn) — anders scrollt de pagina alsnog mee zodra je tijdens het lopen een pijltje indrukt
+  // dat toevallig geen geldige zet oplevert (gebruikersmelding: "de pagina scrollt mee").
+  e.preventDefault();
   const match = soloCurrentLegalMoves.find(l => l.dir === dir);
   if (!match) return;
-  e.preventDefault();
   soloHandleMoveClick(match.key);
 });
 
