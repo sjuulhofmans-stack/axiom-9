@@ -622,10 +622,16 @@ Check minimaal:
     **Gevonden en gefixt — de pagina scrolde soms toch mee** (gebruikersmelding).
     Oorzaak: `preventDefault()` stond ná de legale-zet-check, dus een pijltje in een
     richting die op dat moment niet mag (muur, U-turn) deed niets in het spel maar
-    kreeg wél nog het standaard scrolgedrag van de browser. Fix: `preventDefault()`
-    staat nu meteen zodra je in `soloPhase === 'moving'` zit en niet in een invoerveld
-    typt — vóór de legale-zet-check, dus ook een ongeldige richting scrollt de pagina
-    niet meer.
+    kreeg wél nog het standaard scrolgedrag van de browser. Eerste fix: `preventDefault()`
+    meteen zodra je in `soloPhase === 'moving'` zit en niet in een invoerveld typt —
+    vóór de legale-zet-check, dus ook een ongeldige richting scrollt de pagina niet
+    meer. **Vervolgmelding: nog steeds mee als je klaar bent met je zetten en dan
+    weer op een pijltje drukt.** Oorzaak: die eerste fix blokkeerde alleen tijdens
+    `soloPhase === 'moving'` zelf — zodra de laatste stap van de beurt gezet is,
+    schuift de fase door naar bv. `choose-action` voor de volgende beurt, en dan
+    greep de blokkade niet meer in. Fix: blokkeer nu de HELE actieve beurt (elke
+    fase behalve `idle`/`game-over`), niet alleen `moving` — de daadwerkelijke zet
+    blijft uiteraard wel beperkt tot `moving`.
   - **Layout: bord links, navigator + speler-/beurtinfo vast rechts ernaast**
     (gebruikersverzoek: "als je op dobbelen klikt, verschuift de hele tabel
     continu"). Vóór deze wijziging stonden dobbelstenen/doel, standenlijst,

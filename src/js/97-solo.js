@@ -567,13 +567,15 @@ if (walkDirPadEl){
 const SOLO_ARROW_DIR = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };
 document.addEventListener('keydown', (e) => {
   const dir = SOLO_ARROW_DIR[e.key];
-  if (dir === undefined || soloPhase !== 'moving') return;
+  // Blokkeer scrollen tijdens de HELE actieve beurt (elke fase behalve 'idle'/'game-over'), niet
+  // alleen tijdens 'moving' zelf — anders scrolt de pagina alsnog zodra je klaar bent met lopen
+  // en een pijltje indrukt terwijl de fase net is doorgeschoven naar bv. 'choose-action' voor de
+  // volgende beurt (gebruikersmelding: "als je klaar bent met je zetten scrollt de pagina").
+  if (dir === undefined || soloPhase === 'idle' || soloPhase === 'game-over') return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  // preventDefault() moet hier al staan, ook als deze richting (nog) niet legaal is (muur,
-  // U-turn) — anders scrollt de pagina alsnog mee zodra je tijdens het lopen een pijltje indrukt
-  // dat toevallig geen geldige zet oplevert (gebruikersmelding: "de pagina scrollt mee").
   e.preventDefault();
+  if (soloPhase !== 'moving') return;
   const match = soloCurrentLegalMoves.find(l => l.dir === dir);
   if (!match) return;
   soloHandleMoveClick(match.key);
