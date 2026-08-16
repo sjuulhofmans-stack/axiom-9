@@ -165,6 +165,10 @@ function setWalkMode(mode){
   if (walkSoloControlsEl) walkSoloControlsEl.hidden = isAuto;
   if (walkSoloSetupEl) walkSoloSetupEl.hidden = isAuto;
   if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = true;
+  // De navigator is alleen relevant in "Zelf spelen" — maar BINNEN die modus blijft hij nu de
+  // hele partij zichtbaar (zie soloHideDirPad hierboven), dus dit is de enige plek die 'm nog
+  // echt uit de layout haalt.
+  if (walkDirPadEl) walkDirPadEl.hidden = isAuto;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
   if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
@@ -525,7 +529,6 @@ function renderSoloDicePending(){
 function soloRenderDirPad(legal){
   if (!walkDirPadEl) return;
   soloCurrentLegalMoves = legal;
-  walkDirPadEl.hidden = false;
   const legalDirs = new Set(legal.map(l => l.dir));
   for (const btn of walkDirPadEl.querySelectorAll('button[data-dir]')){
     btn.disabled = !legalDirs.has(parseInt(btn.dataset.dir, 10));
@@ -533,9 +536,18 @@ function soloRenderDirPad(legal){
   if (walkStepDoneEl) walkStepDoneEl.textContent = soloMove.path.length - 1;
   if (walkStepLeftEl) walkStepLeftEl.textContent = soloMove.stepsLeft;
 }
+// De navigator zelf blijft nu de HELE partij zichtbaar (zie setWalkMode: alleen de modus,
+// niet de beurtfase, bepaalt of hij getoond wordt) — "verbergen" buiten je eigen zet betekent
+// nu alleen nog de knoppen uitschakelen en de teller op een placeholder zetten, niet meer het
+// hele blok uit de layout halen. Zonder dit sprong het infopaneel eronder elke beurt een stukje
+// omhoog/omlaag zodra het navigatorblok verscheen/verdween (gebruikersmelding: "het menu rechts
+// schiet continu heen en weer").
 function soloHideDirPad(){
-  if (walkDirPadEl) walkDirPadEl.hidden = true;
   soloCurrentLegalMoves = [];
+  if (!walkDirPadEl) return;
+  for (const btn of walkDirPadEl.querySelectorAll('button[data-dir]')) btn.disabled = true;
+  if (walkStepDoneEl) walkStepDoneEl.textContent = '–';
+  if (walkStepLeftEl) walkStepLeftEl.textContent = '–';
 }
 if (walkDirPadEl){
   walkDirPadEl.addEventListener('click', (e) => {

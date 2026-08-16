@@ -21,6 +21,14 @@
     --slot-empty:#0e1319;
   }
   *{box-sizing:border-box;}
+  /* zonder dit reserveert de browser de verticale scrollbalk pas zodra de pagina daadwerkelijk
+     te lang wordt om te passen — en tijdens "Stap voor stap" wisselt de paginahoogte voortdurend
+     (actiepaneel dat verschijnt/verdwijnt, richtingskruis aan/uit, log dat groeit), waardoor de
+     balk er continu bij komt en weer weggaat. Elke keer dat dat gebeurt verschuift de hele pagina
+     ~15px naar links/rechts (gebruikersmelding: "het menu rechts schiet continu van links naar
+     rechts"), óók de vaste 300px-zijkolom met de navigator en de dobbelknop. `scrollbar-gutter:
+     stable` reserveert die ruimte altijd, scrollbalk of niet, dus die horizontale sprong is weg. */
+  html{scrollbar-gutter: stable;}
   html,body{margin:0;padding:0; overflow-x:hidden;}
   body{
     background:
@@ -377,6 +385,7 @@
     display:flex; flex-direction:column; gap:12px;
     background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:14px;
     min-height:440px; max-height:min(680px, calc(100vh - 220px)); overflow-y:auto;
+    scrollbar-gutter: stable;
   }
   @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
   /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
@@ -387,6 +396,16 @@
      te kappen: bij een lange strategienaam ("Herprioritering") paste er anders geen "0/6" meer. */
   .walk-info-panel .walk-score{flex-direction:column;}
   .walk-info-panel .walk-player{flex:none; width:100%; min-width:0; flex-wrap:wrap; row-gap:4px;}
+  /* Vrij laten wrappen gaf een wisselende rijhoogte (1, 2 of 3 regels, afhankelijk van hoe lang
+     de strategienaam toevallig is en of er kaartbadges bij staan) — en dat liet de dobbelknop
+     eronder toch nog een paar pixels op en neer springen bij elke beurt (gebruikersmelding: "de
+     knop met het dobbelen"). Een geforceerde flex-basis:100%-break op één specifiek kind bleek
+     averechts te werken (die neemt dan zelf de HELE regel in beslag i.p.v. alleen een nieuwe
+     regel te starten, met een extra 3e regel tot gevolg). Simpeler en robuuster: een vaste
+     `min-height` die het slechtste geval (2 kaartbadges + de langste strategienaam) al dekt —
+     kortere inhoud laat dan gewoon wat lege ruimte staan, maar de rijhoogte zelf verandert nooit
+     meer per beurt. 80px is gemeten met alle 4 strategienamen + 2 kaarten tegelijk. */
+  .walk-info-panel .walk-player{min-height:80px;}
 
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -421,6 +440,12 @@
     font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
     display:flex; flex-direction:column; gap:3px; line-height:1.5;
   }
+  /* de derde regel ("Voltooid: X/6 · nog Y stap(pen)") is alleen tijdens het lopen langer (het
+     "· nog Y stap(pen)"-stuk komt erbij) — in de smalle 300px-kolom is dat precies genoeg om
+     die regel soms wél, soms niet te laten wrappen naar een extra regel. Dat verklaarde het
+     laatste stukje restdrift van de dobbelknop eronder (99px vs. 117px, gemeten). Vaste
+     min-height = altijd het 2-regel-geval alvast gereserveerd. */
+  .walk-info-panel .walk-meta{min-height:117px;}
   .walk-meta b{color:var(--text);}
   .walk-meta .goal{color:var(--quest);}
   .walk-active-name{color:var(--pc) !important;}
