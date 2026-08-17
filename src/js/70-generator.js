@@ -37,7 +37,21 @@ function layoutIsConnected(lay){
 // slotOpenDir i.p.v. OPEN_EDGES_STATIC rechtstreeks, zodat een hoek-geschikte tegel op ELKE hoek
 // klopt — welke exacte rotatie dat straks wordt, maakt de zoektocht zelf niet uit (zie
 // applyCornerRotations in 10-rules.js, die dat pas ná het vinden van een geldige indeling regelt).
-function attemptSeamlessLayout(rand, stepBudget){
+//
+// `roomColorPref` (0 of 1) stuurt de VOLGORDE waarin tegels per positie geprobeerd worden: op een
+// schaakbordveld van die kleur eerst de kamertegels, op de andere kleur eerst de gangen. Waarom
+// een schaakbord? Het bord is 4x5 = 10 velden van elke kleur en er zijn precies 10 kamers, dus
+// "alle kamers op één kleur" is exact de indeling waarin geen enkele kamer aan een andere grenst.
+// Helemaal halen kan niet (tegel 1 en 16 zijn gangen die op verschillende kleuren vastliggen —
+// zie de toelichting bij roomSpreadScore), maar eromheen zoeken scheelt enorm.
+//
+// Cruciaal: dit is puur een volgorde, geen filter. Elke kandidaat wordt nog steeds geprobeerd als
+// de voorkeursvolgorde niet uitkomt, dus de zoektocht blijft compleet en vindt nog steeds elke
+// geldige indeling die hij eerst ook vond — alleen kómt hij nu meestal eerst een gespreide tegen.
+// Dat is nodig omdat achteraf de minst geklonterde kandidaat kiezen (compareLayoutQuality) te
+// weinig deed: gemeten bleef de slechtste uitschieter op 9 van de 10 kamers tegen elkaar, simpelweg
+// omdat álle 60 kandidaten in de pool al even sterk geklonterd waren.
+function attemptSeamlessLayout(rand, stepBudget, roomColorPref){
   const SOLVE_ORDER = solveOrder();
   const lay = new Array(20).fill(null);
   const usedTiles = new Set();
@@ -55,13 +69,23 @@ function attemptSeamlessLayout(rand, stepBudget){
     for (let i=a.length-1; i>0; i--){ const j=Math.floor(rand()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
     return a;
   }
+  // kandidaten die bij de schaakbordkleur van deze positie passen eerst, de rest daarna —
+  // binnen elke groep nog steeds willekeurig, zodat dezelfde seed gevarieerde borden blijft geven
+  function orderedCandidates(arr, slotIdx){
+    if (roomColorPref !== 0 && roomColorPref !== 1) return shuffled(arr);
+    const [row, col] = [Math.floor(slotIdx/TILE_COLS), slotIdx%TILE_COLS];
+    const wantRoom = ((row + col) % 2) === roomColorPref;
+    const fits = [], rest = [];
+    for (const t of arr) (!!ROOM_NAMES[t] === wantRoom ? fits : rest).push(t);
+    return shuffled(fits).concat(shuffled(rest));
+  }
   function backtrack(i){
     steps++;
     if (steps > stepBudget) return false;
     if (i === SOLVE_ORDER.length) return true;
     const slotIdx = SOLVE_ORDER[i];
     const candidates = ALLOWED_TILES[slotIdx].filter(t => !usedTiles.has(t));
-    for (const tid of shuffled(candidates)){
+    for (const tid of orderedCandidates(candidates, slotIdx)){
       if (consistent(slotIdx, tid)){
         lay[slotIdx] = tid; usedTiles.add(tid);
         if (backtrack(i+1)) return true;
@@ -150,12 +174,14 @@ function roomsBehindBridges(lay){
 // Werkt op de ONGEDRAAIDE brondata (net als de rest van de generator); een puntspiegeling
 // achteraf verandert onderlinge afstanden niet, dus scoren vóór applyRandomBoardFlip is prima.
 //
-// Let op over minDist: tegel 1 staat altijd op een "even" hoek (A) en tegel 16 altijd op een
-// "oneven" hoek (P) (schaakbordkleur van de slotpositie, (rij+kolom)%2). Twee gangtegels op
-// verschillende kleuren betekent dat de 10 kamers NOOIT allebei op één kleur kunnen zitten —
-// en dus staat er altijd minstens één kamerpaar naast elkaar. Met de huidige tegelset is
-// minDist dus wiskundig altijd 1; hij blijft toch als eerste criterium staan omdat dat verandert
-// zodra iemand via de tegel-editor de deuren van tegel 1/16 anders tekent.
+// Let op over minDist: hier stond ooit dat minDist wiskundig ALTIJD 1 moest zijn, omdat tegel 1
+// vastzat op hoek A ("even" schaakbordveld, (rij+kolom)%2) en tegel 16 op hoek P ("oneven") —
+// twee gangen op verschillende kleuren, dus konden de 10 kamers nooit samen op één kleur en
+// grensde er altijd minstens één kamerpaar aan elkaar. Dat klopt niet meer sinds hoek-geschikte
+// tegels via rotatie op ELKE hoek passen (applyCornerRotations in 10-rules.js): beide gangen
+// kunnen nu op dezelfde kleur, en dan past het volledige schaakbord met alle 10 kamers op de
+// andere kleur. Gemeten: die indelingen komen er nu daadwerkelijk uit (roomAdjacencyCount 0,
+// een perfect R.R.R / .R.R. -patroon), zie de kleurvoorkeur in attemptSeamlessLayout.
 function slotRC(idx){ return [Math.floor(idx/TILE_COLS), idx % TILE_COLS]; }
 
 // hoe verder kamertegels onderling uit elkaar liggen (in tegel-stappen), hoe minder ze klonteren
@@ -573,7 +599,9 @@ function constrainedShuffleAsync(seedStr, onProgress){
       while (attempt < MAX_ATTEMPTS && candidates.length < CANDIDATE_POOL){
         const attemptSeed = Math.floor(masterRand() * 4294967296) ^ (attempt * 0x9E3779B1);
         const rand = mulberry32(attemptSeed);
-        const lay = attemptSeamlessLayout(rand, STEP_BUDGET);
+        // om en om de andere schaakbordkleur als "kamerkleur" proberen: allebei de kleuren geven
+        // heel andere indelingen, en zo staat de pool niet vol met varianten van hetzelfde bord
+        const lay = attemptSeamlessLayout(rand, STEP_BUDGET, attempt % 2);
         attempt++;
         if (lay){
           if (layoutIsConnected(lay)) candidates.push(lay);
