@@ -35,7 +35,8 @@ src/
     80-controls.js    knoppen: seed, dobbelsteen, herstel, draaien, download, legenda
     90-editor.js      tegel-editor (vakjes aan/uit klikken)
     95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren)
-    96-walk.js        stap-voor-stap: 1 speler zichtbaar over het bord, eigen tabblad
+    96-walk.js        stap-voor-stap "automatisch": 1-4 bot-spelers zichtbaar over het bord
+    97-solo.js        stap-voor-stap "zelf spelen": jij dobbelt/loopt/speelt kaarten zelf
 build.py              plakt alles tot dist/axiom9.html
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
 ```
@@ -58,31 +59,123 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pion, tempo)     | `96-walk.js`          |
+| iets aan "stap voor stap" automatisch (pionnen, tempo, pauze, aantal spelers) | `96-walk.js` |
+| iets aan "stap voor stap" zelf spelen (jouw acties, klikbare vakjes)   | `97-solo.js` |
 
 ## Spelregels die in de code zitten
 
 - Beweging is **horizontaal/verticaal**, nooit diagonaal.
 - Een zijde van een tegel is een **doorgang** als beide deurvakjes gevuld zijn.
   Deurvakjes: N=(0,3)(0,4), Z=(7,3)(7,4), W=(3,0)(4,0), O=(3,7)(4,7).
-- Op een **hoekpositie** (A, E, P, T) mag geen doorgang het bord af wijzen.
-  Daardoor passen tegel 1 en 16 alleen op A en P; E en T kunnen 10/5 resp. 20/5 zijn.
-- **4-weg kruisingen** (tegels 7, 8, 9, 13) liggen altijd binnenin op G/H/I/L/M/N.
+- Op een **hoekpositie** (A, E, P, T) mag geen doorgang het bord af wijzen. Alleen een tegel
+  met precies 2 open zijden die ook nog eens NAAST elkaar liggen (een L-vorm) kan ooit op een
+  hoek terechtkomen (`isCornerCapable` in `10-rules.js`) — daarom kunnen 4-weg tegels (alle
+  zijden open) hier NOOIT liggen, en een rechtdoor-tegel (2 open zijden tegenover elkaar) ook
+  niet, hoe je 'm ook draait. Met de huidige tegelset zijn dat tegel 1, 5, 16, 20 (4 stuks).
+  **Hoek-tegels roteren nu individueel om overal te passen** (`applyCornerRotations`/
+  `requiredCornerRotation` in 10-rules.js): vroeger had elke hoek maar 1-2 vaste kandidaten,
+  puur omdat de generator alleen de ONGEDRAAIDE tegelvorm gebruikte. Nu wordt elke hoek-geschikte
+  tegel gewoon 0/90/180/270° gedraaid tot hij past, dus alle 4 kunnen op alle 4 de hoeken
+  terechtkomen. Gemeten over 150 indelingen: elke hoek zag alle 4 tegels langskomen (roughly
+  25-35% elk), alle 4 rotatiestanden worden echt gebruikt, en geen enkele plaatsing had ooit een
+  doorgang het bord af — dood-vrij bleef 100%, kamer-kamer deuren gemiddeld 7,33 (vergelijkbaar
+  met vóór deze wijziging).
+  **Waarom dit niet dezelfde rotatie-vervuilingsbug herintroduceert**: deadTileCount e.a. lezen
+  nog steeds via de GLOBALE `tileRotation`, en nu is er ECHT per kandidaat een andere rotatie
+  nodig (niet meer alleen 0 of 180 voor het HELE bord tegelijk). Vandaar `scored(lay, fn)` in
+  `70-generator.js`: die roept `applyCornerRotations(lay)` ALTIJD vlak vóór een rotatie-
+  afhankelijke meting aan, per kandidaat, i.p.v. één keer bovenaan `constrainedShuffle()` te
+  resetten (dat werkte toen omdat er toen maar 2 rotatiestanden voor het HELE bord bestonden;
+  nu verschilt de juiste rotatie per hoekslot en per kandidaat). `applyRandomBoardFlip()` (de
+  180°-muntworp) is aangepast om 180° OP TE TELLEN bij de al gezette hoekrotatie in plaats van
+  'm te overschrijven, anders ging de net berekende hoekrotatie bij de helft van de klikken
+  alsnog verloren.
+- **4-weg kruisingen**: geen vaste regel voor WAAR ze mogen liggen (`DEG4_TILES` in
+  `10-rules.js` is bewust ongebruikte data, zie de "Niet doen"-notitie verderop) — wél een vaste
+  eigenschap van de tegelSET welke tegels dat kunnen zijn. Was tegel 7, 8, 9, 13, 17 (5 stuks);
+  sinds de tegel-10/11-wijziging hieronder ook 10 en 11 (7 stuks in totaal).
+- **Tegel 10 en 11 omgebouwd naar 4-weg** (was: 10 had alleen Z/W, 11 had N/Z/O). Doel: meer
+  kruispunten voor een strakker/beter verbonden bord (gebruikersverzoek). Vorm: de ontbrekende
+  zijden zijn als natuurlijke verlenging van de bestaande vorm toegevoegd (tegel 10: N+O erbij,
+  29 vakjes i.p.v. 17; tegel 11: alleen W erbij, 31 vakjes i.p.v. 27) — geen kopie van de
+  bestaande kruispunt-tegels 9/13, dus ze behouden hun eigen vorm/karakter. Gemeten effect over
+  150 indelingen: dood-vrij 97,7% → **100%**, kamer-kamer deuren gemiddeld 6,86 → **7,51**,
+  kamers met een kamerbuur 88,7% → **95,1%** — meer kruispunten geeft de backtracking-solver
+  meer speelruimte om alles strak aan te sluiten. Dit haalde tegel 10 tijdelijk uit de
+  hoek-kandidatenpool (een 4-weg tegel kan nooit op een hoek), maar de rotatie-wijziging
+  hierboven lost dat weer op: hoek E/P zijn niet meer aan specifieke tegels gebonden.
 - Tegel **8** (Hibernatie) bevat de vier startposities 3.1–3.4 en hoort ook binnenin.
   Als enige kamertegel heeft hij bewust **geen** opdrachtvakje — de tegel-editor
   staat dat uitzonderlijk toe (zie `tileValidationIssues` in `90-editor.js`).
+- Tegel-editor, opdrachtgereedschap (`paintCell` in `90-editor.js`): een opdrachtlabel kan
+  alleen over een AL LOOPBAAR vakje gelegd worden (of over een vakje dat al opdracht is, om
+  het label te wisselen) — nooit op een lege/onbenutte sjabloonplek. Vroeger kon dat wel, en
+  dan werd de tegelvorm ongemerkt uitgebreid met dat vakje; verplaatste je het label daarna
+  naar een andere plek, dan viel de oude plek altijd terug op "loopbaar" (1) in plaats van
+  weer leeg, ook als hij dat origineel nooit was geweest. Nu is elk vakje dat ooit een
+  opdrachtlabel droeg per definitie al loopbaar geweest, dus dat terugvallen op "loopbaar" bij
+  het verplaatsen klopt nu altijd.
 - De generator zoekt een indeling **zonder doodlopende naden** en waarbij alle
   20 tegels met elkaar verbonden zijn. Kandidaten (pool van 20) worden daarna
-  gerangschikt op (1) `deadTileCount`; (2) kamers achter een wurgpunt;
-  (3) `roomIsolationScore` — hoeveel gangen je hoogstens moet passeren van een
-  kamer naar de dichtstbijzijnde andere kamer; (4) `questSpacingScore.minDist` —
-  kortste loopafstand tussen twee opdrachtvakjes, zo groot mogelijk;
-  (5) `questCoverageScore`; (6) eerlijkheid startposities. Zie `70-generator.js`.
+  gerangschikt op (1) `deadTileCount`; (2) `minTileBetweenness` — de zwakste
+  tegel z'n steun boven 0 optrekken (zie hieronder); (3) kamers achter een
+  wurgpunt; (4) `roomIsolationScore` — hoeveel gangen je hoogstens moet
+  passeren van een kamer naar de dichtstbijzijnde andere kamer;
+  (5) `roomAdjacencyCount` — bij gelijke `roomIsolationScore` alsnog zoveel
+  mogelijk kamers die ECHT rechtstreeks aan een andere kamer grenzen
+  (`roomIsolationScore` let alleen op het slechtste geval, dus twee
+  kandidaten kunnen daar allebei op 0 staan terwijl de een veel meer
+  kamer-kamer deuren heeft); (6) `questSpacingScore.minDist` — kortste
+  loopafstand tussen twee opdrachtvakjes, zo groot mogelijk; (7) `questCoverageScore`;
+  (8) eerlijkheid startposities. Zie `70-generator.js`.
   **Waarom `deadTileCount` bovenaan staat:** "dicht bij een opdracht" bleek niet
   genoeg — een buitenrand-lus kan 5 stappen van een opdracht liggen en toch 0
   bezoeken krijgen, omdat spelers alleen van opdracht naar opdracht reizen. De
   test is gevalideerd tegen de simulatie: hij wees exact de tegels aan die 0–17
   bezoeken kregen terwijl de rest er 4000+ had.
+  **`deadTileCount === 0` bleek niet genoeg voor de hoek-gangen — `minTileBetweenness`
+  toegevoegd.** `deadTileCount` telt een tegel als "niet dood" zodra ÉÉN van de 78
+  mogelijke opdracht/start-paren er zijn kortste pad doorheen legt — maar tegel 1 en
+  16 (moeten altijd op een hoek liggen, mogen NOOIT een opdracht dragen) haalden dat
+  vaak met precies 1 zo'n paar, en kregen in de simulatie dan ook maar 0,2-0,6%
+  van het verkeer terwijl `deadTileCount` ze prima vond. `tileBetweennessCounts(lay)`
+  telt nu per tegel het AANTAL paren i.p.v. alleen dood/niet-dood, en
+  `minTileBetweenness(lay)` = de zwakste tegel z'n telling — hoe hoger, hoe meer marge
+  boven 0. Toegevoegd als criterium #2, direct na `deadTileCount`.
+  Geanalyseerd over 100 indelingen: gemiddelde `minTileBetweenness` 13,9 → **31,2**
+  (bijna verdubbeld), en de laagste hoek-telling specifiek 15,0 → **33,9**.
+  **Eerlijk over het effect op de ECHTE simulatie** (8 seeds × 3000 potjes, vóór/na
+  vergeleken): het hoek-verkeer ging gemiddeld maar licht omhoog (3,31% → 3,67%) en
+  bij meerdere seeds veranderde er nauwelijks iets — de analytische score verbeterde
+  dus veel sterker dan het werkelijke speelgedrag. Reden: `minTileBetweenness` meet
+  kortste-pad-telling tussen abstracte punten, niet de stochastische AI-realiteit
+  (welk specifiek label toevallig waar staat, energie-acties, blokkades). Wél een
+  reële winst in het slechtste geval (laagst geziene hoek-percentage 0,05% → 0,22%,
+  ruim 4×) en geen enkele regressie (dood-vrij bleef 100% over alle testen). Blijft
+  ook een **structurele** grens: tegel 1 en 16 zijn en blijven de kleinste,
+  opdrachtloze, aan-de-rand-geforceerde tegels van de hele set.
+  **Kandidatenpool vergroot naar 60 (was 20) — `constrainedShuffleAsync`.** Gemeten
+  (gebruikersverzoek) over 40 indelingen per poolgrootte: pool 20 → 40 → 60 → 100 geeft
+  gemiddelde `minTileBetweenness` 34,8 → 43,5 → 47,9 → 60,7 en laagste hoek-telling
+  39,4 → 48,7 → 53,1 → 71,4, tegen ~660ms → 1,35s → 2,0s → 3,5s per klik. Rendement per
+  seconde neemt af naarmate de pool groeit, maar de absolute winst blijft oplopen; 60
+  is de gekozen balans (+35-37% t.o.v. pool 20, ~2s per klik). `MAX_ATTEMPTS` schaalt
+  evenredig mee (240, was 80 — zelfde verhouding van ~4 pogingen per gewenste kandidaat).
+  Bij pool 60 zou een blokkerende versie de pagina zichtbaar laten bevriezen, dus
+  `constrainedShuffle` is omgebouwd naar `constrainedShuffleAsync(seedStr, onProgress)`:
+  een Promise die in brokken van 30ms rekent en na elk brok `onProgress(gevonden, doel,
+  poging, maxPogingen)` aanroept — exact hetzelfde patroon als `runSimulationBatch` in
+  `95-simulate.js`. `applyGeneratedLayout` (`80-controls.js`) toont daarbij een
+  voortgangsbalk (`#genProgress`, hergebruikt de `.sim-progress`-CSS) en schakelt
+  `btnShuffle`/`btnDice` uit tijdens het rekenen. Dezelfde `simRunId`-staleness-guard als
+  bij de simulatie beschermt tegen een race: `clearSimResults()` (aangeroepen door ELKE
+  bordwijziging — slepen, draaien, herstellen, tegel-editor) verhoogt `simRunId` en roept
+  nu ook `hideGenProgress()` aan, zodat de balk direct verdwijnt als het bord op een
+  ANDERE manier verandert terwijl er nog gegenereerd wordt; `applyGeneratedLayout` checkt
+  bij het teruggeven van de Promise of `simRunId` nog hetzelfde is voordat hij het
+  resultaat toepast, anders wordt het stilzwijgend weggegooid. Getest: een "Herstel
+  origineel"-klik tijdens een lopende generatie reset de balk/knoppen meteen en wordt
+  niet alsnog overschreven zodra de verouderde generatie later terugkomt.
   **Niet doen — 4-weg-tegels verplicht binnenin.** Klinkt logisch (meer grid),
   maar is gemeten over 248 indelingen en pakt averechts uit: gemiddeld 4,0-4,4
   dode tegels i.p.v. 2,6-2,9, en het aandeel indelingen zónder dode tegel zakt
@@ -91,32 +184,815 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   over en dat is precies de gangenlus waar niemand komt. Twee ervan (7
   Serverruimte, 17 Kernreactor) dragen bovendien een opdracht, dus centraal
   vastzetten haalt de reden weg om naar buiten te lopen.
+  **Gevonden en gefixt — rotatie-vervuiling in `constrainedShuffle`.** De echte
+  boosdoener achter de dode-tegel-klachten bleek geen tegelplaatsing te zijn,
+  maar een globale-state-bug: `deadTileCount`/`startBalanceScore`/
+  `questCoverageScore` lezen tegelcellen via `getDisplayValue()`, dat de
+  GLOBALE `tileRotation` volgt. `applyRandomBoardFlip()` laat die global aan
+  het eind van elke `constrainedShuffle()`-aanroep op overal-0 of overal-180
+  staan (muntworp, zie hieronder), en handmatig een tegel draaien in de editor
+  zet 'm ook. `attemptSeamlessLayout()` bouwt nieuwe kandidaten echter altíjd
+  met de ongedraaide brondata — zonder reset werd de hele volgende
+  scoringsronde dus zo'n **helft van de tijd** uitgevoerd tegen de verkeerde
+  rotatie. Gemeten: het "beste" kandidaat in een pool leek dan `deadTileCount`
+  6–11 te hebben, terwijl diezelfde pool schoon gescoord gewoon een
+  dood-vrije (0) kandidaat bevatte — de generator koos zo effectief willekeurig
+  in plaats van de echte beste indeling, op elke klik die volgde op een
+  geflipt bord. Fix: `resetRotations()` als allereerste regel in
+  `constrainedShuffle()`. Effect over 300 gegenereerde indelingen: dood-vrij
+  64,3% → 97,7%, gemiddeld aantal dode tegels 0,86 → 0,03. Dit verklaart ook
+  meteen waarom "4-weg-tegels op de buitenring" geen echte oorzaak is: na de
+  fix is `deadTileCount` vlak (0,00–0,05) ongeacht hoeveel 4-weg-tegels op de
+  buitenring liggen — dus **niet** opnieuw proberen ze naar binnen te dwingen,
+  dat is het hierboven al afgeraden experiment.
+  **Kamers spreiden — schaakbord-voorkeur bij het bouwen.** Kamers klonterden
+  samen (gemiddeld 5,9 kamerparen rechtstreeks tegen elkaar, uitschieters tot 9;
+  in de praktijk blokken van 3-4 kamers op een rij). Alleen de rangschikking
+  omdraaien hielp niet — in 95% van de gevallen koos hij dezelfde indeling,
+  omdat álle 60 kandidaten in de pool al even sterk geklonterd waren. Wat wél
+  werkt is sturen bij de **opbouw**: `attemptSeamlessLayout` krijgt een
+  `roomColorPref` mee en probeert per positie eerst de tegelsoort die volgens
+  het schaakbordpatroon op dat veld hoort. Het bord is 4×5 = 10 velden per
+  kleur en er zijn precies 10 kamers, dus dat patroon is exact de indeling
+  zonder enkele kamer-kamer-grens. Let op: dit is een **volgorde, geen filter**
+  — elke kandidaat wordt nog steeds geprobeerd, dus de zoektocht blijft
+  compleet. Gemeten over 250 indelingen (origineel vs. nieuw, één proces):
+  kamerparen 5,88 → 2,15 gemiddeld, maximum 9 → 4, het aandeel met ≥6 paren
+  0% (was 58,8%), en 26% haalt nu een perfect schaakbord (0 paren). Dode tegels
+  bleven 0,000 (100% van de indelingen dode-tegel-vrij, ongewijzigd), wurgpunten
+  0,000, `minTileBetweenness` 47,2 → 46,8 (verwaarloosbaar), opdrachtafstand
+  8,7 → 11,4 (beter), en het zoeken werd niet trager (164 → 152 pogingen).
+  Enige lichte achteruitgang: `startBalanceScore` 0,589 → 0,628 — criterium 9,
+  dus laag gewicht.
+  **Meetvalkuil bij dit soort tests:** meet een kandidaat altijd vóór
+  `applyRandomBoardFlip`, of laat de rotaties met rust. Meet je ná de
+  spiegeling en roep je dan `applyCornerRotations` aan, dan worden alle
+  niet-hoektegels op 0 gezet terwijl een gespiegeld bord 180° nodig heeft — je
+  meet dan een spookbord met kapotte naden (gaf 0,46 "dode tegels" waar het er
+  echt 0 waren). De spiegeling is puntsymmetrisch en verandert geen enkele
+  afstand, dus vóóraf meten is altijd correct én simpeler.
 - Spelsimulatie (`95-simulate.js`): 2×D6 = exact aantal te lopen stappen, geen
   U-turn, bezette vakjes (andere spelers) blokkeren. Uitzondering: land je exact
   op je eigen opdrachtvakje met minder dan de volledige worp, dan stop je daar
   en vervalt de rest. Elke speler heeft een eigen geschud stapeltje opdrachten
   1–9 (labels `2.1`–`2.9`); wie als eerste 6 opdrachten voltooit wint. Draait
   altijd op de indeling die op dat moment in de tool staat.
+- **Er wordt doorgespeeld na de winnaar**, zodat ook plaats 2 en 3 uitgespeeld
+  worden. Wie binnen is stopt met spelen en verdwijnt van het bord — hij
+  blokkeert dus niemand meer. Het potje eindigt zodra `simFinishTarget()`
+  spelers binnen zijn: bij 4 spelers is dat de **nummer 3**, want daarmee is de
+  vierde plaats al beslist en kan die speler niets meer veranderen. De formule
+  is `max(1, aantal spelers - 1)`, zodat "stap voor stap" met 2 of 3 spelers
+  hetzelfde principe volgt. `SIM_MAX_TURNS` staat daarom op 900 (was 500): een
+  potje duurt nu ~115 beurten in plaats van ~90, en die marge houdt het aantal
+  vastgelopen potjes op 0.
+- **Gevonden en gefixt — wie als eerste aan zet was won systematisch vaker.**
+  Gemeten vóór de fix (8000 potjes): 1e aan zet 29,6% winst, 2e 25,9%, 3e 23,9%,
+  4e 20,5% — een verschil van 9,1 procentpunt tussen eerste en laatste, puur
+  door beurtvolgorde. Oorzaak: zodra de eerste speler zijn 6e opdracht haalde,
+  kreeg hij meteen rank 1 en liep het potje door naar de volgende in de
+  beurtvolgorde — maar zodra `finishTarget` bereikt werd (bij 4 spelers de
+  nummer 3), stopte het potje MIDDEN in de ronde, dus een speler die later in
+  de beurtvolgorde zat kon soms zijn beurt die ronde niet eens meer spelen.
+  Fix (gebruikersverzoek): plaatsen worden nu pas toegekend nadat de HELE ronde
+  is afgemaakt — iedereen die nog mag spelen krijgt altijd zijn beurt, ook als
+  er al genoeg spelers binnen zijn voor `finishTarget`. Wie in dezelfde ronde
+  als de winnaar zijn 6e opdracht haalt deelt een gelijke stand: eerst de meeste
+  energie beslist, dan de meeste actiekaarten in de hand, en zijn ook die gelijk
+  dan wordt de plek (en dus eventueel de winst) letterlijk gedeeld tussen de
+  betrokken spelers (`resolveRoundFinishers()` in `95-simulate.js`, gebruikt
+  door zowel de batch als `96-walk.js`). Gemeten ná de fix: 25,1% / 26,5% /
+  24,1% / 24,4% — de 9,1-punts kloof is nagenoeg verdwenen. Getest over 5000
+  potjes: ~5,2% van de potjes bevat een gedeelde plek (meestal 2-weg), en de
+  "gemiddelde plaats"-som per potje bleef in alle 5000 gevallen exact 10 (dus
+  de 2,50-controle in de simulatie-uitslag klopt nog steeds).
+  **Statistieken bij een gedeelde plek**: een tie-groep van k spelers krijgt
+  allemaal dezelfde `rank` (skip-stijl: 1,1,3 bij een 2-weg tie op de 1e plek),
+  en voor eerlijke credit in percentages/gemiddeldes wordt dat verdeeld: elke
+  betrokkene telt voor `1/k` mee in bijvoorbeeld winst% en de kolommen van
+  "Eindklassering per startpositie". Dat reduceert bij een niet-gedeelde plek
+  (verreweg de meeste potjes) gewoon tot de oude 0-of-1-uitkomst — puur een
+  uitbreiding, geen gedragswijziging voor een potje zonder tie. Zie
+  `rankOverlapFraction()`.
+  **Bijwerking op de energie-actie-tabel**: doordat het spel nu tot een echt
+  eerlijke ronde-afsluiting speelt in plaats van eerder af te kappen, verschoven
+  de percentages in "Welke energie-actie wint?" licht: Stuwstoot 32-34% → nu
+  **31,2%**, Herprioritering ~26% → nu **26,8%**, Noodtransport 32-34% → nu
+  **34,2%**, geen energie ~7% → nu **7,9%** (15000 potjes). Volgorde en
+  onderlinge verhouding zijn ongewijzigd, dus check 9 hieronder is bijgewerkt
+  met deze nieuwe cijfers.
+- Stap voor stap (`96-walk.js`) speelt hetzelfde potje met **1 t/m 4 zichtbare
+  spelers** en roept daarvoor dezelfde `resolveMove()` aan als de batch — dus
+  dezelfde U-turn- en blokkeerregels. Bij meerdere spelers is de "bezette
+  vakjes"-set de posities van de andere pionnen, krijgt iedereen een eigen
+  startvakje (willekeurig verdeeld) en wordt de beurtvolgorde geloot, precies
+  zoals in `simulateOneGame()`. Wijkt hier iets af, dan liegt het tabblad over
+  de batch-cijfers — houd de twee dus gelijk.
 
 ## Controleren of het nog werkt
 
 Na een wijziging altijd `python3 build.py` en dan `dist/axiom9.html` openen.
 Check minimaal:
-1. Dobbelsteenknop → melding "strak aaneengesloten, geen doodlopende doorgangen".
+1. Dobbelsteenknop (of "Genereer indeling") → tijdens het rekenen (~2s) een voortgangsbalk
+   ("X / 60 kandidaten...") en uitgeschakelde Genereer-/dobbelsteenknop; erna de melding
+   "strak aaneengesloten, geen doodlopende doorgangen" en de balk weer verdwenen. "Herstel
+   origineel" klikken TERWIJL er nog gegenereerd wordt moet de balk direct laten verdwijnen
+   en mag niet later alsnog overschreven worden door de verouderde generatie.
 2. Onbereikbare vakjes (bv. na een tegel-bewerking) krijgen een roze/magenta rand
    direct op het bord — geen apart paneel, dit is de enige indicatie.
 3. Een tegel selecteren → draaiknoppen gaan per **90°** (niet 180).
 4. Een tegel over een andere slepen → wisselt om, rood kader = niet toegestaan.
 5. Browserconsole moet leeg zijn.
-6. Paneel Simulatie → "Draai simulatie" → 4 startposities laten allemaal winst
-   zien, "vastgelopen potjes" is 0 of bijna 0.
+6. Paneel Simulatie → "Draai simulatie" → een voortgangsbalk met "X / Y potjes
+   (Z%) · verstreken ... · nog ongeveer ..." moet meebewegen (test dit met een
+   groot aantal, bv. 15000, anders is de run te snel voorbij om te zien); de
+   knop moet tijdens het rekenen uitgeschakeld zijn en de balk moet na afloop
+   weer verdwijnen. Wijzig je de indeling (Genereer indeling) terwijl er nog
+   gerekend wordt, dan moet die lopende reeks stilletjes afbreken — de
+   "indeling gewijzigd"-melding mag NIET later alsnog overschreven worden door
+   de verouderde run (`simRunId` in `95-simulate.js` bewaakt dit). 4
+   startposities laten allemaal winst zien, "vastgelopen potjes" is 0 of bijna
+   0. In "Eindklassering per startpositie" moet elke kolom (1e/2e/3e/4e) over
+   de vier startposities optellen tot 100% en de gemiddelde plaats over alle
+   vier precies 2,50 zijn — dat is een rekenkundige controle op de
+   klassering, geen balanstest.
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
-8. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
-   de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
-   Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
-   echt stilzetten (geen achtergrondlus die doorloopt).
+8. Tabblad "Stap voor stap" → "Simulatie starten" → de pionnen lopen zichtbaar,
+   de dobbelstenen rollen, en het potje eindigt met "Speler x wint vanaf 3.y"
+   (of, bij een gelijke stand, "X en Y delen de winst") plus een eindklassering
+   1e t/m 4e; de pion van wie binnen is verdwijnt, die van de verliezer blijft
+   staan. Wie zijn 6e opdracht haalt krijgt eerst de log-melding "... wacht op
+   de rest van deze ronde" — pas als de hele ronde is afgemaakt volgt de
+   definitieve plaatsing (en bij een tie: "X en Y delen de Ne plaats").
+   Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pionnen
+   echt stilzetten (geen achtergrondlus die doorloopt). "⏸ Pauze" bevriest alles
+   (pionnen, dobbelsteen, log) en "▶ Hervatten" gaat verder waar hij was;
+   stoppen vanuit pauze mag niet blijven hangen.
+9. In "Welke energie-actie wint?" liggen Stuwstoot rond de 31%, Noodtransport
+   rond de 34%, Herprioritering rond de 27% (lager dan zonder kaarten:
+   Herkalibratie geeft nu iedereen af en toe hetzelfde gratis, wat specifiek
+   Herprioritering's voorsprong opeet) en de speler die nooit uitgeeft rond de
+   8%. Loopt één actie ver weg van dit patroon, dan is de balans stuk.
+10. In "Beloningskaarten" (zelfde paneel) moet elke kaart behalve Prioriteitspas
+   op een aantal keer per potje > 0 staan; Prioriteitspas hoort op 0,00 (geen
+   mechanisch effect in de bot-simulatie, geen bug). Het aandeel trekkansen
+   verloren aan een volle hand ligt rond de 15-20%.
+11. Stap voor stap met 4 spelers: vier gekleurde pionnen tegelijk op het bord,
+   ze staan nooit op hetzelfde vakje (bezet blokkeert, net als in de batch), de
+   standenbalk telt mee, "Startpositie" is alleen te kiezen bij 1 speler, en
+   getrokken beloningskaarten verschijnen als kleine badges naast elke speler.
+12. Mobiel (breedte ≤ 640px, test o.a. op 320/375/414px): het bord (Kaart maken,
+   Stap voor stap én de drukte-heatmap in Simulatie) moet **passen zonder
+   horizontaal te scrollen** — controleer dat `document.documentElement.scrollWidth`
+   niet groter is dan `clientWidth`. Wordt dat toch breder, dan klopt de
+   `clamp(...)`-formule voor `--cell` in `styles.css` niet meer met de werkelijke
+   marges van `body`/`.panel` op dat breakpoint.
+13. Tabblad "Stap voor stap" → "Zelf spelen": alleen de solo-besturing
+   (Aantal spelers/Aantal bots/per-mens startpositie-keuze/Potje starten/Nieuw
+   potje) mag zichtbaar zijn, niet de automatische besturing (Energie-inzet/
+   Tempo/Simulatie starten) — en andersom bij "Automatisch". Wisselen van modus
+   of het bord bewerken (Genereer indeling) terwijl een solo-potje loopt moet
+   dat potje stilletjes afbreken (`stopSoloGame()`), niet laten hangen of
+   crashen. Aantal bots loopt van 0 t/m (aantal spelers − 1); de resterende
+   plekken zijn mens (hotseat, om de beurt achter hetzelfde scherm) — dus zowel
+   1 speler solo, 1-tegen-3-bots als 1-tegen-1-tegen-een-vriend (2 spelers,
+   0 bots) moeten werken. Elke menselijke plek krijgt vóór "Potje starten" een
+   eigen startpositie-keuze mét voorproefje van de eerste opdrachtkaart; kiezen
+   twee mensen dezelfde plek, dan wisselen die twee eenvoudig om. Een potje
+   uitspelen: dobbelen → per worp een aangrenzend vakje aanklikken (geen-U-turn-
+   vakjes en bezette vakjes van andere spelers zijn niet aanklikbaar) **of** een
+   van de vier richtingsknoppen boven het bord gebruiken (die alleen
+   ingeschakeld zijn in een toegestane richting) **of** op een pc de pijltjestoetsen
+   gebruiken → bij 6/6 een winmelding. Alle drie de manieren van bewegen moeten
+   door elkaar blijven werken binnen dezelfde beurt, en de pijltjestoetsen mogen
+   elders op de pagina (bv. het seed-invoerveld) niet worden onderschept.
+   Bot-beurten spelen zichzelf meteen door (geen animatie/wachttijd), mens-
+   beurten blijven volledig interactief. Met 1 speler staan Kortsluiting/Blinde
+   Vlek/Duwstoot/Prioriteitspas EN de vijf nieuwe hinder-kaarten (Vergrendeling/
+   Stroomonderbreking/Noodbarrière/Terugtrekbevel/Signaalstoring) nog altijd
+   permanent uitgeschakeld (geen tegenstanders); met 2+ spelers werken
+   Kortsluiting/Duwstoot/Prioriteitspas/Vergrendeling/Stroomonderbreking/
+   Noodbarrière/Terugtrekbevel/Signaalstoring via een klikbare doelwit-kiezer
+   (een kaart-knop per tegenstander; Duwstoot/Terugtrekbevel alleen aangrenzende
+   tegenstanders, Noodbarrière alleen tegenstanders met een lege buurcel), en
+   Blinde Vlek wordt vanzelf aangeboden (ja/nee) zodra je route door een
+   tegenstander geblokkeerd wordt — nooit los klikbaar in het actiepaneel.
+   Overdrukklep en Reservetank werken hetzelfde: permanent uitgeschakeld in het
+   paneel, en verschijnen pas als ja/nee-aanbod vlak ná het gooien, als er
+   energie boven het plafond verloren dreigt te gaan (heb je beide op zak, dan
+   staan er twee "Ja"-knoppen naast elkaar). Herkansing is ook zo'n reactief
+   aanbod, vlak ná het dobbelen, vóór het Overdrukklep/Reservetank-moment. Bij
+   een gedeelde score op het eind (gelijke energie én
+   evenveel actiekaarten) moet de melding "delen de winst/Ne plaats" tonen, net
+   als in "Automatisch". **Direct na "Potje starten" (of "Nieuw potje" →
+   "Potje starten") moet het EERSTE wat je ziet altijd de echte startopstelling
+   zijn**: iedereen op zijn eigen gekozen/toegewezen startvakje, iedereen op 0
+   energie — ook als een bot vóór jou in de beurtvolgorde zit (die beurten
+   worden pas ná die eerste tekening afgehandeld). Je eigen energie blijft op 0
+   staan tot en met "sla actie over"; pas na de dobbelklik (of Zwaartekracht-
+   laarzen/een Noodtransport dat exact op je doel landt) springt hij omhoog.
+14. Tabblad "Stap voor stap" (beide modi, breedte > 880px): het bord staat
+   links, MET de standenlijst van de ANDERE spelers (niet wie aan zet is)
+   erboven — precies zoals vóór de 2-koloms-layout. Rechts, van boven naar
+   onder: de navigator (40×40px richtingsknoppen, kleiner dan vroeger),
+   daaronder een los vast blokje met alleen de dobbelstenen + de "gooi de
+   dobbelstenen"/"sla actie over"-knoppenrij, en daaronder het infopaneel met
+   ALLEEN de speler die op dat moment aan de beurt is (doel/voortgang +
+   actiepaneel/status). Controleer met `getBoundingClientRect().top/left +
+   window.scrollY` (dus de DOCUMENT-positie, niet de viewport-positie — een
+   klik kan de pagina laten scrollen, dat is geen bug) dat zowel het bord ALS
+   de navigator (`#walkDirPad`) ALS de dobbel-/skip-knoppenrij niet
+   verschuiven tijdens een volledig gespeeld potje (actie kiezen, dobbelen,
+   stap zetten, meerdere beurten achter elkaar) — test dit over minstens
+   20-30 stappen, één enkele meting kan een toevallige stand missen. De
+   navigator blijft in "Zelf spelen" de hele partij zichtbaar (uitgeschakelde
+   knoppen + "–"-teller buiten je eigen zet), niet meer aan/uit per
+   beurtfase. In de standenlijst boven het bord (`#walkScore`) mag de actieve
+   speler NOOIT verschijnen, en in het paneel rechts (`#walkScoreActive`)
+   mag ALLEEN de actieve speler verschijnen — bij 1 speler is `#walkScore`
+   dus altijd leeg. Geen enkele rij (`.walk-player`) mag over de rand van
+   zijn container heen lopen, ongeacht welke strategienaam of hoeveel
+   beloningskaarten een speler heeft. Onder 880px breedte valt het terug naar
+   1 kolom (bord eerst, net als "Kaart maken"). Bij het laden van de pagina
+   (vóórdat je een tab hebt aangeklikt) mag de solo-opzet-UI (spelerskeuze/
+   "Potje starten") niet zichtbaar zijn, want "Automatisch" is de
+   standaard-actieve tab.
+15. De 10 nieuwe kaarten in "Zelf spelen": Vergrendeling/Stroomonderbreking/
+   Noodbarrière/Signaalstoring openen (net als Kortsluiting/Duwstoot/
+   Prioriteitspas) een doelwit-kiezer, en dat kan nu ook MIDDENIN het lopen —
+   de oude groene aanklikbare vakjes moeten dan verdwijnen zolang de kiezer
+   openstaat en na een keuze weer correct terugkomen. Terugtrekbevel toont
+   alleen tegenstanders die zowel aangrenzend zijn ALS al minstens 1 stap
+   gelopen hebben deze partij. Een vergrendelde beurt (na Vergrendeling)
+   slaat "Energie-actie kiezen" en "Boots/Stuwlading kiezen" allebei over en
+   springt direct naar dobbelen, met een logregel die dat meldt. Herkansing
+   verschijnt als ja/nee-aanbod meteen na een worp, vóór je kunt lopen, en de
+   dobbelstenen-HUD moet het nieuwe cijfer tonen als je "ja" kiest. Speel je
+   zowel Overdrukklep als Reservetank in de hand, dan toont het aanbod na een
+   overloop-worp beide als losse knoppen. Snelroute moet een stap terug
+   toestaan die normaal (geen-U-turn) niet zou mogen, maar alleen NA het
+   spelen van de kaart — stappen die je al vóór het spelen zette blijven aan
+   de oude regel gebonden. Kaartenruil is uitgeschakeld zolang je 'm als
+   enige kaart in de hand hebt (geen "andere kaart" om te ruilen). Herinnering
+   toont de bovenste 3 van de trekstapel in trekvolgorde (eerste knop = eerst
+   getrokken) en "niet wijzigen" laat de volgorde exact zoals hij was.
+
+- **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
+  beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
+  gemiddeld 1,5 per beurt, en de voorraad stapelt tot `ENERGY_MAX` = 10. Energie
+  die je deze beurt rolt mag je meteen inzetten. Er is **maximaal één actie per
+  beurt**, uit drie (`ENERGY_ACTIONS`):
+  - **3 Stuwstoot** — gooi met 3 loopstenen in plaats van 2 (+3,5 stappen).
+  - **6 Herprioritering** — wissel je opdracht met de volgende in je stapel,
+    maar alleen als die dichterbij ligt (scheelt gemeten 7,6 stappen lopen).
+  - **10 Noodtransport** — verplaats je tot `ENERGY_JUMP_RANGE` vakjes vrij:
+    geen dobbelsteen, bezette vakjes tellen niet. Gebruik dit **vóór** de zet,
+    zodat de opdracht binnen bereik van de stenen komt; alleen erná springen
+    maakt de actie flink zwakker (26,5% winst tegen 32,4%).
+  - Elke speler krijgt per potje één strategie uit `ENERGY_STRATEGIES`, geloot
+    over de startposities, zodat één batch een zuiver toernooi tussen de acties
+    is. Zie de tabel "Welke energie-actie wint?" in het simulatiepaneel.
+  - `ENERGY_JUMP_RANGE` = 13 is **gemeten, niet gegokt** — de sweep staat in het
+    commentaar bij de constante. Verzet je 'm, draai die sweep opnieuw.
+  - Niet doen: een actie "negeer de geen-U-turn-regel" geven. Gemeten waardeloos —
+    met die regel bereik je op elk aantal stappen exact dezelfde vakjes als
+    zonder (verhouding 1,000 over 180 startposities).
+  Let op: de energiesteen trekt elke beurt een getal uit dezelfde `rand`-stroom,
+  dus dezelfde seed geeft een ander verloop dan vóór deze toevoeging.
+- **Beloningskaarten** (`95-simulate.js`, bij `ACTION_CARDS`): wie een opdracht
+  bereikt trekt een kaart van een **gedeelde**, gesloten stapel van 20 (2 van
+  elk van de 10 typen, `ACTION_CARD_IDS`). Max **2 kaarten in de hand**
+  (`ACTION_CARD_HAND_MAX`) — sta je al op 2, dan trek je niet, de kaart blijft
+  liggen. Gebruikte kaarten gaan op de aflegstapel; is de trekstapel leeg, dan
+  wordt de aflegstapel geschud en dient weer als trekstapel
+  (`buildActionDeck`/`drawActionCard`). De opdrachtkaarten blijven gewoon staan
+  — een beloningskaart is een bonus onderweg, geen vervanging van de 6 op te
+  lossen opdrachten.
+  - Een kaart spelen is **dezelfde actie-slot** als een energie-actie: hooguit
+    één ding per beurt, of dat nu een kaart is of energie. Kaarten zijn gratis,
+    dus een speler geeft ze voorrang boven het uitgeven van energie.
+  - De tien kaarten en hun AI-voorwaarde in de simulatie (`resolveGravityBoots`,
+    `pickShortCircuitTarget`, `pickShoveMove` — de rest zit inline in
+    `simulateOneGame`): Zwaartekracht-laarzen (10 rechtdoor, geen bochten —
+    alleen gebruikt als het doel raakt of minstens 7 stappen dichterbij komt),
+    Noodrantsoen (+3 energie, alleen onder het plafond), Kortsluiting (de
+    koploper mist zijn eerstvolgende energiesteen), Blinde Vlek (reageert
+    alleen als de normale zet daadwerkelijk geblokkeerd werd), Herkalibratie
+    (gratis versie van Herprioritering, zelfde dichterbij-voorwaarde), Duwstoot
+    (duwt de tegenstander wiens afstand tot zijn eigen doel het meest toeneemt),
+    Stuwlading (gratis versie van Stuwstoot, altijd gebruikt), Overdrukklep
+    (redt energie die anders over het plafond ging), Herbevoorrading (trekt
+    een nieuwe kaart, alleen als sluitstuk — niets anders was die beurt bruikbaar),
+    Prioriteitspas (puur informatie, **geen mechanisch effect** in de bot-
+    simulatie, dus altijd 0 keer ingezet in de tabel — dat is verwacht, geen bug).
+  - `pickShoveMove`/`pickShortCircuitTarget`/`resolveGravityBoots` worden door
+    zowel de batch als "stap voor stap" gebruikt. De batch-speler noemt zijn
+    opdrachtstapel `order`, het tabblad noemt 'm `deck` — waar een functie een
+    willekeurige speler uit de array pakt (niet "de huidige speler" via een
+    `shim`), moet hij dus met **beide** veldnamen overweg kunnen
+    (`target.order || target.deck`). Dit was al eens een bug (Duwstoot crashte
+    het tabblad zodra een tegenstander adjacent stond) — vergeet dit niet
+    opnieuw als je een elfde kaart toevoegt die ook naar een ANDERE speler kijkt.
+  - Sectie "Beloningskaarten" in het simulatiepaneel: keer getrokken, keer
+    gebruikt per kaart, en het aandeel trekkansen dat verloren ging aan een
+    volle hand.
+  - `runSimulationBatch()` rekent in brokken (`SIM_CHUNK_BUDGET_MS` = 30ms per
+    brok) i.p.v. één ononderbroken lus, en toont ondertussen een
+    voortgangsbalk (`#simProgress`). Zonder dit bevriest de pagina bij grote
+    aantallen potjes tot de hele run klaar is. Omdat de pagina nu tussentijds
+    wél reageert, kan de gebruiker de indeling wijzigen terwijl er nog wordt
+    gerekend — `simRunId` (verhoogd in zowel `runSimulationBatch()` als
+    `clearSimResults()`) zorgt dat zo'n verouderde run zichzelf stilletjes
+    afbreekt in plaats van straks de nieuwere "indeling gewijzigd"-melding te
+    overschrijven met cijfers die niet meer bij het bord horen.
+  - Kaart-illustraties (`95-simulate.js`, `ACTION_CARD_ICONS`/`ACTION_CARD_TINTS`/
+    `renderActionCardFace`): elke kaart is een klein lijntekening-icoon in inline
+    SVG (geen losse plaatjes — dat zou het éénbestands-HTML flink opblazen),
+    gedeeld tussen de badges in de bot-standenbalk (`size:'sm'`) en de klikbare
+    kaarten in de solo-modus (`size:'lg'`, `interactive:true`). Nieuwe kaart
+    toevoegen? Voeg 'm toe aan `ACTION_CARDS`/`ACTION_CARD_IDS` in `95-simulate.js`
+    én teken een icoon in `ACTION_CARD_ICONS` — zonder icoon crasht de render.
+- **Stap voor stap, zelf spelen** (`97-solo.js`): tabblad-modusje voor **1 t/m 4
+  spelers, mens én bot gemengd** (gebruikersverzoek: "ik wil een 1 tegen 1
+  potje kunnen spelen tegen een vriend, maar ook een potje 1 tegen 3 bots").
+  Twee losse keuzevelden boven het bord: "Aantal spelers" (1-4) en "Aantal
+  bots" (0 t/m spelers−1, `soloSyncBotOptions()` vult de opties en zet 'm
+  standaard op "alle overige plekken zijn bot"). De eerste `spelers−bots`
+  plekken zijn altijd mens (hotseat, om de beurt achter hetzelfde scherm,
+  generiek "Speler N" — geen aparte "jij"/"vriend"-styling nodig want beide
+  gebruiken dezelfde interactieve UI); de rest is bot met een `ENERGY_STRATEGIES`-
+  strategie, round-robin toegewezen. Bot-beurten spelen zichzelf **meteen**
+  door zonder animatie (`soloResolveBotTurn()`) — dat was expliciet de wens
+  ("meteen doorspelen"), mens-beurten blijven volledig interactief via de
+  bestaande dobbel/klik/actiepaneel-UI.
+  - **Startpositie kiezen, mét voorproefje**: vóór "Potje starten" toont
+    `soloRenderSetupUI()` per menselijke plek een dropdown met startpositie
+    én "eerste opdracht: X — naam" ernaast — dat voorproefje was een expliciete
+    eis ("voordat je start mag je je eigen eerste opdrachtkaart bekijken").
+    Om dat kloppend te houden schudt `soloRebuildSetup()` bij het intekenen van
+    het scherm ieders opdrachtstapel al met een eigen `soloSetupRand`, en die
+    ZELFDE stapels/objecten (niet opnieuw geschud) worden hergebruikt zodra het
+    potje echt start — anders zou het voorproefje kunnen liegen. Kiezen twee
+    mensen dezelfde plek, dan wisselt een simpele paarsgewijze swap ze om (geen
+    cascaderende resolutie nodig bij hooguit 4 plekken).
+  - **Doelwit zelf kiezen** (expliciete eis, i.p.v. auto-selectie zoals de
+    bot-AI): Kortsluiting/Duwstoot/Prioriteitspas openen een nieuwe fase
+    `'target-pick'` (`soloEnterTargetPicker()`) met een knop per in aanmerking
+    komende tegenstander (Duwstoot alleen aangrenzende, de andere twee alle
+    nog-niet-binnen spelers) — dezelfde `.action-card--lg.action-card--plain`-
+    stijl als de bestaande richtingskiezer voor Zwaartekracht-laarzen.
+    `soloResolveTargetCard()` voert 'm daarna uit; Duwstoot hergebruikt niet
+    letterlijk `pickShoveMove()` (die kiest zelf een willekeurige tegenstander)
+    maar dezelfde "welke lege buur vergroot zijn afstand tot zijn eigen doel het
+    meest"-berekening, toegepast op precies het gekozen doelwit.
+  - **Blinde Vlek is puur reactief**, nooit los klikbaar: staat in het gewone
+    actiepaneel altijd uitgeschakeld met tooltip "wordt vanzelf aangeboden
+    zodra je route geblokkeerd wordt". `soloAdvanceMovePhase()` biedt 'm pas
+    aan (nieuwe fase `'blind-offer'`, ja/nee-knoppen) op het exacte moment dat
+    de volgende stap alleen geblokkeerd wordt door een tegenstander (niet door
+    een muur) én de kaart nog in de hand zit én er deze beurt nog geen andere
+    actie gebruikt is. Bewuste vereenvoudiging t.o.v. de bot-AI: bezette
+    vakjes tellen na een "ja" alleen voor de REST van deze beurt niet meer mee
+    (herberekend vanaf de huidige positie), geen volledige herstart van de hele
+    beurt vanaf het startpunt — dat sluit aan bij de eigen hint-tekst van de
+    kaart ("bezette vakjes tellen deze beurt niet mee").
+  - **Ronde-lus deelt dezelfde eerlijkheidslogica als de batch/animatie**:
+    `soloFinishRound()`/`soloContinueLoop()`/`soloAdvanceLoop()` roepen dezelfde
+    `resolveRoundFinishers()`/`simFinishTarget()` aan als `95-simulate.js` en
+    `96-walk.js` — een ronde wordt altijd afgemaakt vóórdat rangen definitief
+    worden, gedeelde plekken bij gelijke energie én evenveel actiekaarten. Een
+    derde, niet-geanimeerde kopie van de bot-beurt-logica (`soloResolveBotTurn`)
+    was hier nodig naast de al bestaande twee in `95-simulate.js`/`96-walk.js`
+    — bewust geaccepteerde duplicatie, zie de noot hierboven bij "Beloningskaarten"
+    over de `target.order || target.deck`-valkuil.
+  - **Gevonden en gefixt tijdens het bouwen**: `soloResolveBotTurn()` riep
+    `energyReorderTarget()` eerst rechtstreeks aan met het bot-spelerobject,
+    maar die functie leest hardcoded `player.order[player.nextIdx]` terwijl
+    solo-spelers alleen `.deck` hebben (dezelfde valkuil als hierboven bij
+    Duwstoot) — crashte meteen zodra een bot Herkalibratie
+    of de Herprioritering-strategie probeerde te gebruiken. Fix: een `shim =
+    { order: player.deck, nextIdx: player.nextIdx }` doorgeven in plaats van
+    `player` — omdat arrays by reference gaan, lopen mutaties gewoon terug in
+    de echte `.deck`. Ook `soloRenderActionPanel()` liet Blinde Vlek aanvankelijk
+    klikbaar-maar-inert staan i.p.v. 'm hard uit te schakelen — beide gevonden
+    en gefixt vóór het testen, niet erna.
+  - **Gevonden en gefixt ná oplevering — "Nieuw potje" hergebruikte vervuilde
+    spelerobjecten** (gebruikersmelding: "Speler 1 krijgt telkens energie erbij,
+    ook de startposities staan op de verkeerde plek"). Oorzaak: `btnWalkSoloReset`
+    was verkeerd bedraad op `startSoloGame` — dezelfde handler als "Potje
+    starten" — en die functie doet `soloPlayers = soloSetupPlayers` (dezelfde
+    objecten, geen kopie). Bij een tweede potje waren dat dus nog steeds de
+    objecten van het VORIGE potje: energie, voltooide opdrachten, handkaarten
+    en positie stonden nog op de eindstand, en werden nooit teruggezet. Fix:
+    `btnWalkSoloReset` roept nu `soloRebuildSetup()` aan (bouwt frisse
+    spelerobjecten met energie/voortgang op 0, nieuw geschudde stapels via een
+    nieuwe RNG, en toont het startpositie-scherm opnieuw) in plaats van
+    `startSoloGame()` nogmaals. `stopSoloGame()` verbergt daarbij nu ook
+    `#walkSoloPanel` weer (deed dat nog niet), anders bleef er een lege
+    bordered box zichtbaar op het setup-scherm.
+  - **Gevonden en gefixt — bot-beurten vóór jouw eerste beurt waren al klaar
+    voordat je ook maar iets zag** (gebruikersmelding, ná de vorige fix: "de
+    startposities staan ineens op een vreemde plek op het bord"). Oorzaak:
+    `startSoloGame()` tekent het bord wél eerst met iedereen op zijn echte
+    startvakje, maar roept daarna in dezelfde synchrone taak `soloAdvanceLoop()`
+    aan — en die speelt alle bots die vóór jou in de beurtvolgorde zitten
+    meteen door (`soloResolveBotTurn()`, per ontwerp zonder wachttijd). De
+    browser krijgt dus nooit de kans om de "iedereen op zijn startvakje"-frame
+    daadwerkelijk te tekenen: het EERSTE wat je te zien kreeg was al een bord
+    waar die bots allang verplaatst waren. Fix: die aanroep staat nu achter één
+    `requestAnimationFrame()`, bewaakt door `soloRunId` (zodat 'm niet alsnog
+    afgaat als je intussen opnieuw gereset hebt) — zo ziet elke speler eerst
+    gegarandeerd de echte startopstelling (iedereen op zijn vakje, 0 energie)
+    voordat voorgaande bot-beurten worden afgehandeld. Bevestigd met een test
+    die het EERSTE `requestAnimationFrame`-moment na de klik vastlegt: over 3
+    herhalingen stond iedereen daar altijd op zijn eigen startvakje met 0
+    energie, ook al hadden bots die eerder aan de beurt waren in de daaropvolgende
+    frame allang (correct) een andere positie/energie.
+  - **Gevonden en gefixt — je eigen energie werd al bijgeschreven vóórdat je
+    zelf had gedobbeld** (gebruikersmelding, samen met de vorige: "de energie
+    komt er pas bij vanaf de eerste keer dat ze dobbelen"). Oorzaak:
+    `soloBeginHumanTurn()` rolde en verwerkte de energiesteen automatisch bij
+    het begin van je beurt — vóór je het actiepaneel ziet, laat staan vóór je
+    op "gooi de dobbelstenen" klikt. Bij navraag (welke kant op: gedrag laten
+    staan omdat Overdrukklep dat nodig heeft, of energie pas bij het gooien
+    toevoegen) koos de gebruiker expliciet voor het laatste, ook al kan
+    Overdrukklep dan niet meer proactief in het actiepaneel staan. Fix:
+    `soloEnergyRoll` start een beurt nu op `null` ("nog niet gegooid"); de
+    energiesteen rolt pas in `soloRollDice()`, samen met de loopstenen, zodra
+    je zelf op "gooi de dobbelstenen" klikt — de actiekeuze ervoor gebeurt dus
+    met je BESTAANDE energie van vorige beurten, niet met een bonus die je nog
+    niet hebt gezien. **Overdrukklep is hierdoor omgebouwd naar puur reactief**
+    (`soloOfferValveSave()`), naar het patroon van Blinde Vlek: je weet pas of
+    er energie verloren dreigt te gaan zódra je gegooid hebt, dus die kaart
+    staat nu permanent uitgeschakeld in het actiepaneel ("wordt vanzelf
+    aangeboden na het gooien") en verschijnt in plaats daarvan als een kort
+    ja/nee-keuzemoment vlak ná de worp, als er iets verloren dreigt te gaan.
+    **Vangnet voor de paden zonder dobbelklik**: Zwaartekracht-laarzen en een
+    Noodtransport dat exact op je doel landt roepen `soloFinishTurn()` aan
+    zonder ooit langs `soloRollDice()` te komen — zonder ingreep zou die beurt
+    zijn energiesteen dus stilzwijgend overslaan. `soloRollEnergyForTurn()` is
+    een kleine helper (rolt alleen als `soloEnergyRoll` nog `null` is) die zowel
+    in `soloRollDice()` als bovenaan `soloFinishTurn()` wordt aangeroepen, zodat
+    elke beurt gegarandeerd precies één energiesteen oplevert. Geen Overdrukklep-
+    aanbod nodig in dat vangnet-geval: je hebt die beurt al een kaart/actie
+    gebruikt (dat is precies waarom je via boots/jump daar bent), en een tweede
+    actie zou de "hooguit één actie per beurt"-regel breken. Bevestigd: energie
+    blijft 0 tot en met "sla actie over", springt pas omhoog na de dobbelklik;
+    Overdrukklep-knop staat uitgeschakeld tot een overloop-worp de reactieve
+    aanbieding triggert; Zwaartekracht-laarzen levert alsnog energie op zonder
+    ooit de dobbelknop aan te raken.
+  Elke mens dobbelt zelf (knop), kiest na elke worp zelf een aangrenzend vakje
+  om naartoe te lopen (klikbare vakjes krijgen de `.walk-clickable`-klasse, en
+  zijn bezette vakjes van andere spelers uitgesloten). Boven
+  dezelfde stap zet als een klik op de cel. Waren aanvankelijk 58×58px (bewust
+  groot als enige manier om te lopen), maar met celklik EN pijltjestoetsen
+  erbij oogde dat "veel te groot" in de smalle zijkolom (gebruikersmelding) —
+  nu 40×40px. Eronder staat een
+  stappenteller (gezet/nog) die in `soloRenderDirPad()` meeschrijft bij elke
+  stap — daarvoor moest je terug scrollen naar de dobbelsteen-HUD bovenaan om
+  te zien hoever je nog kon lopen. Beide manieren werken altijd tegelijk en
+  door elkaar: een knopklik roept
+  dezelfde `soloHandleMoveClick()` aan als een celklik, en `soloRenderDirPad()`
+  schakelt per stap alleen de knoprichtingen in die net als de cellen ook
+  daadwerkelijk legaal zijn (geen U-turn, geen muur). Vergeet bij een nieuwe
+  fase niet ook `soloHideDirPad()` aan te roepen — net zo makkelijk te vergeten
+  als `soloClearClickable()`. Sinds de vaste-layout-wijziging hieronder betekent
+  dat niet meer "het hele kruis verbergen" (het blok blijft nu de hele partij
+  staan) maar alleen "alle 4 de richtingsknoppen uitschakelen en de teller op
+  een placeholder zetten" — belangrijk om dat te blijven doen tijdens een fase
+  waarin het kruis niet hoort te reageren (bijv. tijdens het kiezen van een
+  Noodtransport-bestemming, die geen 4 maar tot 13 vakjes breed is).
+  - Op een pc werken de **pijltjestoetsen** (gebruikersverzoek) als derde manier om te
+    lopen, naast celklik en richtingskruis: `document`-brede `keydown`-listener die
+    alleen iets doet tijdens `soloPhase === 'moving'` en anders niets onderneemt (geen
+    `preventDefault()`), zodat pijltjes overal elders op de pagina (bv. tekst-cursor in
+    het seed-invoerveld op "Kaart maken") gewoon blijven werken zoals normaal. Roept
+    dezelfde `soloHandleMoveClick()` aan als een klik — dus ook hier gelden geen-U-turn
+    en bezette vakjes gewoon.
+    **Gevonden en gefixt — de pagina scrolde soms toch mee** (gebruikersmelding).
+    Oorzaak: `preventDefault()` stond ná de legale-zet-check, dus een pijltje in een
+    richting die op dat moment niet mag (muur, U-turn) deed niets in het spel maar
+    kreeg wél nog het standaard scrolgedrag van de browser. Eerste fix: `preventDefault()`
+    meteen zodra je in `soloPhase === 'moving'` zit en niet in een invoerveld typt —
+    vóór de legale-zet-check, dus ook een ongeldige richting scrollt de pagina niet
+    meer. **Vervolgmelding: nog steeds mee als je klaar bent met je zetten en dan
+    weer op een pijltje drukt.** Oorzaak: die eerste fix blokkeerde alleen tijdens
+    `soloPhase === 'moving'` zelf — zodra de laatste stap van de beurt gezet is,
+    schuift de fase door naar bv. `choose-action` voor de volgende beurt, en dan
+    greep de blokkade niet meer in. Fix: blokkeer nu de HELE actieve beurt (elke
+    fase behalve `idle`/`game-over`), niet alleen `moving` — de daadwerkelijke zet
+    blijft uiteraard wel beperkt tot `moving`.
+  - **Layout: bord links, navigator + speler-/beurtinfo vast rechts ernaast**
+    (gebruikersverzoek: "als je op dobbelen klikt, verschuift de hele tabel
+    continu"). Vóór deze wijziging stonden dobbelstenen/doel, standenlijst,
+    actiepaneel, statusregel en richtingskruis allemaal ÓÓK boven het bord in
+    één kolom — elke fasewisseling (actiekaarten die verschijnen/verdwijnen,
+    het richtingskruis dat aan/uit gaat) veranderde de hoogte van dat blok en
+    duwde het bord dus letterlijk op en neer. Fix: `.walk-play-layout` is een
+    2-koloms grid (`.walk-board-col` / `.walk-side-col`, zelfde patroon als
+    `.grid-layout`/`.right-col` op "Kaart maken") met `align-items:start`, zodat
+    elke kolom onafhankelijk van de ander groeit — het bord (links, met legenda
+    en log eronder) verandert niet meer mee met wat er rechts gebeurt. Rechts
+    staat bovenaan de navigator (`#walkDirPad`), en daaronder de "grote tab"
+    `.walk-info-panel` met dobbelstenen/doel/standenlijst/actiepaneel/
+    statusregel. Die krijgt een vaste `min-height:440px` (plus `overflow-y:auto`
+    als vangnet) zodat hij niet zichtbaar in- en uitklapt terwijl je een beurt
+    speelt — de instelvelden bovenaan (aantal spelers/bots, Potje starten) blijven
+    wél gewoon full-width boven het speelveld staan, die veranderen niet per beurt.
+    Onder 880px breedte (zelfde grens als `.grid-layout`) valt het terug naar 1
+    kolom, bord eerst — net als "Kaart maken" op mobiel.
+    **Gevonden en gefixt tijdens het testen**: `.walk-player` (een rij in de
+    standenlijst) gebruikt in de brede layout `flex:1 1 210px`, maar in de
+    nieuwe 300px-brede kolom werd dat met `flex:none` teruggezet naar zijn
+    intrinsieke inhoudsbreedte (~440px) — de rij liep dus letterlijk over de
+    rand van het paneel heen. Fix: `width:100%; min-width:0; flex-wrap:wrap;`
+    zodat alleen `.walk-player-goal` (die al een ellipsis heeft) krimpt en de
+    rest (strategienaam-badge, energie, kaarten, score) desnoods naar een
+    tweede regel wrapt in plaats van afgekapt te worden — bij een lange naam
+    als "Herprioritering" paste er anders geen "0/6" meer naast.
+    **Apart gevonden en gefixt, niet gerelateerd aan de layout zelf**: de
+    solo-opzet-UI (spelerskeuze + "Potje starten"/"Nieuw potje") bleef zichtbaar
+    staan bij het laden van de pagina, ook al is "Automatisch" de standaard-
+    actieve tab. Oorzaak: de allerlaatste regel van `97-solo.js` riep
+    onvoorwaardelijk `soloRebuildSetup()` aan, en die vult/toont die UI zonder
+    ooit te checken welke tab actief is. Fix: die aanroep is vervangen door
+    `setWalkMode('auto')`, dezelfde functie die al gebruikt werd om alle
+    mode-afhankelijke zichtbaarheid correct te zetten bij een klik op de
+    mode-knoppen — nu ook bij het laden van de pagina zelf.
+  - **Vervolgmelding: de zijkolom "schoot nog continu heen en weer"** — de
+    2-koloms grid loste de grote (100+ px) verschuivingen van het bord zelf op,
+    maar binnen de vaste 300px-kolom bleven er nog drie kleinere bronnen van
+    beweging over, alle drie gevonden door bij elke stap van een volledig
+    gespeeld potje de DOCUMENT-positie (`getBoundingClientRect().top/left +
+    window.scrollY`, dus los van Playwrights eigen auto-scroll-naar-knop-toe)
+    van de navigator en de dobbelknop te loggen en te vergelijken:
+    1. De browser reserveert de verticale scrollbalk pas zodra de pagina
+       daadwerkelijk te lang wordt — en die drempel werd tijdens het spelen
+       voortdurend gekruist, dus kwam de balk er steeds bij en weer af. Elke
+       keer verschoof de HELE pagina (dus ook de vaste zijkolom) een stuk of
+       15px naar links/rechts. Fix: `scrollbar-gutter: stable` op `html`,
+       plus hetzelfde nog eens lokaal op `.walk-info-panel` zelf (die heeft
+       een eigen `overflow-y:auto` als vangnet, met precies hetzelfde risico).
+    2. De navigator (`#walkDirPad`) werd tot dan toe elke beurt opnieuw
+       verborgen/getoond (`hidden`-attribuut) afhankelijk van de beurtfase —
+       dat haalde 'm helemaal uit de layout, waardoor het infopaneel eronder
+       elke keer omhoog/omlaag sprong. Fix: de navigator blijft nu de HELE
+       partij gewoon zichtbaar zodra je in solo-modus zit (`setWalkMode()`
+       regelt alleen nog de modus-brede aan/uit, niet meer de beurtfase);
+       `soloHideDirPad()` schakelt tegenwoordig alleen de 4 richtingsknoppen
+       uit en zet de stappenteller op een `–`-placeholder, zonder het blok
+       zelf uit de layout te halen.
+    3. De rij met "Gooi de dobbelstenen"/"Sla actie over" stond (op dat
+       moment nog) ÓNDER het actiekaartenblok (`.walk-solo-actions`), dat van
+       0 naar 1-2 rijen kaarten wisselt per beurt — dus verschoof de knop zelf
+       nog steeds mee. Eerste fix: de knoppenrij vóór de kaarten in de DOM.
+       Zie de latere wijziging hieronder ("dobbelen als eigen los blok") voor
+       waar die rij inmiddels definitief staat. Twee kleinere resterende
+       bronnen binnen diezelfde standenlijst/metatekst zijn met een vaste
+       `min-height` dichtgezet i.p.v. geprobeerd te forceren met
+       `flex-basis:100%` (die truc bleek averechts te werken op een element
+       met eigen zichtbare inhoud — die neemt dan zelf de HELE regel in beslag
+       i.p.v. alleen een nieuwe regel te starten, met een extra regel tot
+       gevolg; werkt wél op een lege rij, zie hieronder):
+       `.walk-info-panel .walk-player{min-height:80px}` (gemeten met alle 4
+       strategienamen tegelijk + 2 kaartbadges, het zwaarste geval) en
+       `.walk-info-panel .walk-meta{min-height:117px}` (de regel "Voltooid:
+       X/6 · nog Y stap(pen)" is alleen tijdens het lopen lang genoeg om in de
+       smalle kolom naar een 2e regel te wrappen). Bevestigd over 30 volledige
+       beurten: navigator en dobbelknop staan exact op dezelfde
+       document-positie bij elke fase-overgang.
+  - **Vervolgverzoek: navigatorknoppen kleiner, dobbelen als eigen los blok,
+    standenlijst splitsen** (gebruikersverzoek, incl. de solo-hinttekst onder
+    de instelvelden helemaal weghalen — `#walkSoloHint` is verwijderd uit
+    `index.html`, met de bijbehorende JS-referentie).
+    - Navigatorknoppen 58×58px → 40×40px (zie hierboven).
+    - **"Zet het dobbelen vast in een los blok"**: de dobbelstenen (`.walk-hud`)
+      en de "Gooi de dobbelstenen"/"Sla actie over"-knoppenrij staan nu samen
+      in diezelfde `.walk-hud`-box, los van het actiekaartenblok — de
+      knoppenrij krijgt `flex-basis:100%` zodat hij altijd een eigen volle
+      regel onder de dobbelstenen krijgt (in tegenstelling tot de eerdere
+      mislukte poging hierboven: hier is dat WEL de bedoeling, de rij mag
+      gerust de hele breedte innemen). **Gevonden tijdens het testen**: zonder
+      `min-height` op die knoppenrij klapte hij helemaal in tijdens fases
+      waarin BEIDE knoppen verborgen zijn (bv. tijdens het lopen zelf, of het
+      kiezen van een doelwit) — 36px verschil, gemeten — en dat liet
+      `.walk-info-panel` eronder alsnog op en neer springen. Fix:
+      `.walk-hud .btn-row{min-height:40px}`.
+    - **"De informatie van de andere spelers boven de map, de speler die aan
+      de beurt is niet"**: `renderWalkScore()` (`96-walk.js`) schrijft
+      dezelfde volledige spelerslijst nu naar TWEE containers — `#walkScore`
+      (boven het bord, terug in `.walk-board-col`, dus weer de brede
+      rij-per-speler-stijl van vóór de 2-koloms-layout) én het nieuwe
+      `#walkScoreActive` (in `.walk-info-panel`, dus de smalle
+      kolom-per-speler-stijl). Welke rijen zichtbaar zijn is puur CSS: `#walkScore
+      .walk-player.active{display:none}` en omgekeerd
+      `#walkScoreActive .walk-player:not(.active){display:none}` — één
+      render-pad, geen aparte "alleen actieve speler"-functie nodig. Bij 1
+      speler blijft `#walkScore` dus leeg (geen "andere" spelers) en
+      verdwijnt vanzelf. Geldt voor beide modi (`renderWalkScore()` is
+      gedeeld), dus ook "Automatisch" toont nu de andere spelers boven het
+      bord en wie aan zet is in het paneel rechts.
+  Verder kiest de speler zelf een energie-actie of handkaart aan het begin van
+  de beurt — hooguit één van de twee, net als in de bot-modus. Alle drie de betaalde energie-acties
+  staan hier gewoon klaar (niet vastgezet op één strategie zoals bij de bots),
+  en Herkalibratie/Herprioritering zijn hier **onvoorwaardelijk**: de bot-AI
+  swapt alleen als het dichterbij is, maar een mens mag zelf kiezen ook als het
+  niet optimaal is — vandaar `soloUnconditionalSwap()` in plaats van het
+  hergebruiken van `energyReorderTarget()` voor de daadwerkelijke uitvoering.
+  - Met **1 speler** (geen bots, geen medespelers) hebben Kortsluiting, Blinde
+    Vlek, Duwstoot en Prioriteitspas nooit een doelwit; ze staan dan permanent
+    uitgeschakeld in het actiepaneel (`WALK_SOLO_NO_OPPONENT_CARDS`), met een
+    tooltip die uitlegt waarom — niet stilzwijgend verbergen, dat oogt als een
+    bug. Met 2+ spelers werken ze wél, via de doelwit-kiezer/reactieve
+    aanbieding hierboven.
+  - Zwaartekracht-laarzen laat de speler zelf een richting kiezen (N/O/Z/W) in
+    plaats van de bot-AI die automatisch de beste richting bepaalt;
+    `gravityBootsOptions()` in `95-simulate.js` geeft alle (tot 4) rechte lijnen
+    terug zodat de UI ze als knoppen kan tonen. Noodtransport licht elk vakje
+    binnen bereik op als klikbaar (tot `ENERGY_JUMP_RANGE` vakjes vrij) i.p.v.
+    automatisch het beste te kiezen.
+  - **Belangrijke CSS-valkuil**: een element met een eigen `display`-regel
+    (zoals `.walk-controls{display:flex}`) negeert het HTML `hidden`-attribuut
+    tenzij je ook `<selector>[hidden]{display:none;}` toevoegt — auteur-CSS wint
+    altijd van de UA-standaardregel voor `[hidden]`, ook al is de specificiteit
+    gelijk. Dit was een echte bug (de automatische besturing bleef zichtbaar in
+    de solo-modus): zoek naar bestaande `[hidden]`-regels in `styles.css` als
+    voorbeeld voordat je een nieuw element toggle je via `.hidden = true/false`.
+
+- **Energie-actie en kaartactie zijn TWEE LOSSE sloten per beurt geworden (gebruikersverzoek:
+  "Energie extra's inzetten indien mogelijk, dobbelen, lopen, tijdens het zetten van je stappen mag
+  je ergens je actiekaart nog spelen. Het is ook mogelijk om een actiekaart weg te gooien... maar 1
+  actiekaart spelen per beurt of 1 kaart afleggen").** Vóór deze wijziging deelden een energie-actie
+  en een kaart spelen ÉÉN gezamenlijk actie-slot per beurt ("hooguit één ding per beurt, kaart of
+  energie"). Nu zijn het twee onafhankelijke sloten (max 1 energie-actie ÉN max 1 kaartactie in
+  dezelfde beurt), en geldt dit voor **alle spelers, mens én bots** (expliciet gevraagd i.p.v. alleen
+  voor "Zelf spelen"). De beurtvolgorde is nu: (1) energie-actie inzetten indien gewenst, (2) dobbelen,
+  (3) lopen — en tijdens dat lopen mag je op elk moment nog een kaart spelen **of** afleggen (niet
+  allebei — die twee delen het kaart-slot).
+  - **Drie paren houden elkaar WEL nog uit, ondanks de losse sloten** — omdat ze letterlijk hetzelfde
+    mechanische effect hebben en dus niet zinvol te stapelen zijn: Stuwlading (kaart) ↔ Stuwstoot
+    (energie), allebei een 3e loopsteen; Herkalibratie (kaart) ↔ Herprioritering (energie), allebei
+    dezelfde `energyReorderTarget()`/`soloUnconditionalSwap()`-doelwissel; Blinde Vlek (kaart) ↔
+    Noodtransport (energie), allebei een uitweg uit een blokkade (bij bots zou Noodtransport de al
+    opgeloste blokkade van Blinde Vlek gewoon overschrijven, omdat het de zet vanaf de OORSPRONKELIJKE
+    positie herberekent). In de bot-AI (`95-simulate.js`, `96-walk.js`, `soloResolveBotTurn` in
+    `97-solo.js`) regelen lokale per-beurt vlaggen (`targetSwapped`, `blindResolvedBlock`) dit, naast
+    de twee nieuwe `energyActionUsed`/`cardActionUsed`-vlaggen die de oude gezamenlijke `actionUsed`
+    vervangen. Bots leggen nooit af — dat is een puur menselijke mogelijkheid (zie hieronder) — dus
+    voor bots is `cardActionUsed` simpelweg "heeft deze beurt al een kaart gespeeld".
+  - **Welke kaarten blijven per se vóór de worp** (ze werken op het mechanisme van de worp zelf) **en
+    welke mogen wachten tot tijdens het lopen**: alleen Zwaartekracht-laarzen (vervangt de worp
+    helemaal) en Stuwlading (voegt een 3e loopsteen toe aan de worp) moeten vóór het dobbelen beslist
+    zijn. Alle andere kaarten (Noodrantsoen, Herkalibratie, Kortsluiting, Duwstoot, Prioriteitspas,
+    Herbevoorrading) raken de worp niet en mogen dus op elk moment tijdens het lopen gespeeld worden —
+    exact zoals de gebruiker het beschreef ("tijdens het zetten van je stappen"). Blinde Vlek en
+    Overdrukklep blijven zoals ze al waren: puur reactief, nooit uit een lijst te kiezen.
+  - **Mens-interactieve flow (`97-solo.js`) kreeg een nieuwe tussenfase `'choose-preroll'`** tussen
+    de energie-keuze en het dobbelen, speciaal voor Zwaartekracht-laarzen/Stuwlading
+    (`soloProceedToPrerollCard()` — slaat 'm automatisch over als geen van beide in de hand zit of
+    het kaart-slot al gebruikt is). De oude `'choose-action'`-fase toont nu ALLEEN nog de drie
+    energie-knoppen (`soloRenderActionPanel()` is vereenvoudigd, de kaarten zijn eruit). Tijdens
+    `'moving'` staat een nieuwe, na elke stap opnieuw getekende kaartenrij (`soloRenderMoveCardRow()`,
+    aangeroepen vanuit `soloAdvanceMovePhase()` zodat alle aanroepers — dobbelen, elke losse stap, ná
+    Overdrukklep/Blinde Vlek/de doelwit-kiezer — 'm automatisch meekrijgen) met alle overige kaarten,
+    inclusief per kaart een **afleg-knop** (`soloCardWithDiscard()` — de speel-knop kan om
+    spelinhoudelijke redenen uitgeschakeld zijn, bijvoorbeeld Herkalibratie nadat Herprioritering al
+    gewisseld heeft, maar de afleg-knop nooit: afleggen is altijd mogelijk voor elke kaart in de hand,
+    alleen het kaart-slot zelf gate 't). Nieuwe routeringsfunctie `soloAfterCardAction()` stuurt een
+    gespeelde/afgelegde kaart naar de juiste vervolgstap: is er al gedobbeld (`soloMove` bestaat), dan
+    wordt de bewegingsfase herberekend (bv. na Duwstoot verschuift een blokkade); anders gaat het
+    gewoon door naar het dobbelen. De doelwit-kiezer (Kortsluiting/Duwstoot/Prioriteitspas) kan nu ook
+    MIDDENIN het lopen geopend worden — `soloEnterTargetPicker()` ruimt daarom nu ook expliciet de
+    aanklikbare vakjes van vóór de klik op (`soloClearClickable()`), anders bleef de oude groene
+    highlight zichtbaar naast de doelwit-knoppen.
+  - **Dezelfde ternary-only-shows-one-bug gevonden en gefixt op alle drie de plekken** waar de
+    beurt-samenvatting in de log wordt opgebouwd: `usedEnergyAction ? walkActionNote(...) :
+    walkCardNote(...)` kon vanzelfsprekend maar één van de twee tonen — een directe consequentie van
+    de nieuwe onafhankelijke sloten, want nu kunnen beide waar zijn in dezelfde beurt. Gefixt door
+    string-concatenatie i.p.v. een ternary in zowel `96-walk.js` (bot-AI) als `soloFinishTurn()` in
+    `97-solo.js` (mens) — beide helper-functies gaven toch al `''` terug bij een lege id, dus
+    concatenatie is veilig. Voor de mens is er ook een derde, nieuwe notitie
+    (`soloDiscardNote(soloDiscardedCardId)`, "🗑 naam afgelegd") toegevoegd aan diezelfde regel, want
+    afleggen is een geheel nieuwe, puur-menselijke actie zonder bot-equivalent.
+  - **Herijkte cijfers na de wijziging** (15.000 potjes, `runSimulationBatch`): de energie-actie-
+    winstpercentages bleken **nagenoeg ongewijzigd** t.o.v. vóór deze wijziging — Stuwstoot 31,2% →
+    **31,3%**, Herprioritering 26,8% → **27,0%**, Noodtransport 34,2% → **34,1%**, geen energie 7,9% →
+    **7,5%** (alle verschillen ruim binnen de foutmarge van ±0,7-0,8 procentpunt). Dat is geen
+    meetfout maar een logisch gevolg: welke energie-actie wint is een apart "toernooi" tussen de vier
+    `ENERGY_STRATEGIES` (één strategie per speler, geloot over de startposities) — of kaarten
+    dezelfde beurt óók gespeeld mogen worden verandert niets aan de relatieve sterkte van die vier
+    strategieën t.o.v. elkaar, het geeft ze allemaal ongeveer evenveel extra kansen. Balans-checks
+    blijven kloppen: eerlijkheid per startpositie binnen foutmarge (spreiding 0,5 procentpunt),
+    eindklassering per startpositie telt op tot 100% per kolom met gem. plaats 2,49-2,52, dood-vrij
+    bleef 100% (geen enkele "koudste tegel" op 0,0% verkeer), en elke beloningskaart behalve
+    Prioriteitspas staat ruim boven 0 (Duwstoot met 0,52 per potje het laagst — logisch, vereist een
+    aangrenzende tegenstander). Kortom: deze wijziging maakt kaarten en energie samen soepeler te
+    combineren voor de speler, zonder de bestaande, al uitgebreid gemeten balans tussen de
+    energie-strategieën te verstoren.
+  - **Bots leggen bewust nooit af** (zelf gekozen scope, niet expliciet gevraagd): een bot die een
+    kaart niet nuttig vindt laat 'm gewoon ongebruikt in de hand zitten, precies zoals vóór deze
+    wijziging — er is geen proactieve "leg maar af als de kaart toch niet gebruikt wordt"-logica
+    toegevoegd aan de bot-AI. Afleggen is dus uitsluitend een keuze die een mens in "Zelf spelen"
+    heeft.
+
+- **10 nieuwe beloningskaarten** (gebruikersverzoek: 5 die een tegenstander kunnen tegenhouden of
+  vertragen, 5 vrij te kiezen). De stapel bestaat nu uit 20 typen × 2 = 40 kaarten (was 20). Alle
+  10 zitten in `ACTION_CARDS`/`ACTION_CARD_ICONS`/`ACTION_CARD_TINTS` in `95-simulate.js`, met
+  resolutielogica en AI-heuristieken in alle drie de bot-engines (`simulateOneGame`, de bot-tak
+  van `96-walk.js`, `soloResolveBotTurn`) én de mens-interactieve flow in `97-solo.js`.
+  - **De 5 hinder-kaarten** (danger-tint, net als Kortsluiting/Duwstoot):
+    - **Vergrendeling** — tegenstander mist zijn eerstvolgende energie- ÉN kaartactie in één klap
+      (zwaarder dan Kortsluiting, die alleen de energiesteen blokkeert). Bot/mens: zet
+      `victim.lockedNextTurn`; aan het begin van het slachtoffer se volgende beurt worden
+      `energyActionUsed`/`cardActionUsed` (bots) resp. `soloLockedThisTurn` (mens) meteen op
+      "gebruikt" gezet, wat automatisch alle kaart-/energiecontroles die beurt blokkeert — geen
+      aparte if-ketting per actie nodig. Voor de mens slaat dit bovendien `choose-action`/
+      `choose-preroll` helemaal over: `soloBeginHumanTurn()` gaat rechtstreeks door naar dobbelen.
+    - **Stroomonderbreking** — tegenstander gooit zijn eerstvolgende worp met 2 stappen minder
+      (minimaal 1). Wordt toegepast NA een eventuele Stuwlading/Stuwstoot-derde-steen, dus die
+      compenseert 'm gedeeltelijk.
+    - **Noodbarrière** — blokkeert tijdelijk een lege buurcel van een tegenstander (telt als bezet
+      tijdens diens eerstvolgende beurt, verdwijnt daarna vanzelf — ongeacht of de speler er
+      daadwerkelijk tegenaan liep). Een tegenstander zonder lege buurcel (zeldzaam, volledig
+      ingesloten) komt niet in aanmerking als doelwit.
+    - **Terugtrekbevel** — duwt een AANGRENZENDE tegenstander tot 2 vakjes terug, langs de
+      richting waar die net vandaan liep (`player.lastDir`, bijgehouden na elke voltooide zet in
+      alle drie de engines). Vereist dus zowel adjacentie als een bekende looprichting (een
+      tegenstander die nog nooit gelopen heeft komt niet in aanmerking) — gegarandeerd effect
+      (geen "geen lege plek"-uitzondering zoals Duwstoot soms heeft), dus zwaarder per gebruik.
+    - **Signaalstoring** — saboteert de EERSTVOLGENDE doelwissel-poging van een tegenstander
+      (Herkalibratie óf Herprioritering, wat 'm het eerst probeert): de kaart/energie wordt gewoon
+      verbruikt, maar de wissel zelf mislukt. Hiervoor is `energyReorderTarget()` gesplitst in
+      `reorderWouldHelp()` (alleen de check) en `applyReorderSwap()` (de daadwerkelijke wissel) —
+      de aanroeper kan er nu tussenuit met `player.reorderBlocked` zonder de afstandsberekening
+      dubbel te hoeven doen.
+  - **De 5 neutrale kaarten**:
+    - **Herkansing** — herrolt de LAAGSTE van je twee loopstenen (Stuwlading/Stuwstoot's 3e steen
+      doet niet mee). Voor de mens een reactief ja/nee-keuzemoment vlak ná het dobbelen (nieuwe
+      fase `'reroll-offer'`, vóór een eventueel Overdrukklep/Reservetank-aanbod) — past
+      `soloMove.roll`/`stepsLeft` bij met de delta.
+    - **Kaartenruil** — ruil een kaart uit je hand tegen de kaart die nu bovenop de aflegstapel
+      ligt (`performCardTrade()`). Bots gebruiken 'm alleen om een nutteloze Prioriteitspas weg te
+      ruilen; een mens ruilt automatisch de ENIGE andere kaart in de hand (bij hand-grootte 2 is
+      dat ondubbelzinnig — met alleen Kaartenruil zelf in de hand is de knop uitgeschakeld).
+    - **Reservetank** — dezelfde situatie als Overdrukklep (energie zou boven het plafond gaan),
+      maar de redding komt pas je VOLGENDE beurt binnen in plaats van meteen. Overdrukklep gaat
+      voor als een bot beide op zak heeft; een mens met beide krijgt de keuze in hetzelfde
+      aanbod-paneel als Overdrukklep (`soloOfferValveSave()` toont nu 0-2 knoppen, afhankelijk van
+      welke van de twee in de hand zitten).
+    - **Snelroute** — schakelt de geen-U-turn-regel voor de REST van de beurt uit. Kreeg hiervoor
+      een `allowUturn`-parameter op `resolveMove()` (default `false`, dus alle bestaande
+      aanroepen blijven ongewijzigd). Voor bots moet dit vóór de worp beslist zijn (het wordt in
+      dezelfde stap als de worp zelf toegepast); voor de mens kan het op elk moment TIJDENS het
+      lopen — `soloEffectiveLastDir()` geeft dan `-1` (geen beperking) terug i.p.v. de echte
+      `soloMove.lastDir`, wat automatisch doorwerkt in elke aanroep van `soloLegalNextCells()`.
+    - **Herinnering** — bekijk de bovenste 3 kaarten van de gedeelde trekstapel en zet er hooguit 1
+      van bovenaan (`deck.draw` trekt van het EIND via `.pop()`, dus "boven" = de laatste
+      elementen — `performPeekReorder()` voor bots, een eigen keuzepaneel met "zet deze bovenaan"-
+      knoppen plus "niet wijzigen" voor de mens). Bots schuiven Zwaartekracht-laarzen/Stuwlading
+      naar boven als die aanwezig zijn (breed inzetbaar, ongeacht welke opdracht je hebt); verder
+      blijft de volgorde gelijk.
+  - **`WALK_SOLO_NO_OPPONENT_CARDS` uitgebreid** met de 5 hinder-kaarten (naast de bestaande
+    Kortsluiting/Blinde Vlek/Duwstoot/Prioriteitspas) — met 1 speler (geen bots) staan ze allemaal
+    uit, met een tooltip die uitlegt waarom.
+  - **Gevonden en gefixt tijdens het meten van de nieuwe kaarten: een echte, pre-existing
+    scheefheid in de koploper-heuristiek.** Een eerste 15.000-potjes-batch op de nieuwe kaarten
+    liet startpositie 3.1 stelselmatig 2-2,5 procentpunt lager winnen dan 3.4 — buiten de
+    foutmarge, en consistent over meerdere onafhankelijke runs (dus geen toeval). Oorzaak:
+    `pickShortCircuitTarget()` (het bestaande "raak de koploper"-algoritme achter Kortsluiting,
+    ongewijzigd sinds vóór deze sessie) koos bij een GELIJKE stand altijd de EERSTE tegenstander
+    die de lus tegenkwam — en de spelers-array staat vast op volgorde 3.1→3.2→3.3→3.4 (alleen
+    `strategy` en de beurtvolgorde worden geloot, de array-volgorde zelf niet). Bij een tie (heel
+    gewoon vroeg in het potje, als iedereen nog op 0 opdrachten staat) werd dus stelselmatig de
+    LAAGST geïndexeerde tegenstander geraakt. Dat gold al voor Kortsluiting alleen, maar bleef
+    destijds onder de meetdrempel (spreiding 0,5 procentpunt in eerdere runs); de vier nieuwe
+    koploper-kaarten (Vergrendeling/Stroomonderbreking/Noodbarrière/Signaalstoring) hergebruiken
+    dezelfde `pickLeaderTarget()`-heuristiek, en met vijf kaarten die allemaal dezelfde kant op
+    duwen werd het effect groot genoeg om te meten. Fix: reservoir sampling (bij elke NIEUWE tie
+    1/n kans om 'm over te nemen) in zowel `pickShortCircuitTarget()` als `pickLeaderTarget()`,
+    met de bestaande `rand`-stroom als bron — blijft dus deterministisch per seed, net als de rest
+    van de simulatie. Geverifieerd over twee nieuwe onafhankelijke runs van 15.000 potjes ná de
+    fix: spreiding terug naar 1,0 procentpunt, ruim binnen de foutmarge van ±0,7, en geen
+    richting-consistente scheefheid meer tussen de vier startposities.
+  - **Herijkte cijfers ná alle 10 nieuwe kaarten én de fairness-fix** (15.000 potjes): dood-vrij
+    bleef 100% (geen "koudste tegel" op 0,0%), eerlijkheid per startpositie binnen foutmarge
+    (spreiding 1,0 procentpunt), eindklassering per startpositie telt op tot 100% per kolom met
+    gem. plaats 2,48-2,53. De energie-actie-winstpercentages verschoven licht binnen de
+    verwachte ruis (Stuwstoot 31,3% → 30,4%, Herprioritering 27,0% → 28,0%, Noodtransport
+    34,1% → 34,3%, geen energie 7,5% → 7,4%) — geen van de verschuivingen is groter dan de
+    foutmarge, dus geen aanwijzing dat de nieuwe kaarten de bestaande energie-strategieën
+    herbalanceren. Elke nieuwe kaart wordt gebruikt: de vier koploper-kaarten (Vergrendeling/
+    Stroomonderbreking/Noodbarrière/Signaalstoring) rond 0,92-0,93× per potje (breed toepasbaar,
+    geen zeldzame voorwaarde), Terugtrekbevel 0,25× (vereist adjacentie ÉN een bekende
+    looprichting, dus zeldzamer — vergelijkbaar met Duwstoot's 0,26×), Herkansing/Snelroute/
+    Herinnering rond 0,93× (bijna altijd bruikbaar), Reservetank 0,59× (net als Overdrukklep
+    afhankelijk van energieverlies boven het plafond), Kaartenruil 0,13× (smalle bot-voorwaarde:
+    alleen om een Prioriteitspas kwijt te raken). Gezien de bewust ZWAARDERE aard van Vergrendeling
+    en Terugtrekbevel (zie de inschatting die aan de implementatie voorafging) zou een volgende
+    balans-blik zich vooral op die twee moeten richten als de trekkans ooit aangepast wordt — voor
+    nu blijven alle 10 met gelijke kans (2 exemplaren) in de gedeelde stapel van 40.
 
 ## Nog te doen
 

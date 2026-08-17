@@ -1,8 +1,54 @@
 // ---------- controls ----------
-function applyGeneratedLayout(seed){
+// pool van 60 kandidaten (zie constrainedShuffleAsync in 70-generator.js) duurt ~2s i.p.v. de
+// vroegere ~0,7s bij pool 20 — loopt daarom in brokken met een voortgangsbalk (zelfde patroon
+// als runSimulationBatch in 95-simulate.js), anders bevriest de pagina zichtbaar tijdens het
+// genereren. genRunning/btnShuffle.disabled voorkomt dat een dubbele klik twee generaties
+// tegelijk start; hideGenProgress() (aangeroepen vanuit clearSimResults() bij ELKE bordwijziging)
+// zorgt dat de balk en knoppen direct resetten zodra het bord op een ANDERE manier verandert
+// terwijl er nog gegenereerd wordt (bv. een tegel slepen) — de simRunId-check in
+// applyGeneratedLayout zorgt dat zo'n verouderde run zijn resultaat dan ook niet meer toepast.
+const genProgressEl = document.getElementById('genProgress');
+const genProgressFillEl = document.getElementById('genProgressFill');
+const genProgressTextEl = document.getElementById('genProgressText');
+let genRunning = false;
+
+function hideGenProgress(){
+  if (genProgressEl) genProgressEl.hidden = true;
+  genRunning = false;
+  const btnShuffleEl = document.getElementById('btnShuffle'), btnDiceEl = document.getElementById('btnDice');
+  if (btnShuffleEl) btnShuffleEl.disabled = false;
+  if (btnDiceEl) btnDiceEl.disabled = false;
+}
+function updateGenProgress(found, target, elapsedMs){
+  if (!genProgressEl) return;
+  const pct = target ? Math.min(100, (found / target) * 100) : 0;
+  genProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  const perCandidate = found ? elapsedMs / found : 0;
+  const etaMs = perCandidate * (target - found);
+  genProgressTextEl.innerHTML =
+    `<span><b>${found}</b> / ${target} kandidaten (${pct.toFixed(0)}%)</span>` +
+    `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${found > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
+}
+
+async function applyGeneratedLayout(seed){
+  if (genRunning) return; // een dubbele klik mag geen tweede generatie tegelijk starten
   clearSimResults();
-  resetRotations(); // de generator rekent met ongedraaide tegels
-  layout = constrainedShuffle(seed);
+  const runId = simRunId; // clearSimResults() heeft 'm net verhoogd; deze aanroep "claimt" dat nummer
+  genRunning = true;
+  const btnShuffleEl = document.getElementById('btnShuffle'), btnDiceEl = document.getElementById('btnDice');
+  if (btnShuffleEl) btnShuffleEl.disabled = true;
+  if (btnDiceEl) btnDiceEl.disabled = true;
+  if (genProgressEl){ genProgressEl.hidden = false; updateGenProgress(0, 60, 0); }
+
+  const t0 = performance.now();
+  const generated = await constrainedShuffleAsync(seed, (found, target) => {
+    if (runId !== simRunId) return; // bord intussen op een andere manier gewijzigd
+    updateGenProgress(found, target, performance.now() - t0);
+  });
+  if (runId !== simRunId){ return; } // verouderd: bord is inmiddels iets anders geworden
+
+  layout = generated;
+  hideGenProgress();
   selectedSlot = null; highlightTile = null;
   statSeed.textContent = seed;
   const conn = computeConnectivity();

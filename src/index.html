@@ -49,8 +49,6 @@
           <button id="btnRotL" disabled>↺ 90° links</button>
           <button id="btnRotR" disabled>90° rechts ↻</button>
         </div>
-        <p class="hint">Sleep een tegel over een andere om ze te verwisselen. Groen kader = mag, rood = mag niet.</p>
-        <p class="hint">Op een hoek mag geen enkele doorgang het bord af wijzen — daardoor passen tegel 1 en 16 alleen op A en P. De starttegel (#8) ligt altijd binnenin op G/H/I/L/M/N.</p>
       </div>
     </div>
 
@@ -67,6 +65,10 @@
         <div class="btn-row">
           <button id="btnShuffle" class="primary">Genereer indeling</button>
           <button id="btnReset" class="ghost">Herstel origineel</button>
+        </div>
+        <div id="genProgress" class="sim-progress" hidden>
+          <div class="sim-progress-bar"><div class="sim-progress-fill" id="genProgressFill"></div></div>
+          <div class="sim-progress-text" id="genProgressText"></div>
         </div>
 
         <div id="layoutCode" hidden></div>
@@ -128,6 +130,10 @@
           </div>
         </div>
         <p class="hint">Speelt potjes na met 2×D6 (exact aantal stappen, geen U-turn, bezette vakjes blokkeren) op de indeling van het tabblad "Kaart maken". Elke speler heeft een eigen geschud stapeltje opdrachten 1–9; wie als eerste 6 opdrachten voltooit wint.</p>
+        <div id="simProgress" class="sim-progress" hidden>
+          <div class="sim-progress-bar"><div class="sim-progress-fill" id="simProgressFill"></div></div>
+          <div class="sim-progress-text" id="simProgressText"></div>
+        </div>
         <div id="simStatus" class="reach-status"></div>
         <div id="simResults"></div>
       </div>
@@ -136,12 +142,36 @@
 
   <div id="tabWalk" class="tab-panel" role="tabpanel" hidden>
     <div class="panel">
-      <h2>Stap voor stap — 1 speler</h2>
+      <h2>Stap voor stap</h2>
       <div class="controls">
-        <div class="walk-controls">
+        <div class="walk-mode-toggle" role="tablist">
+          <button class="walk-mode-btn active" id="walkModeAuto" data-mode="auto" role="tab" aria-selected="true">Automatisch</button>
+          <button class="walk-mode-btn" id="walkModeSolo" data-mode="solo" role="tab" aria-selected="false">Zelf spelen</button>
+        </div>
+
+        <div class="walk-controls" id="walkAutoControls">
+          <div class="field">
+            <label for="walkPlayers">Aantal spelers</label>
+            <select id="walkPlayers">
+              <option value="1">1 speler</option>
+              <option value="2">2 spelers</option>
+              <option value="3">3 spelers</option>
+              <option value="4" selected>4 spelers</option>
+            </select>
+          </div>
           <div class="field">
             <label for="walkStart">Startpositie</label>
             <select id="walkStart"></select>
+          </div>
+          <div class="field">
+            <label for="walkEnergyMode">Energie-inzet</label>
+            <select id="walkEnergyMode">
+              <option value="mix" selected>elke speler een andere</option>
+              <option value="boost">alleen Stuwstoot (3)</option>
+              <option value="reorder">alleen Herprioritering (6)</option>
+              <option value="jump">alleen Noodtransport (10)</option>
+              <option value="none">niemand geeft uit</option>
+            </select>
           </div>
           <div class="field">
             <label for="walkSpeed">Tempo — <span id="walkSpeedLabel">normaal</span></label>
@@ -149,32 +179,90 @@
           </div>
           <div class="btn-row">
             <button id="btnWalkStart" class="primary">Simulatie starten</button>
+            <button id="btnWalkPause" class="ghost" disabled>⏸ Pauze</button>
             <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
           </div>
         </div>
-        <p class="hint">Speelt één potje met één speler op de indeling van het tabblad "Kaart maken". Het tempo kun je tijdens het lopen aanpassen.</p>
+        <p class="hint" id="walkAutoHint">Speelt één potje op de indeling van het tabblad "Kaart maken", met dezelfde regels als de batch-simulatie: elke speler blokkeert de vakjes waar hij staat, en er wordt doorgespeeld tot de één na laatste speler binnen is — bij 4 spelers dus tot en met de nummer 3, want dan ligt de vierde plaats vast. Het tempo kun je tijdens het lopen aanpassen. <span id="walkStartHint" class="sub"></span></p>
 
-        <div class="walk-hud">
-          <div class="walk-dice" id="walkDice"></div>
-          <div class="walk-meta" id="walkMeta"></div>
+        <div class="walk-controls" id="walkSoloControls" hidden>
+          <div class="field">
+            <label for="walkSoloPlayers">Aantal spelers</label>
+            <select id="walkSoloPlayers">
+              <option value="1">1 speler (alleen)</option>
+              <option value="2">2 spelers</option>
+              <option value="3">3 spelers</option>
+              <option value="4" selected>4 spelers</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="walkSoloBots">Aantal bots</label>
+            <select id="walkSoloBots"></select>
+          </div>
         </div>
-
-        <div id="walkStatus" class="reach-status"></div>
-
-        <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
-        <div class="board-outer">
-          <div id="walkBoard"></div>
+        <div id="walkSoloSetupPlayers" class="walk-solo-setup"></div>
+        <div class="walk-controls" id="walkSoloStartRow" hidden>
+          <div class="btn-row">
+            <button id="btnWalkSoloStart" class="primary">Potje starten</button>
+            <button id="btnWalkSoloReset" class="ghost" disabled>Nieuw potje</button>
+          </div>
         </div>
+        <div class="walk-play-layout">
+          <div class="walk-board-col">
+            <div class="walk-score" id="walkScore"></div>
 
-        <div class="walk-legend">
-          <span class="walk-key"><i class="walk-swatch pawn"></i>pion</span>
-          <span class="walk-key"><i class="walk-swatch target"></i>huidig doel</span>
-          <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt</span>
-          <span class="walk-key"><i class="walk-swatch done"></i>voltooide opdracht</span>
-          <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
+            <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
+            <div class="board-outer">
+              <div id="walkBoard"></div>
+            </div>
+
+            <div class="walk-legend">
+              <span class="walk-key"><i class="walk-swatch pawn p1"></i><i class="walk-swatch pawn p2"></i><i class="walk-swatch pawn p3"></i><i class="walk-swatch pawn p4"></i>pionnen (speler 1–4)</span>
+              <span class="walk-key"><i class="walk-swatch target"></i>doel van wie aan zet is</span>
+              <span class="walk-key"><i class="walk-swatch trail"></i>route deze beurt (kleur van wie aan zet is)</span>
+              <span class="walk-key"><i class="walk-swatch done"></i>al voltooid door wie aan zet is</span>
+              <span class="walk-key"><i class="walk-swatch start"></i>startpositie</span>
+            </div>
+
+            <div id="walkLog" class="walk-log"></div>
+          </div>
+
+          <div class="walk-side-col">
+            <div class="walk-dirpad-row" id="walkDirPad" hidden>
+              <div class="walk-dirpad">
+                <button type="button" class="walk-dir-btn walk-dir-n" data-dir="0" title="Noord">▲<span>N</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-w" data-dir="3" title="West">◀<span>W</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-o" data-dir="1" title="Oost">▶<span>O</span></button>
+                <button type="button" class="walk-dir-btn walk-dir-z" data-dir="2" title="Zuid">▼<span>Z</span></button>
+              </div>
+              <div class="walk-step-counter">
+                <div class="walk-step-box"><span class="walk-step-num" id="walkStepDone">0</span><span class="walk-step-lbl">gezet</span></div>
+                <div class="walk-step-box"><span class="walk-step-num" id="walkStepLeft">0</span><span class="walk-step-lbl">nog</span></div>
+              </div>
+            </div>
+
+            <div class="walk-hud">
+              <div class="walk-dice" id="walkDice"></div>
+              <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+              <div class="btn-row">
+                <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
+                <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
+              </div>
+            </div>
+
+            <div class="walk-info-panel">
+              <div class="walk-meta" id="walkMeta"></div>
+
+              <div class="walk-score" id="walkScoreActive"></div>
+
+              <div class="walk-solo-panel" id="walkSoloPanel" hidden>
+                <div class="walk-solo-actions" id="walkSoloActions"></div>
+              </div>
+
+              <div id="walkStatus" class="reach-status"></div>
+            </div>
+          </div>
         </div>
-
-        <div id="walkLog" class="walk-log"></div>
       </div>
     </div>
   </div>

@@ -35,6 +35,7 @@ JS_ORDER = [
     "90-editor.js",
     "95-simulate.js",
     "96-walk.js",
+    "97-solo.js",
 ]
 
 
