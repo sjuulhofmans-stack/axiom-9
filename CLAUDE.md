@@ -106,6 +106,32 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   over en dat is precies de gangenlus waar niemand komt. Twee ervan (7
   Serverruimte, 17 Kernreactor) dragen bovendien een opdracht, dus centraal
   vastzetten haalt de reden weg om naar buiten te lopen.
+  **Kamers spreiden — schaakbord-voorkeur bij het bouwen.** Kamers klonterden
+  samen (gemiddeld 5,9 kamerparen rechtstreeks tegen elkaar, uitschieters tot 9;
+  in de praktijk blokken van 3-4 kamers op een rij). Alleen de rangschikking
+  omdraaien hielp niet — in 95% van de gevallen koos hij dezelfde indeling,
+  omdat álle 60 kandidaten in de pool al even sterk geklonterd waren. Wat wél
+  werkt is sturen bij de **opbouw**: `attemptSeamlessLayout` krijgt een
+  `roomColorPref` mee en probeert per positie eerst de tegelsoort die volgens
+  het schaakbordpatroon op dat veld hoort. Het bord is 4×5 = 10 velden per
+  kleur en er zijn precies 10 kamers, dus dat patroon is exact de indeling
+  zonder enkele kamer-kamer-grens. Let op: dit is een **volgorde, geen filter**
+  — elke kandidaat wordt nog steeds geprobeerd, dus de zoektocht blijft
+  compleet. Gemeten over 250 indelingen (origineel vs. nieuw, één proces):
+  kamerparen 5,88 → 2,15 gemiddeld, maximum 9 → 4, het aandeel met ≥6 paren
+  0% (was 58,8%), en 26% haalt nu een perfect schaakbord (0 paren). Dode tegels
+  bleven 0,000 (100% van de indelingen dode-tegel-vrij, ongewijzigd), wurgpunten
+  0,000, `minTileBetweenness` 47,2 → 46,8 (verwaarloosbaar), opdrachtafstand
+  8,7 → 11,4 (beter), en het zoeken werd niet trager (164 → 152 pogingen).
+  Enige lichte achteruitgang: `startBalanceScore` 0,589 → 0,628 — criterium 9,
+  dus laag gewicht.
+  **Meetvalkuil bij dit soort tests:** meet een kandidaat altijd vóór
+  `applyRandomBoardFlip`, of laat de rotaties met rust. Meet je ná de
+  spiegeling en roep je dan `applyCornerRotations` aan, dan worden alle
+  niet-hoektegels op 0 gezet terwijl een gespiegeld bord 180° nodig heeft — je
+  meet dan een spookbord met kapotte naden (gaf 0,46 "dode tegels" waar het er
+  echt 0 waren). De spiegeling is puntsymmetrisch en verandert geen enkele
+  afstand, dus vóóraf meten is altijd correct én simpeler.
 - Spelsimulatie (`95-simulate.js`): 2×D6 = exact aantal te lopen stappen, geen
   U-turn, bezette vakjes (andere spelers) blokkeren. Uitzondering: land je exact
   op je eigen opdrachtvakje met minder dan de volledige worp, dan stop je daar
