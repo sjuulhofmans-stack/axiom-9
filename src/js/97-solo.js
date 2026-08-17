@@ -501,7 +501,9 @@ function soloUseEnergyAction(id){
     soloUnconditionalSwap();
     soloTargetSwapped = true;
     soloRefreshTarget();
-    walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
+    // kosten uit ENERGY_ACTIONS halen i.p.v. hier een getal te herhalen — dat liep bij de
+    // prijswijziging 6 → 2 juist uit de pas met de werkelijk afgeschreven energie
+    walkLog(`Je zet <b>Herprioritering</b> in (−${act.cost}): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
     soloProceedToRoll();
   } else if (id === 'jump'){
     soloEnterJumpTarget();
@@ -991,7 +993,7 @@ function soloResolveBotTurn(player){
     }
   }
   if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
-    const swapped = energyReorderTarget(soloGraph, shim, player.pos);
+    const swapped = blindReorderTarget(soloGraph, shim, player.pos, REORDER_BLIND_THRESHOLD);
     if (swapped !== null){ targetLabel = swapped; player.energy -= ENERGY_ACTIONS.reorder.cost; player.actionUses++; energyActionUsed = true; }
   }
   const targetKey = soloGraph.questCells[targetLabel];

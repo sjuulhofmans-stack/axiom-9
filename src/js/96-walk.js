@@ -464,7 +464,7 @@ async function runWalkSimulation(){
         }
       }
       if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
-        const swapped = energyReorderTarget(graph, shim, player.pos);
+        const swapped = blindReorderTarget(graph, shim, player.pos, REORDER_BLIND_THRESHOLD);
         if (swapped !== null){
           targetLabel = swapped;
           player.energy -= ENERGY_ACTIONS.reorder.cost;
