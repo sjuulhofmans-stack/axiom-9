@@ -419,11 +419,10 @@ async function runWalkSimulation(){
       }
 
       // fase 1: energie-kaarten horen bij de worp die net gevallen is
-      if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
-        const saved = Math.min(3, energyGain.wasted);
-        player.energy += saved;
-        useActionCard(player, 'valve', deck);
-        cardActionUsed = true; usedCardId = 'valve';
+      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
+        simGainEnergy(player, energyRoll);   // verdubbelen = nog eens dezelfde worp erbij
+        useActionCard(player, 'condenser', deck);
+        cardActionUsed = true; usedCardId = 'condenser';
       }
       if (!cardActionUsed && player.cards.includes('short')){
         const victim = pickShortCircuitTarget(players, pIdx);
@@ -558,15 +557,31 @@ async function runWalkSimulation(){
       await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
 
-      if (!usedBoots) move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+      if (!usedBoots){
+        move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+        // Koerscorrectie: tegenvallende worp overdoen (zie simulateOneGame voor de drempel)
+        const dice = d3 ? 3 : 2;
+        if (!move.bankedQuest && !cardActionUsed && player.cards.includes('reroll') && roll < dice * 3.5){
+          d1 = simRollD6(rand); d2 = simRollD6(rand);
+          if (d3) d3 = simRollD6(rand);
+          roll = d1 + d2 + (d3 || 0);
+          useActionCard(player, 'reroll', deck);
+          cardActionUsed = true; usedCardId = 'reroll';
+          renderWalkDice(d1, d2, energyRoll, false, d3);
+          if (aborted()) return;
+          await walkTick(Math.min(500, walkSpeed().rollMs));
+          if (aborted()) return;
+          move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+        }
+      }
 
       // fase 4: Blinde Vlek (kaart) en Noodtransport (energie) lossen allebei een blokkade op
       // — blijven elkaar uitsluiten binnen dit ene bewegingsmoment (`blindResolvedBlock`), zie
       // de toelichting in simulateOneGame(). Noodtransport mag TUSSENTIJDS.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && !usedBoots && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
-        if (retry.key !== move.key){
+        const retry = resolveMove(graph, player.pos, roll, SIM_EMPTY_SET, targetKey, rand, occupiedNow());
+        if (retry && retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck);
           cardActionUsed = true; usedCardId = 'blind';
@@ -585,17 +600,6 @@ async function runWalkSimulation(){
             : resolveMove(graph, jump.key, roll, occupiedNow(), targetKey, rand);
         }
       }
-      // fase 5: Herbevoorrading als sluitstuk — alleen als er verder geen ANDERE kaart speelde
-      if (!cardActionUsed && player.cards.includes('resupply')){
-        useActionCard(player, 'resupply', deck);
-        const drawn = drawActionCard(deck, rand);
-        if (drawn){
-          player.cards.push(drawn);
-          walkLog(`${player.name} gebruikt <b>Herbevoorrading</b> en trekt meteen <b>${ACTION_CARDS[drawn].name}</b>.`, null, player);
-        }
-        cardActionUsed = true; usedCardId = 'resupply';
-      }
-
       if (!await walkPath(move.path, usedBoots)) return;
 
       const rollText = usedBoots ? `🥾 ${move.stepsUsed} van 10 stappen rechtdoor` : walkRollText(d1, d2, d3, roll);

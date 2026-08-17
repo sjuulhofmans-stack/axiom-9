@@ -91,6 +91,9 @@ const SIM_HISTOGRAM_BINS = 12;
 // verspillen zonder om te keren. Niet opnieuw voorstellen dus.
 const ENERGY_DIE_FACES = [0, 1, 1, 2, 2, 3];
 const ENERGY_MAX = 10;
+// gedeelde lege verzameling voor "niets blokkeert de route" (Blinde Vlek) — scheelt een
+// nieuwe Set per beurt in een lus die miljoenen keren draait
+const SIM_EMPTY_SET = new Set();
 // Afstemknop: het bereik van het Noodtransport. Bewust `let`, zodat je 'm vanuit de console
 // kunt doorrekenen zonder te herbouwen. 13 is niet gegokt maar gemeten — winst% van
 // (Stuwstoot / Herprioritering / Noodtransport) over 5000 potjes per stand, zelfde
@@ -221,20 +224,20 @@ function blindReorderTarget(graph, player, fromKey, threshold){
 // Stuwstoot, Herkalibratie/Herprioritering, Blinde Vlek/Noodtransport) die elkaar nog wél
 // uitsluiten omdat ze hetzelfde mechanische effect hebben. Binnen het kaart-slot is de
 // voorrangsvolgorde: eerst de energie-kaarten (ze horen bij de worp die net gevallen is), dan de
-// doelkaarten, dan de bewegingskaarten, dan de reactieve kaart, en Herbevoorrading als sluitstuk
-// voor beurten waarin geen ANDERE kaart speelde. Prioriteitspas heeft geen meetbaar effect in
+// doelkaarten, dan de bewegingskaarten, en als laatste de reactieve kaart (Blinde Vlek, die pas
+// afgaat als je route daadwerkelijk geblokkeerd raakt). Prioriteitspas heeft geen meetbaar effect in
 // deze bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit
 // actief gespeeld door bots — een mens kan 'm wel altijd zelf spelen of afleggen.
 const ACTION_CARDS = {
   boots:     { name: 'Zwaartekracht-laarzen', hint: '10 stappen rechtdoor, geen bochten' },
   ration:    { name: 'Noodrantsoen',          hint: '+3 energie direct' },
   short:     { name: 'Kortsluiting',          hint: 'tegenstander mist zijn energiesteen' },
-  blind:     { name: 'Blinde Vlek',           hint: 'bezette vakjes tellen deze beurt niet mee' },
+  blind:     { name: 'Blinde Vlek',           hint: 'loop door tegenstanders heen — eindig er niet op' },
   recal:     { name: 'Herkalibratie',         hint: 'gratis wissel met de volgende opdracht' },
   shove:     { name: 'Duwstoot',              hint: 'duw een naastgelegen tegenstander weg' },
   boostcell: { name: 'Stuwlading',            hint: 'gratis derde loopsteen' },
-  valve:     { name: 'Overdrukklep',          hint: 'redt energie die anders over het plafond ging' },
-  resupply:  { name: 'Herbevoorrading',       hint: 'trek meteen nog een kaart' },
+  condenser: { name: 'Condensator',           hint: 'je energiesteen telt deze beurt dubbel' },
+  reroll:    { name: 'Koerscorrectie',        hint: 'gooi je worp opnieuw' },
   scan:      { name: 'Prioriteitspas',        hint: 'bekijk de volgende opdracht van een tegenstander' },
 };
 const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
@@ -248,7 +251,7 @@ const ACTION_CARD_HAND_MAX = 2;
 // rood = verstoring, gedimd = puur informatief (Prioriteitspas).
 const ACTION_CARD_TINTS = {
   boots: 'amber', ration: 'start', short: 'danger', blind: 'quest', recal: 'quest',
-  shove: 'danger', boostcell: 'amber', valve: 'start', resupply: 'quest', scan: 'dim',
+  shove: 'danger', boostcell: 'amber', condenser: 'start', reroll: 'amber', scan: 'dim',
 };
 const ACTION_CARD_ICONS = {
   boots: `<path d="M14 34 L14 18 Q14 14 18 14 L22 14 L22 24 L30 24 Q34 24 34 28 L34 34 Z"/>
@@ -273,10 +276,15 @@ const ACTION_CARD_ICONS = {
     <circle cx="22" cy="22" r="1.1" fill="currentColor" stroke="none"/><circle cx="26" cy="26" r="1.1" fill="currentColor" stroke="none"/>
     <rect x="33" y="8" width="10" height="10" rx="2"/>
     <circle cx="36" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="40" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="36" cy="15" r="1" fill="currentColor" stroke="none"/>`,
-  valve: `<circle cx="19" cy="27" r="12"/><line x1="19" y1="27" x2="25.5" y2="19"/><circle cx="19" cy="27" r="1.6" fill="currentColor" stroke="none"/>
-    <path d="M28 14 Q31.5 9 28 4.5"/><path d="M33.5 16.5 Q38 12.5 35.5 7"/>`,
-  resupply: `<path d="M8 20 L24 12 L40 20 L40 36 L8 36 Z"/><line x1="8" y1="20" x2="24" y2="28"/><line x1="40" y1="20" x2="24" y2="28"/><line x1="24" y1="28" x2="24" y2="36"/>
-    <path d="M19 6 A8 8 0 1 1 12.5 12.5"/><path d="M19 6 L14.5 5 M19 6 L18 10"/>`,
+  // condensator: twee platen met een aansluiting links/rechts en een vonk in de spleet
+  condenser: `<line x1="18" y1="13" x2="18" y2="35"/><line x1="30" y1="13" x2="30" y2="35"/>
+    <line x1="5" y1="24" x2="18" y2="24"/><line x1="30" y1="24" x2="43" y2="24"/>
+    <path d="M26.5 16 L21 24.5 L25 24.5 L21.5 32" fill="none"/>`,
+  // koerscorrectie: een loopsteen met twee cirkelpijlen eromheen (opnieuw gooien)
+  reroll: `<rect x="17" y="17" width="16" height="16" rx="3"/>
+    <circle cx="22" cy="22" r="1.5" fill="currentColor" stroke="none"/><circle cx="28" cy="28" r="1.5" fill="currentColor" stroke="none"/>
+    <path d="M11 21 A15 15 0 0 1 34 10"/><path d="M34 10 L29 9.5 M34 10 L33 14.5"/>
+    <path d="M37 27 A15 15 0 0 1 14 38"/><path d="M14 38 L19 38.5 M14 38 L15 33.5"/>`,
   scan: `<rect x="6" y="12" width="21" height="27" rx="2"/><line x1="10.5" y1="19" x2="22.5" y2="19"/><line x1="10.5" y1="24.5" x2="22.5" y2="24.5"/>
     <circle cx="31.5" cy="30.5" r="8"/><line x1="37.2" y1="36.2" x2="43" y2="42"/>`,
 };
@@ -552,11 +560,20 @@ function backtrackLayers(layersKeys, layersParent, step, idx){
 
 // kiest, tussen meerdere even geldige eindcellen (zelfde afstand tot eigen doel), de
 // beste met de hinder-score als tie-break en tot slot willekeur.
-function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, rand, stepsUsed, bankedQuest){
+function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, rand, stepsUsed, bankedQuest, endBlockedSet){
   const keys = layersKeys[step];
   const firstIndex = new Map();
   for (let i = 0; i < keys.length; i++) if (!firstIndex.has(keys[i])) firstIndex.set(keys[i], i);
-  const uniqueKeys = Array.from(firstIndex.keys());
+  let uniqueKeys = Array.from(firstIndex.keys());
+  // Blinde Vlek: je mag DOOR een bezet vakje lopen, maar er niet op eindigen. De bezette
+  // vakjes zijn dan uit occupiedSet gehaald (zodat de route erlangs mag) en zitten hier in
+  // endBlockedSet. Blijft er geen vrij eindvakje over, dan levert deze zet niets op —
+  // null, waarna de aanroeper terugvalt op de gewone (wel-blokkerende) zet.
+  if (endBlockedSet){
+    const free = uniqueKeys.filter(k => !endBlockedSet.has(k));
+    if (!free.length) return null;
+    uniqueKeys = free;
+  }
 
   let chosenKey;
   if (uniqueKeys.length === 1){
@@ -581,7 +598,10 @@ function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, 
 // lost één beurt op: DP over (cel, binnenkomstrichting) per stap, t/m de geworpen som.
 // Houdt alle lagen bij (klein: <=12 stappen, elk een paar honderd toestanden) zodat
 // het uiteindelijk gekozen pad achteraf teruggelezen kan worden voor de heatmap.
-function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
+// `endBlockedSet` (optioneel) is de verzameling vakjes waar je wel DOORHEEN mag maar niet op
+// mag EINDIGEN — alleen gebruikt door Blinde Vlek. Zonder die parameter gedraagt deze functie
+// zich exact als voorheen. Geeft null terug als er met die beperking geen zet mogelijk is.
+function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand, endBlockedSet){
   const { adjKey, adjDir } = graph;
   const layersKeys = [[startKey]], layersDirs = [[-1]], layersParent = [[]];
   let wasBlocked = false;
@@ -601,7 +621,9 @@ function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
         if (occupiedSet.has(nk)){ wasBlocked = true; continue; } // bezet vakje blokkeert
         // eigen doel exact geraakt: beurt eindigt meteen, rest van de worp vervalt —
         // geen noodzaak om de rest van deze (of latere) lagen nog uit te rekenen.
-        if (nk === targetKey){
+        // staat er met Blinde Vlek een tegenstander op je eigen opdrachtvakje, dan mag je er
+        // wel overheen lopen maar hem niet pakken — dus doorzoeken i.p.v. hier afronden
+        if (nk === targetKey && !(endBlockedSet && endBlockedSet.has(nk))){
           const path = backtrackLayers(layersKeys, layersParent, step - 1, i);
           path.push(nk);
           return { key: targetKey, stepsUsed: step, bankedQuest: true, path, wasBlocked };
@@ -614,13 +636,15 @@ function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
     }
     if (nextKeys.length === 0){
       // doodlopend voordat de worp op is: stop op de laatst haalbare laag
-      const move = pickEnd(graph, layersKeys, layersParent, step - 1, targetKey, occupiedSet, rand, step - 1, false);
+      const move = pickEnd(graph, layersKeys, layersParent, step - 1, targetKey, occupiedSet, rand, step - 1, false, endBlockedSet);
+      if (!move) return null;
       move.wasBlocked = wasBlocked;
       return move;
     }
     layersKeys.push(nextKeys); layersDirs.push(nextDirs); layersParent.push(nextParent);
   }
-  const move = pickEnd(graph, layersKeys, layersParent, steps, targetKey, occupiedSet, rand, steps, false);
+  const move = pickEnd(graph, layersKeys, layersParent, steps, targetKey, occupiedSet, rand, steps, false, endBlockedSet);
+  if (!move) return null;
   move.wasBlocked = wasBlocked;
   return move;
 }
@@ -699,13 +723,17 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       extra.energyWasted += energyGain.wasted;
       extra.energyLevels[player.energy]++;
 
-      // 1b. energie-kaarten horen bij de worp die net gevallen is: Overdrukklep redt wat
-      //     anders over het plafond ging, Kortsluiting raakt de leider, Noodrantsoen vult aan.
-      if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
-        const saved = Math.min(3, energyGain.wasted);
-        player.energy += saved;
-        extra.energyWasted -= saved;
-        useActionCard(player, 'valve', deck, extra);
+      // 1b. energie-kaarten horen bij de worp die net gevallen is: Condensator verdubbelt 'm,
+      //     Kortsluiting raakt de leider, Noodrantsoen vult aan.
+      // Condensator wordt pas gespeeld NA de energiesteen, dus met kennis van de uitkomst —
+      // verdubbelen betekent simpelweg nog eens `energyRoll` erbij, netjes tegen het plafond
+      // aan (simGainEnergy). Alleen de moeite waard als er ook echt iets bij kan: staat de
+      // speler al (bijna) vol, dan bewaart hij de kaart.
+      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
+        const bonus = simGainEnergy(player, energyRoll);
+        extra.energyRolled += energyRoll;
+        extra.energyWasted += bonus.wasted;
+        useActionCard(player, 'condenser', deck, extra);
         cardActionUsed = true;
       }
       if (!cardActionUsed && player.cards.includes('short')){
@@ -772,18 +800,29 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         }
       }
       if (!usedBoots){
+        let dice = 2;
         roll = simRollD6(rand) + simRollD6(rand);
         if (!cardActionUsed && player.cards.includes('boostcell')){
-          roll += simRollD6(rand);
+          roll += simRollD6(rand); dice = 3;
           useActionCard(player, 'boostcell', deck, extra);
           cardActionUsed = true;
         } else if (!energyActionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
-          roll += simRollD6(rand);
+          roll += simRollD6(rand); dice = 3;
           player.energy -= ENERGY_ACTIONS.boost.cost;
           player.actionUses++;
           energyActionUsed = true;
         }
         move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+        // Koerscorrectie: een tegenvallende worp overdoen. Alleen zinvol als deze worp de
+        // opdracht niet al pakt, en alleen onder de verwachtingswaarde (3,5 per steen) — dan
+        // is opnieuw gooien in verwachting winst. De nieuwe worp telt, ook als die slechter is.
+        if (!move.bankedQuest && !cardActionUsed && player.cards.includes('reroll') && roll < dice * 3.5){
+          roll = 0;
+          for (let d = 0; d < dice; d++) roll += simRollD6(rand);
+          useActionCard(player, 'reroll', deck, extra);
+          cardActionUsed = true;
+          move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+        }
       }
 
       // 4. Blinde Vlek (kaart) lost een blokkade op door de zet te herberekenen vanaf de
@@ -796,8 +835,11 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       //    32,4% voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
-        if (retry.key !== move.key){
+        // door tegenstanders heen mogen lopen (lege blokkeerset), maar er niet op eindigen
+        // (occupied als endBlockedSet) — levert dat geen enkel vrij eindvakje op, dan geeft
+        // resolveMove null terug en blijft de gewone, geblokkeerde zet staan
+        const retry = resolveMove(graph, player.pos, roll, SIM_EMPTY_SET, targetKey, rand, occupied);
+        if (retry && retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck, extra);
           cardActionUsed = true;
@@ -817,15 +859,6 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
             : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
         }
       }
-      // 5. Herbevoorrading als sluitstuk: alleen als er verder geen ANDERE kaart te spelen viel
-      //    deze beurt — energiegebruik telt niet meer mee, dat is nu een apart slot.
-      if (!cardActionUsed && player.cards.includes('resupply')){
-        useActionCard(player, 'resupply', deck, extra);
-        const drawn = drawActionCard(deck, rand);
-        if (drawn){ player.cards.push(drawn); extra.cardDraws++; }
-        cardActionUsed = true;
-      }
-
       player.pos = move.key;
       player.turnsOnTarget++;
       extra.totalTurns++;

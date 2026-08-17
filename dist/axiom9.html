@@ -3237,6 +3237,9 @@ const SIM_HISTOGRAM_BINS = 12;
 // verspillen zonder om te keren. Niet opnieuw voorstellen dus.
 const ENERGY_DIE_FACES = [0, 1, 1, 2, 2, 3];
 const ENERGY_MAX = 10;
+// gedeelde lege verzameling voor "niets blokkeert de route" (Blinde Vlek) — scheelt een
+// nieuwe Set per beurt in een lus die miljoenen keren draait
+const SIM_EMPTY_SET = new Set();
 // Afstemknop: het bereik van het Noodtransport. Bewust `let`, zodat je 'm vanuit de console
 // kunt doorrekenen zonder te herbouwen. 13 is niet gegokt maar gemeten — winst% van
 // (Stuwstoot / Herprioritering / Noodtransport) over 5000 potjes per stand, zelfde
@@ -3367,20 +3370,20 @@ function blindReorderTarget(graph, player, fromKey, threshold){
 // Stuwstoot, Herkalibratie/Herprioritering, Blinde Vlek/Noodtransport) die elkaar nog wél
 // uitsluiten omdat ze hetzelfde mechanische effect hebben. Binnen het kaart-slot is de
 // voorrangsvolgorde: eerst de energie-kaarten (ze horen bij de worp die net gevallen is), dan de
-// doelkaarten, dan de bewegingskaarten, dan de reactieve kaart, en Herbevoorrading als sluitstuk
-// voor beurten waarin geen ANDERE kaart speelde. Prioriteitspas heeft geen meetbaar effect in
+// doelkaarten, dan de bewegingskaarten, en als laatste de reactieve kaart (Blinde Vlek, die pas
+// afgaat als je route daadwerkelijk geblokkeerd raakt). Prioriteitspas heeft geen meetbaar effect in
 // deze bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit
 // actief gespeeld door bots — een mens kan 'm wel altijd zelf spelen of afleggen.
 const ACTION_CARDS = {
   boots:     { name: 'Zwaartekracht-laarzen', hint: '10 stappen rechtdoor, geen bochten' },
   ration:    { name: 'Noodrantsoen',          hint: '+3 energie direct' },
   short:     { name: 'Kortsluiting',          hint: 'tegenstander mist zijn energiesteen' },
-  blind:     { name: 'Blinde Vlek',           hint: 'bezette vakjes tellen deze beurt niet mee' },
+  blind:     { name: 'Blinde Vlek',           hint: 'loop door tegenstanders heen — eindig er niet op' },
   recal:     { name: 'Herkalibratie',         hint: 'gratis wissel met de volgende opdracht' },
   shove:     { name: 'Duwstoot',              hint: 'duw een naastgelegen tegenstander weg' },
   boostcell: { name: 'Stuwlading',            hint: 'gratis derde loopsteen' },
-  valve:     { name: 'Overdrukklep',          hint: 'redt energie die anders over het plafond ging' },
-  resupply:  { name: 'Herbevoorrading',       hint: 'trek meteen nog een kaart' },
+  condenser: { name: 'Condensator',           hint: 'je energiesteen telt deze beurt dubbel' },
+  reroll:    { name: 'Koerscorrectie',        hint: 'gooi je worp opnieuw' },
   scan:      { name: 'Prioriteitspas',        hint: 'bekijk de volgende opdracht van een tegenstander' },
 };
 const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
@@ -3394,7 +3397,7 @@ const ACTION_CARD_HAND_MAX = 2;
 // rood = verstoring, gedimd = puur informatief (Prioriteitspas).
 const ACTION_CARD_TINTS = {
   boots: 'amber', ration: 'start', short: 'danger', blind: 'quest', recal: 'quest',
-  shove: 'danger', boostcell: 'amber', valve: 'start', resupply: 'quest', scan: 'dim',
+  shove: 'danger', boostcell: 'amber', condenser: 'start', reroll: 'amber', scan: 'dim',
 };
 const ACTION_CARD_ICONS = {
   boots: `<path d="M14 34 L14 18 Q14 14 18 14 L22 14 L22 24 L30 24 Q34 24 34 28 L34 34 Z"/>
@@ -3419,10 +3422,15 @@ const ACTION_CARD_ICONS = {
     <circle cx="22" cy="22" r="1.1" fill="currentColor" stroke="none"/><circle cx="26" cy="26" r="1.1" fill="currentColor" stroke="none"/>
     <rect x="33" y="8" width="10" height="10" rx="2"/>
     <circle cx="36" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="40" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="36" cy="15" r="1" fill="currentColor" stroke="none"/>`,
-  valve: `<circle cx="19" cy="27" r="12"/><line x1="19" y1="27" x2="25.5" y2="19"/><circle cx="19" cy="27" r="1.6" fill="currentColor" stroke="none"/>
-    <path d="M28 14 Q31.5 9 28 4.5"/><path d="M33.5 16.5 Q38 12.5 35.5 7"/>`,
-  resupply: `<path d="M8 20 L24 12 L40 20 L40 36 L8 36 Z"/><line x1="8" y1="20" x2="24" y2="28"/><line x1="40" y1="20" x2="24" y2="28"/><line x1="24" y1="28" x2="24" y2="36"/>
-    <path d="M19 6 A8 8 0 1 1 12.5 12.5"/><path d="M19 6 L14.5 5 M19 6 L18 10"/>`,
+  // condensator: twee platen met een aansluiting links/rechts en een vonk in de spleet
+  condenser: `<line x1="18" y1="13" x2="18" y2="35"/><line x1="30" y1="13" x2="30" y2="35"/>
+    <line x1="5" y1="24" x2="18" y2="24"/><line x1="30" y1="24" x2="43" y2="24"/>
+    <path d="M26.5 16 L21 24.5 L25 24.5 L21.5 32" fill="none"/>`,
+  // koerscorrectie: een loopsteen met twee cirkelpijlen eromheen (opnieuw gooien)
+  reroll: `<rect x="17" y="17" width="16" height="16" rx="3"/>
+    <circle cx="22" cy="22" r="1.5" fill="currentColor" stroke="none"/><circle cx="28" cy="28" r="1.5" fill="currentColor" stroke="none"/>
+    <path d="M11 21 A15 15 0 0 1 34 10"/><path d="M34 10 L29 9.5 M34 10 L33 14.5"/>
+    <path d="M37 27 A15 15 0 0 1 14 38"/><path d="M14 38 L19 38.5 M14 38 L15 33.5"/>`,
   scan: `<rect x="6" y="12" width="21" height="27" rx="2"/><line x1="10.5" y1="19" x2="22.5" y2="19"/><line x1="10.5" y1="24.5" x2="22.5" y2="24.5"/>
     <circle cx="31.5" cy="30.5" r="8"/><line x1="37.2" y1="36.2" x2="43" y2="42"/>`,
 };
@@ -3698,11 +3706,20 @@ function backtrackLayers(layersKeys, layersParent, step, idx){
 
 // kiest, tussen meerdere even geldige eindcellen (zelfde afstand tot eigen doel), de
 // beste met de hinder-score als tie-break en tot slot willekeur.
-function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, rand, stepsUsed, bankedQuest){
+function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, rand, stepsUsed, bankedQuest, endBlockedSet){
   const keys = layersKeys[step];
   const firstIndex = new Map();
   for (let i = 0; i < keys.length; i++) if (!firstIndex.has(keys[i])) firstIndex.set(keys[i], i);
-  const uniqueKeys = Array.from(firstIndex.keys());
+  let uniqueKeys = Array.from(firstIndex.keys());
+  // Blinde Vlek: je mag DOOR een bezet vakje lopen, maar er niet op eindigen. De bezette
+  // vakjes zijn dan uit occupiedSet gehaald (zodat de route erlangs mag) en zitten hier in
+  // endBlockedSet. Blijft er geen vrij eindvakje over, dan levert deze zet niets op —
+  // null, waarna de aanroeper terugvalt op de gewone (wel-blokkerende) zet.
+  if (endBlockedSet){
+    const free = uniqueKeys.filter(k => !endBlockedSet.has(k));
+    if (!free.length) return null;
+    uniqueKeys = free;
+  }
 
   let chosenKey;
   if (uniqueKeys.length === 1){
@@ -3727,7 +3744,10 @@ function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, 
 // lost één beurt op: DP over (cel, binnenkomstrichting) per stap, t/m de geworpen som.
 // Houdt alle lagen bij (klein: <=12 stappen, elk een paar honderd toestanden) zodat
 // het uiteindelijk gekozen pad achteraf teruggelezen kan worden voor de heatmap.
-function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
+// `endBlockedSet` (optioneel) is de verzameling vakjes waar je wel DOORHEEN mag maar niet op
+// mag EINDIGEN — alleen gebruikt door Blinde Vlek. Zonder die parameter gedraagt deze functie
+// zich exact als voorheen. Geeft null terug als er met die beperking geen zet mogelijk is.
+function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand, endBlockedSet){
   const { adjKey, adjDir } = graph;
   const layersKeys = [[startKey]], layersDirs = [[-1]], layersParent = [[]];
   let wasBlocked = false;
@@ -3747,7 +3767,9 @@ function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
         if (occupiedSet.has(nk)){ wasBlocked = true; continue; } // bezet vakje blokkeert
         // eigen doel exact geraakt: beurt eindigt meteen, rest van de worp vervalt —
         // geen noodzaak om de rest van deze (of latere) lagen nog uit te rekenen.
-        if (nk === targetKey){
+        // staat er met Blinde Vlek een tegenstander op je eigen opdrachtvakje, dan mag je er
+        // wel overheen lopen maar hem niet pakken — dus doorzoeken i.p.v. hier afronden
+        if (nk === targetKey && !(endBlockedSet && endBlockedSet.has(nk))){
           const path = backtrackLayers(layersKeys, layersParent, step - 1, i);
           path.push(nk);
           return { key: targetKey, stepsUsed: step, bankedQuest: true, path, wasBlocked };
@@ -3760,13 +3782,15 @@ function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
     }
     if (nextKeys.length === 0){
       // doodlopend voordat de worp op is: stop op de laatst haalbare laag
-      const move = pickEnd(graph, layersKeys, layersParent, step - 1, targetKey, occupiedSet, rand, step - 1, false);
+      const move = pickEnd(graph, layersKeys, layersParent, step - 1, targetKey, occupiedSet, rand, step - 1, false, endBlockedSet);
+      if (!move) return null;
       move.wasBlocked = wasBlocked;
       return move;
     }
     layersKeys.push(nextKeys); layersDirs.push(nextDirs); layersParent.push(nextParent);
   }
-  const move = pickEnd(graph, layersKeys, layersParent, steps, targetKey, occupiedSet, rand, steps, false);
+  const move = pickEnd(graph, layersKeys, layersParent, steps, targetKey, occupiedSet, rand, steps, false, endBlockedSet);
+  if (!move) return null;
   move.wasBlocked = wasBlocked;
   return move;
 }
@@ -3845,13 +3869,17 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       extra.energyWasted += energyGain.wasted;
       extra.energyLevels[player.energy]++;
 
-      // 1b. energie-kaarten horen bij de worp die net gevallen is: Overdrukklep redt wat
-      //     anders over het plafond ging, Kortsluiting raakt de leider, Noodrantsoen vult aan.
-      if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
-        const saved = Math.min(3, energyGain.wasted);
-        player.energy += saved;
-        extra.energyWasted -= saved;
-        useActionCard(player, 'valve', deck, extra);
+      // 1b. energie-kaarten horen bij de worp die net gevallen is: Condensator verdubbelt 'm,
+      //     Kortsluiting raakt de leider, Noodrantsoen vult aan.
+      // Condensator wordt pas gespeeld NA de energiesteen, dus met kennis van de uitkomst —
+      // verdubbelen betekent simpelweg nog eens `energyRoll` erbij, netjes tegen het plafond
+      // aan (simGainEnergy). Alleen de moeite waard als er ook echt iets bij kan: staat de
+      // speler al (bijna) vol, dan bewaart hij de kaart.
+      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
+        const bonus = simGainEnergy(player, energyRoll);
+        extra.energyRolled += energyRoll;
+        extra.energyWasted += bonus.wasted;
+        useActionCard(player, 'condenser', deck, extra);
         cardActionUsed = true;
       }
       if (!cardActionUsed && player.cards.includes('short')){
@@ -3918,18 +3946,29 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         }
       }
       if (!usedBoots){
+        let dice = 2;
         roll = simRollD6(rand) + simRollD6(rand);
         if (!cardActionUsed && player.cards.includes('boostcell')){
-          roll += simRollD6(rand);
+          roll += simRollD6(rand); dice = 3;
           useActionCard(player, 'boostcell', deck, extra);
           cardActionUsed = true;
         } else if (!energyActionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
-          roll += simRollD6(rand);
+          roll += simRollD6(rand); dice = 3;
           player.energy -= ENERGY_ACTIONS.boost.cost;
           player.actionUses++;
           energyActionUsed = true;
         }
         move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+        // Koerscorrectie: een tegenvallende worp overdoen. Alleen zinvol als deze worp de
+        // opdracht niet al pakt, en alleen onder de verwachtingswaarde (3,5 per steen) — dan
+        // is opnieuw gooien in verwachting winst. De nieuwe worp telt, ook als die slechter is.
+        if (!move.bankedQuest && !cardActionUsed && player.cards.includes('reroll') && roll < dice * 3.5){
+          roll = 0;
+          for (let d = 0; d < dice; d++) roll += simRollD6(rand);
+          useActionCard(player, 'reroll', deck, extra);
+          cardActionUsed = true;
+          move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+        }
       }
 
       // 4. Blinde Vlek (kaart) lost een blokkade op door de zet te herberekenen vanaf de
@@ -3942,8 +3981,11 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       //    32,4% voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
-        if (retry.key !== move.key){
+        // door tegenstanders heen mogen lopen (lege blokkeerset), maar er niet op eindigen
+        // (occupied als endBlockedSet) — levert dat geen enkel vrij eindvakje op, dan geeft
+        // resolveMove null terug en blijft de gewone, geblokkeerde zet staan
+        const retry = resolveMove(graph, player.pos, roll, SIM_EMPTY_SET, targetKey, rand, occupied);
+        if (retry && retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck, extra);
           cardActionUsed = true;
@@ -3963,15 +4005,6 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
             : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
         }
       }
-      // 5. Herbevoorrading als sluitstuk: alleen als er verder geen ANDERE kaart te spelen viel
-      //    deze beurt — energiegebruik telt niet meer mee, dat is nu een apart slot.
-      if (!cardActionUsed && player.cards.includes('resupply')){
-        useActionCard(player, 'resupply', deck, extra);
-        const drawn = drawActionCard(deck, rand);
-        if (drawn){ player.cards.push(drawn); extra.cardDraws++; }
-        cardActionUsed = true;
-      }
-
       player.pos = move.key;
       player.turnsOnTarget++;
       extra.totalTurns++;
@@ -4929,11 +4962,10 @@ async function runWalkSimulation(){
       }
 
       // fase 1: energie-kaarten horen bij de worp die net gevallen is
-      if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
-        const saved = Math.min(3, energyGain.wasted);
-        player.energy += saved;
-        useActionCard(player, 'valve', deck);
-        cardActionUsed = true; usedCardId = 'valve';
+      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
+        simGainEnergy(player, energyRoll);   // verdubbelen = nog eens dezelfde worp erbij
+        useActionCard(player, 'condenser', deck);
+        cardActionUsed = true; usedCardId = 'condenser';
       }
       if (!cardActionUsed && player.cards.includes('short')){
         const victim = pickShortCircuitTarget(players, pIdx);
@@ -5068,15 +5100,31 @@ async function runWalkSimulation(){
       await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
 
-      if (!usedBoots) move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+      if (!usedBoots){
+        move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+        // Koerscorrectie: tegenvallende worp overdoen (zie simulateOneGame voor de drempel)
+        const dice = d3 ? 3 : 2;
+        if (!move.bankedQuest && !cardActionUsed && player.cards.includes('reroll') && roll < dice * 3.5){
+          d1 = simRollD6(rand); d2 = simRollD6(rand);
+          if (d3) d3 = simRollD6(rand);
+          roll = d1 + d2 + (d3 || 0);
+          useActionCard(player, 'reroll', deck);
+          cardActionUsed = true; usedCardId = 'reroll';
+          renderWalkDice(d1, d2, energyRoll, false, d3);
+          if (aborted()) return;
+          await walkTick(Math.min(500, walkSpeed().rollMs));
+          if (aborted()) return;
+          move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+        }
+      }
 
       // fase 4: Blinde Vlek (kaart) en Noodtransport (energie) lossen allebei een blokkade op
       // — blijven elkaar uitsluiten binnen dit ene bewegingsmoment (`blindResolvedBlock`), zie
       // de toelichting in simulateOneGame(). Noodtransport mag TUSSENTIJDS.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && !usedBoots && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
-        if (retry.key !== move.key){
+        const retry = resolveMove(graph, player.pos, roll, SIM_EMPTY_SET, targetKey, rand, occupiedNow());
+        if (retry && retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck);
           cardActionUsed = true; usedCardId = 'blind';
@@ -5095,17 +5143,6 @@ async function runWalkSimulation(){
             : resolveMove(graph, jump.key, roll, occupiedNow(), targetKey, rand);
         }
       }
-      // fase 5: Herbevoorrading als sluitstuk — alleen als er verder geen ANDERE kaart speelde
-      if (!cardActionUsed && player.cards.includes('resupply')){
-        useActionCard(player, 'resupply', deck);
-        const drawn = drawActionCard(deck, rand);
-        if (drawn){
-          player.cards.push(drawn);
-          walkLog(`${player.name} gebruikt <b>Herbevoorrading</b> en trekt meteen <b>${ACTION_CARDS[drawn].name}</b>.`, null, player);
-        }
-        cardActionUsed = true; usedCardId = 'resupply';
-      }
-
       if (!await walkPath(move.path, usedBoots)) return;
 
       const rollText = usedBoots ? `🥾 ${move.stepsUsed} van 10 stappen rechtdoor` : walkRollText(d1, d2, d3, roll);
@@ -5337,7 +5374,7 @@ let soloFinished = 0;
 let soloFinishTarget = 1;
 let soloActiveIdx = -1;       // wie van soloPlayers nu interactief aan zet is (mens)
 let soloTargetKey = null;
-// 'idle' | 'choose-action' | 'target-pick' | 'valve-offer' | 'blind-offer' |
+// 'idle' | 'choose-action' | 'target-pick' | 'blind-offer' |
 // 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
 // Beurtvolgorde: 'choose-action' = energie-actie kiezen (of overslaan) — vóór het dobbelen, direct
 // ingezet. Dan 'rolling' = dobbelen. Dan 'moving' = stappen zetten; kaarten spelen/afleggen kan op
@@ -5529,11 +5566,13 @@ function soloDiscardCard(id){
   soloAfterCardAction();
 }
 // ---------- tijdens het lopen: altijd-zichtbare kaartenrij (spelen óf afleggen) ----------
-// Blinde Vlek/Overdrukklep blijven puur reactief (zie soloOfferBlindSpot/soloOfferValveSave) —
-// die twee dus hier uitsluiten. Boots/Stuwlading staan hier wél bij: de juiste beurtvolgorde is
-// energie (vóór het dobbelen) → dobbelen → kaart spelen/afleggen (vóór of tijdens het stappen
-// zetten), dus ook deze twee horen pas ná de worp aan de beurt, niet ervoor.
-const SOLO_MOVE_ROW_EXCLUDE = ['blind', 'valve'];
+// Alleen Blinde Vlek blijft puur reactief (zie soloOfferBlindSpot): die bied je pas aan op het
+// moment dat je route daadwerkelijk geblokkeerd raakt. Al het andere staat gewoon in deze rij —
+// de juiste beurtvolgorde is energie (vóór het dobbelen) → dobbelen → kaart spelen/afleggen
+// (vóór of tijdens het stappen zetten), dus ook Boots/Stuwlading/Condensator horen pas ná de
+// worp aan de beurt. Voor Condensator is dat zelfs de bedoeling: je ziet je energiesteen al
+// liggen en beslist dán pas of verdubbelen de moeite waard is.
+const SOLO_MOVE_ROW_EXCLUDE = ['blind'];
 function soloRenderMoveCardRow(){
   if (!walkSoloActionsEl) return;
   if (soloCardActionUsed()){ walkSoloActionsEl.innerHTML = ''; return; }
@@ -5553,6 +5592,10 @@ function soloRenderMoveCardRow(){
     // zouden ze een 4e opleveren, dus sluiten ze elkaar uit ook al zitten ze op losse sloten
     // (zelfde regel als in 95-simulate.js/96-walk.js)
     else if (id === 'boostcell' && soloUsedEnergyId === 'boost'){ disabled = true; reason = 'je hebt deze beurt al Stuwstoot ingezet'; }
+    else if (id === 'condenser' && soloEnergyRoll === 0){ disabled = true; reason = 'je energiesteen gooide 0 — niets te verdubbelen'; }
+    else if (id === 'condenser' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
+    // "Gooi je worp opnieuw" kan alleen zolang je nog geen stap hebt gezet
+    else if (id === 'reroll' && soloMove && soloMove.stepsLeft !== soloMove.roll){ disabled = true; reason = 'je bent al begonnen met lopen'; }
     return soloCardWithDiscard(id, disabled, reason);
   }).join('');
   walkSoloActionsEl.innerHTML = `<div class="action-card-row">${cards}</div>`;
@@ -5684,12 +5727,26 @@ function soloPlayCard(id){
     renderWalkDice(soloMove.d1, soloMove.d2, soloEnergyRoll, false, soloMove.d3);
     walkLog(`Je speelt <b>Stuwlading</b>: gratis derde loopsteen (${d3}) → ${soloMove.stepsLeft} stappen te gaan.`, null, p);
     soloAfterCardAction();
-  } else if (id === 'resupply'){
-    useActionCard(p, 'resupply', soloDeck);
-    const drawn = drawActionCard(soloDeck, soloRand);
-    if (drawn) p.cards.push(drawn);
-    soloUsedCardId = 'resupply';
-    walkLog(`Je speelt <b>Herbevoorrading</b> en trekt meteen <b>${drawn ? ACTION_CARDS[drawn].name : 'niets — stapel leeg'}</b>.`, null, p);
+  } else if (id === 'condenser'){
+    // je hebt je energiesteen al zien vallen — verdubbelen is simpelweg nog eens dezelfde
+    // worp erbij, netjes tegen het plafond aan
+    const before = p.energy;
+    simGainEnergy(p, soloEnergyRoll);
+    useActionCard(p, 'condenser', soloDeck);
+    soloUsedCardId = 'condenser';
+    walkLog(`Je speelt <b>Condensator</b>: energiesteen ${soloEnergyRoll} telt dubbel → +${p.energy - before} energie, totaal ${p.energy}.`, null, p);
+    renderWalkScore(soloPlayers, soloActiveIdx);
+    soloAfterCardAction();
+  } else if (id === 'reroll'){
+    const d1 = simRollD6(soloRand), d2 = simRollD6(soloRand);
+    const d3 = soloMove.d3 !== null && soloMove.d3 !== undefined ? simRollD6(soloRand) : null;
+    const roll = d1 + d2 + (d3 || 0);
+    useActionCard(p, 'reroll', soloDeck);
+    soloUsedCardId = 'reroll';
+    // volledig nieuwe zet: het pad begint opnieuw vanaf waar je nu staat
+    soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [p.pos] };
+    renderWalkDice(d1, d2, soloEnergyRoll, false, d3);
+    walkLog(`Je speelt <b>Koerscorrectie</b> en gooit opnieuw: <b>${roll}</b> stappen.`, null, p);
     soloAfterCardAction();
   }
 }
@@ -5897,43 +5954,7 @@ function soloRollDice(){
   soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [solo().pos] };
   btnWalkSoloRoll.hidden = true;
   renderWalkScore(soloPlayers, soloActiveIdx);
-  if (soloEnergyGain.wasted > 0 && solo().cards.includes('valve') && !soloCardActionUsed()){
-    soloOfferValveSave();
-    return;
-  }
   soloAdvanceMovePhase();
-}
-// Overdrukklep is nu óók puur reactief: je weet pas of er energie verloren dreigt te gaan zodra
-// je 'm gegooid hebt, dus deze aanbieding komt — net als Blinde Vlek — vanzelf, meteen ná de worp.
-function soloOfferValveSave(){
-  soloPhase = 'valve-offer';
-  const p = solo();
-  walkLog(`Je gooide ${soloEnergyRoll} energie, maar ${soloEnergyGain.wasted} ging verloren boven het plafond van ${ENERGY_MAX}.`, null, p);
-  walkSoloActionsEl.innerHTML =
-    `<div class="walk-target-picker-hint">Speel <b>Overdrukklep</b> om tot 3 daarvan alsnog te redden?</div>` +
-    `<div class="action-card-row">` +
-      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="yes"><span class="action-card-name" style="margin-top:22px;">Ja, speel Overdrukklep</span></button>` +
-      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>` +
-    `</div>`;
-}
-if (walkSoloActionsEl){
-  walkSoloActionsEl.addEventListener('click', (e) => {
-    if (soloPhase !== 'valve-offer') return;
-    const btn = e.target.closest('button[data-valve]');
-    if (!btn) return;
-    const p = solo();
-    if (btn.dataset.valve === 'yes'){
-      const saved = Math.min(3, soloEnergyGain.wasted);
-      p.energy += saved;
-      soloEnergyGain.wasted -= saved;
-      useActionCard(p, 'valve', soloDeck);
-      soloUsedCardId = 'valve';
-      walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${p.energy}.`, null, p);
-      renderWalkScore(soloPlayers, soloActiveIdx);
-    }
-    walkSoloActionsEl.innerHTML = '';
-    soloAdvanceMovePhase();
-  });
 }
 if (btnWalkSoloRoll) btnWalkSoloRoll.addEventListener('click', soloRollDice);
 if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
@@ -5966,7 +5987,7 @@ function soloAdvanceMovePhase(){
   soloRenderDirPad(legal);
   renderSoloMeta(soloMove.stepsLeft);
   // altijd-zichtbare kaartenrij (spelen/afleggen) opnieuw tekenen — dekt alle aanroepers van
-  // deze functie in één keer (dobbelen, elke losse stap, ná Overdrukklep/doelwit-kiezer/enz.)
+  // deze functie in één keer (dobbelen, elke losse stap, ná een doelwit-kiezer/Condensator/enz.)
   soloRenderMoveCardRow();
 }
 // Blinde Vlek is puur reactief: alleen aan te bieden op het moment dat je zet daadwerkelijk
@@ -6047,10 +6068,9 @@ function soloFinishTurn(banked){
   soloHideDirPad();
   // vangnet voor Zwaartekracht-laarzen / een Noodtransport dat exact op je doel landt: die paden
   // roepen soloFinishTurn() aan zonder ooit langs soloRollDice() te komen, dus zonder dit zou die
-  // beurt zijn energiesteen helemaal overslaan. Geen Overdrukklep-aanbieding hier nodig — die
-  // aanbieding zit puur in soloRollDice() (reageert op de worp die daar net gevallen is), en beide
-  // paden hierboven slaan die functie juist over — dus dit is een structurele beperking, los van of
-  // het energie- of kaart-slot deze beurt nog vrij is.
+  // beurt zijn energiesteen helemaal overslaan. Let op: wie langs dit vangnet binnenkomt heeft
+  // zijn energiesteen dus pas ná zijn zet gezien en kan er geen Condensator meer op spelen —
+  // dat is inherent aan die twee paden, niet aan het kaart-slot.
   soloRollEnergyForTurn();
   const p = solo();
   const { d1, d2, d3, roll } = soloMove;
@@ -6157,10 +6177,9 @@ function soloResolveBotTurn(player){
   if (player.skipEnergyRoll){ player.skipEnergyRoll = false; }
   else { energyRoll = simRollEnergy(soloRand); energyGain = simGainEnergy(player, energyRoll); }
 
-  if (!cardActionUsed && player.cards.includes('valve') && energyGain.wasted > 0){
-    const saved = Math.min(3, energyGain.wasted);
-    player.energy += saved;
-    useActionCard(player, 'valve', soloDeck);
+  if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
+    simGainEnergy(player, energyRoll);   // verdubbelen = nog eens dezelfde worp erbij
+    useActionCard(player, 'condenser', soloDeck);
     cardActionUsed = true;
   }
   if (!cardActionUsed && player.cards.includes('short')){
@@ -6213,19 +6232,29 @@ function soloResolveBotTurn(player){
     if (bootsMove){ move = bootsMove; usedBoots = true; useActionCard(player, 'boots', soloDeck); cardActionUsed = true; }
   }
   if (!usedBoots){
+    let dice = 2;
     roll = simRollD6(soloRand) + simRollD6(soloRand);
     if (!cardActionUsed && player.cards.includes('boostcell')){
-      roll += simRollD6(soloRand); useActionCard(player, 'boostcell', soloDeck); cardActionUsed = true;
+      roll += simRollD6(soloRand); dice = 3; useActionCard(player, 'boostcell', soloDeck); cardActionUsed = true;
     } else if (!energyActionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
-      roll += simRollD6(soloRand); player.energy -= ENERGY_ACTIONS.boost.cost; player.actionUses++; energyActionUsed = true;
+      roll += simRollD6(soloRand); dice = 3; player.energy -= ENERGY_ACTIONS.boost.cost; player.actionUses++; energyActionUsed = true;
     }
     move = resolveMove(soloGraph, player.pos, roll, occupied, targetKey, soloRand);
+    // Koerscorrectie: tegenvallende worp overdoen (zie simulateOneGame voor de drempel)
+    if (!move.bankedQuest && !cardActionUsed && player.cards.includes('reroll') && roll < dice * 3.5){
+      roll = 0;
+      for (let d = 0; d < dice; d++) roll += simRollD6(soloRand);
+      useActionCard(player, 'reroll', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Koerscorrectie</b> en gooit opnieuw: ${roll}.`, null, player);
+      move = resolveMove(soloGraph, player.pos, roll, occupied, targetKey, soloRand);
+    }
   }
 
   let blindResolvedBlock = false;
   if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
-    const retry = resolveMove(soloGraph, player.pos, roll, new Set(), targetKey, soloRand);
-    if (retry.key !== move.key){ move = retry; useActionCard(player, 'blind', soloDeck); cardActionUsed = true; blindResolvedBlock = true; }
+    const retry = resolveMove(soloGraph, player.pos, roll, SIM_EMPTY_SET, targetKey, soloRand, occupied);
+    if (retry && retry.key !== move.key){ move = retry; useActionCard(player, 'blind', soloDeck); cardActionUsed = true; blindResolvedBlock = true; }
   }
   if (!blindResolvedBlock && !move.bankedQuest && !energyActionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
     const jump = resolveEnergyJump(soloGraph, player.pos, ENERGY_JUMP_RANGE, targetKey);
@@ -6236,13 +6265,6 @@ function soloResolveBotTurn(player){
         : resolveMove(soloGraph, jump.key, roll, occupied, targetKey, soloRand);
     }
   }
-  if (!cardActionUsed && player.cards.includes('resupply')){
-    useActionCard(player, 'resupply', soloDeck);
-    const drawn = drawActionCard(soloDeck, soloRand);
-    if (drawn){ player.cards.push(drawn); walkLog(`${player.name} gebruikt <b>Herbevoorrading</b> en trekt meteen <b>${ACTION_CARDS[drawn].name}</b>.`, null, player); }
-    cardActionUsed = true;
-  }
-
   player.pos = move.key;
   paintWalkPawns(soloGraph, soloPlayers, pIdx);
 

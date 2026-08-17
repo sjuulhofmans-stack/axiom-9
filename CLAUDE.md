@@ -48,7 +48,7 @@ src/
                       over het bord, eigen tabblad
     97-solo.js        stap-voor-stap "zelf spelen": jij bestuurt één menselijke speler
                       tussen bots, met actiekaarten (Kortsluiting, Duwstoot,
-                      Prioriteitspas, Zwaartekracht-laarzen, Herbevoorrading, ...)
+                      Prioriteitspas, Zwaartekracht-laarzen, Koerscorrectie, ...)
 build.py              plakt alles tot dist/axiom9.html (JS_ORDER bepaalt de volgorde,
                       dus een nieuw js/-bestand moet je daar ook toevoegen)
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
