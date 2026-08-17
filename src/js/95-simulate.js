@@ -155,16 +155,23 @@ function resolveEnergyJump(graph, fromKey, range, targetKey){
   return { key: dest, path, banked: dest === targetKey };
 }
 
-// Herprioritering loont alleen als de volgende opdracht in je stapel dichterbij ligt dan de
-// huidige; anders houd je de energie in je zak. Geeft het nieuwe doellabel terug, of null.
-function energyReorderTarget(graph, player, fromKey){
+// Herprioritering/Herkalibratie lonen alleen als de volgende opdracht in de stapel dichterbij
+// ligt dan de huidige. Gesplitst in een check (`reorderWouldHelp`) en de daadwerkelijke wissel
+// (`applyReorderSwap`) zodat Signaalstoring ertussen kan komen: een OP ZICH geldige wissel laten
+// mislukken, zonder dat de aanroeper twee keer dezelfde afstandsberekening hoeft te doen.
+function reorderWouldHelp(graph, player, fromKey){
   const curLabel = player.order[player.nextIdx];
   const altLabel = player.order[player.nextIdx + 1];
-  if (altLabel === undefined) return null;
+  if (altLabel === undefined) return false;
   const stamp = simBfsDistances(graph, fromKey);
   const dCur = simDistLookup(stamp, graph.questCells[curLabel]);
   const dAlt = simDistLookup(stamp, graph.questCells[altLabel]);
-  if (dCur < 0 || dAlt < 0 || dAlt >= dCur) return null;
+  return dCur >= 0 && dAlt >= 0 && dAlt < dCur;
+}
+// Roep pas aan nadat reorderWouldHelp() true gaf. Geeft het nieuwe doellabel terug.
+function applyReorderSwap(player){
+  const curLabel = player.order[player.nextIdx];
+  const altLabel = player.order[player.nextIdx + 1];
   player.order[player.nextIdx] = altLabel;
   player.order[player.nextIdx + 1] = curLabel;
   return altLabel;
@@ -188,6 +195,10 @@ function energyReorderTarget(graph, player, fromKey){
 // voor beurten waarin geen ANDERE kaart speelde. Prioriteitspas heeft geen meetbaar effect in
 // deze bot-simulatie (het is pure informatie voor een menselijke speler) en wordt daarom nooit
 // actief gespeeld door bots — een mens kan 'm wel altijd zelf spelen of afleggen.
+// Tien extra kaarten (gebruikersverzoek), vijf ervan bedoeld om een tegenstander tegen te
+// houden of te vertragen (lockdown/outage/barrier/recoil/jam) en vijf neutraal/voor jezelf
+// (reroll/trade/tank/fastlane/peek). Zie de resolutielogica in simulateOneGame() hieronder voor
+// de precieze mechanica en de AI-heuristieken.
 const ACTION_CARDS = {
   boots:     { name: 'Zwaartekracht-laarzen', hint: '10 stappen rechtdoor, geen bochten' },
   ration:    { name: 'Noodrantsoen',          hint: '+3 energie direct' },
@@ -199,6 +210,16 @@ const ACTION_CARDS = {
   valve:     { name: 'Overdrukklep',          hint: 'redt energie die anders over het plafond ging' },
   resupply:  { name: 'Herbevoorrading',       hint: 'trek meteen nog een kaart' },
   scan:      { name: 'Prioriteitspas',        hint: 'bekijk de volgende opdracht van een tegenstander' },
+  lockdown:  { name: 'Vergrendeling',         hint: 'tegenstander mist energie- én kaartactie' },
+  outage:    { name: 'Stroomonderbreking',    hint: 'tegenstander gooit 2 stappen minder' },
+  barrier:   { name: 'Noodbarrière',          hint: 'blokkeert tijdelijk een vakje naast een tegenstander' },
+  recoil:    { name: 'Terugtrekbevel',        hint: 'duwt een tegenstander tot 2 vakjes terug' },
+  jam:       { name: 'Signaalstoring',        hint: 'saboteert de eerstvolgende doelwissel van een tegenstander' },
+  reroll:    { name: 'Herkansing',            hint: 'gooi één loopsteen opnieuw' },
+  trade:     { name: 'Kaartenruil',           hint: 'ruil een kaart met de aflegstapel' },
+  tank:      { name: 'Reservetank',           hint: 'spaar verloren energie op voor volgende beurt' },
+  fastlane:  { name: 'Snelroute',             hint: 'geen-U-turn-regel geldt deze beurt niet voor jou' },
+  peek:      { name: 'Herinnering',           hint: 'bekijk en herschik de bovenste 3 kaarten van de trekstapel' },
 };
 const ACTION_CARD_IDS = Object.keys(ACTION_CARDS);
 const ACTION_CARD_HAND_MAX = 2;
@@ -212,6 +233,8 @@ const ACTION_CARD_HAND_MAX = 2;
 const ACTION_CARD_TINTS = {
   boots: 'amber', ration: 'start', short: 'danger', blind: 'quest', recal: 'quest',
   shove: 'danger', boostcell: 'amber', valve: 'start', resupply: 'quest', scan: 'dim',
+  lockdown: 'danger', outage: 'danger', barrier: 'danger', recoil: 'danger', jam: 'danger',
+  reroll: 'amber', trade: 'quest', tank: 'start', fastlane: 'amber', peek: 'quest',
 };
 const ACTION_CARD_ICONS = {
   boots: `<path d="M14 34 L14 18 Q14 14 18 14 L22 14 L22 24 L30 24 Q34 24 34 28 L34 34 Z"/>
@@ -242,6 +265,25 @@ const ACTION_CARD_ICONS = {
     <path d="M19 6 A8 8 0 1 1 12.5 12.5"/><path d="M19 6 L14.5 5 M19 6 L18 10"/>`,
   scan: `<rect x="6" y="12" width="21" height="27" rx="2"/><line x1="10.5" y1="19" x2="22.5" y2="19"/><line x1="10.5" y1="24.5" x2="22.5" y2="24.5"/>
     <circle cx="31.5" cy="30.5" r="8"/><line x1="37.2" y1="36.2" x2="43" y2="42"/>`,
+  lockdown: `<rect x="14" y="22" width="20" height="16" rx="2"/><path d="M18 22 L18 15 A6 6 0 0 1 30 15 L30 22"/>
+    <circle cx="24" cy="29" r="2" fill="currentColor" stroke="none"/><line x1="24" y1="31" x2="24" y2="34"/>`,
+  outage: `<path d="M26 6 L14 26 L22 26 L18 42 L34 20 L26 20 Z"/><line x1="8" y1="8" x2="40" y2="40"/>`,
+  barrier: `<line x1="6" y1="15" x2="6" y2="38"/><line x1="42" y1="15" x2="42" y2="38"/>
+    <rect x="6" y="19" width="36" height="7" rx="1.5" transform="rotate(-6 24 22.5)"/>
+    <rect x="6" y="30" width="36" height="7" rx="1.5" transform="rotate(-6 24 33.5)"/>`,
+  recoil: `<path d="M32 24 L14 24 M14 24 L21 17 M14 24 L21 31"/>
+    <line x1="34" y1="14" x2="38" y2="14"/><line x1="34" y1="24" x2="40" y2="24"/><line x1="34" y1="34" x2="38" y2="34"/>`,
+  jam: `<line x1="24" y1="10" x2="24" y2="40"/><line x1="16" y1="40" x2="32" y2="40"/>
+    <path d="M14 18 A14 14 0 0 1 34 18"/><path d="M18 22 A8 8 0 0 1 30 22"/><line x1="6" y1="8" x2="42" y2="40"/>`,
+  reroll: `<path d="M10 24 A14 14 0 1 1 14 34"/><path d="M14 34 L8 33 M14 34 L15 28"/>
+    <circle cx="24" cy="24" r="2" fill="currentColor" stroke="none"/>`,
+  trade: `<path d="M8 18 L34 18 M28 12 L34 18 L28 24"/><path d="M40 30 L14 30 M20 24 L14 30 L20 36"/>`,
+  tank: `<rect x="10" y="14" width="24" height="20" rx="2"/><rect x="34" y="20" width="4" height="8" rx="1" fill="currentColor" stroke="none"/>
+    <line x1="22" y1="19" x2="22" y2="29"/><line x1="17" y1="24" x2="27" y2="24"/>`,
+  fastlane: `<line x1="6" y1="24" x2="36" y2="24"/><path d="M30 17 L37 24 L30 31"/>
+    <line x1="12" y1="12" x2="12" y2="36"/><line x1="20" y1="12" x2="20" y2="36"/>`,
+  peek: `<rect x="8" y="26" width="14" height="18" rx="2"/><rect x="26" y="26" width="14" height="18" rx="2"/>
+    <path d="M12 12 Q24 2 36 12 Q24 22 12 12 Z"/><circle cx="24" cy="12" r="3.4"/>`,
 };
 
 // Bouwt één kaart: `size` is 'sm' (badge in de standenbalk) of 'lg' (jouw hand / getrokken-
@@ -283,6 +325,29 @@ function useActionCard(player, id, deck, extra){
   player.cards.splice(i, 1);
   deck.discard.push(id);
   if (extra) extra.cardUses[id]++;
+}
+// Kaartenruil: ruil een kaart uit je hand tegen de kaart die nu bovenop de aflegstapel ligt (het
+// laatst afgelegde exemplaar — dezelfde stapel waar useActionCard() op duwt). Geeft niets terug
+// (roep 'm aan VÓÓR useActionCard(player, 'trade', ...) — anders ligt Kaartenruil zelf al
+// bovenop en ruil je met zichzelf).
+function performCardTrade(player, giveId, deck){
+  const i = player.cards.indexOf(giveId);
+  if (i === -1 || !deck.discard.length) return;
+  const received = deck.discard.pop();
+  deck.discard.push(giveId);
+  player.cards[i] = received;
+}
+// Herinnering: bekijkt de bovenste 3 kaarten van de trekstapel (drawActionCard() trekt van het
+// EIND van deck.draw via pop(), dus "boven" = de laatste elementen) en schuift Zwaartekracht-
+// laarzen/Stuwlading — breed inzetbaar, ongeacht wie ze trekt — helemaal naar boven als die
+// erbij zitten. De rest van de volgorde blijft ongewijzigd.
+function performPeekReorder(deck){
+  const n = Math.min(3, deck.draw.length);
+  if (n === 0) return;
+  const preferred = ['boots', 'boostcell'];
+  const top = deck.draw.slice(deck.draw.length - n);
+  top.sort((a, b) => Number(preferred.includes(a)) - Number(preferred.includes(b)));
+  for (let i = 0; i < n; i++) deck.draw[deck.draw.length - n + i] = top[i];
 }
 
 // Zwaartekracht-laarzen: loop tot `maxSteps` in een RECHTE lijn (geen bochten, dus strenger
@@ -352,13 +417,81 @@ function resolveGravityBoots(graph, fromKey, maxSteps, occupied, targetKey){
 
 // Kortsluiting: raakt de speler die op dit moment de meeste opdrachten heeft (bij gelijke
 // stand de eerste in spelervolgorde), voor zover die nog meespeelt en niet al geraakt is.
-function pickShortCircuitTarget(players, selfIdx){
-  let best = null;
+// Gevonden tijdens het bouwen van de 5 nieuwe hinder-kaarten (gebruikersverzoek: "reken uit
+// hoeveel verschil deze kaarten gaan maken") — een 15.000-potjes-batch liet 3.1 stelselmatig
+// 2-2,5 procentpunt lager winnen dan 3.4, over meerdere onafhankelijke runs heen (dus geen
+// toeval). Oorzaak: `best.completed` koos bij een GELIJKE stand altijd de EERSTE speler die de
+// lus tegenkwam — en `players` staat vast op volgorde 3.1→3.2→3.3→3.4 (alleen `strategy` en
+// `turnOrder` worden geloot, de array-volgorde zelf niet). Bij een tie (heel gewoon vroeg in het
+// potje, als iedereen nog op 0 staat) werd dus stelselmatig de LAAGST geïndexeerde tegenstander
+// geraakt — 3.1 was zo vaker het doelwit van Kortsluiting én de vier nieuwe koploper-kaarten dan
+// 3.4. Reservoir sampling (bij elke NIEUWE tie 1/n kans om 'm over te nemen) maakt een tie
+// eerlijk willekeurig i.p.v. altijd de eerste — gedeeld door Kortsluiting (pre-existing, zelfde
+// bug) en de vier nieuwe koploper-kaarten.
+function pickShortCircuitTarget(players, selfIdx, rand){
+  let best = null, bestCount = -1, ties = 0;
   for (const p of players){
     if (p.idx === selfIdx || p.rank || p.skipEnergyRoll) continue;
-    if (!best || p.completed > best.completed) best = p;
+    if (p.completed > bestCount){ best = p; bestCount = p.completed; ties = 1; }
+    else if (p.completed === bestCount){ ties++; if (rand() < 1 / ties) best = p; }
   }
   return best;
+}
+
+// Gedeelde AI-heuristiek voor Vergrendeling/Stroomonderbreking/Signaalstoring: raak de koploper
+// onder de tegenstanders (net als Kortsluiting, inclusief dezelfde eerlijke tie-break — zie
+// hierboven), maar sla over wie al hetzelfde effect ondervindt (`alreadyAffected`) — anders zou
+// een bot een kaart "verspillen" aan een tegenstander die het effect toch al draagt.
+function pickLeaderTarget(players, selfIdx, alreadyAffected, rand){
+  let best = null, bestCount = -1, ties = 0;
+  for (const p of players){
+    if (p.idx === selfIdx || p.rank || alreadyAffected(p)) continue;
+    if (p.completed > bestCount){ best = p; bestCount = p.completed; ties = 1; }
+    else if (p.completed === bestCount){ ties++; if (rand() < 1 / ties) best = p; }
+  }
+  return best;
+}
+// Noodbarrière: kies de koploper die nog geen barrière draagt ÉN nog een lege buurcel heeft om
+//'m op te zetten (volledig ingesloten spelers, zeldzaam, tellen niet mee als geldig doelwit).
+function pickBarrierTarget(graph, players, occupiedSet, selfIdx, rand){
+  const victim = pickLeaderTarget(players, selfIdx, p => p.barrierCell !== null, rand);
+  if (!victim) return null;
+  const spot = graph.adjKey[victim.pos].find(k => !occupiedSet.has(k));
+  return spot === undefined ? null : { player: victim, cell: spot };
+}
+// Terugtrekbevel: onder de tegenstanders die nu aan mij grenzen, kies degene die het verst
+// teruggeduwd kan worden (tot 2 vakjes) langs de richting waar hij net vandaan liep — een muur
+// of een bezet vakje stopt de terugtocht eerder. Een tegenstander die nog nooit gelopen heeft
+// (lastDir === -1) heeft geen "net vandaan"-richting en komt niet in aanmerking.
+function pickRecoilMove(graph, players, occupiedSet, selfIdx){
+  const self = players[selfIdx];
+  const neigh = graph.adjKey[self.pos];
+  let best = null, bestSteps = 0;
+  for (const nk of neigh){
+    const target = players.find(p => !p.rank && p.idx !== selfIdx && p.pos === nk);
+    if (!target || target.lastDir === -1) continue;
+    const revDir = (target.lastDir + 2) % 4;
+    let cur = target.pos, steps = 0;
+    for (let s = 0; s < 2; s++){
+      const dirs = graph.adjDir[cur], keys = graph.adjKey[cur];
+      let nextKey = -1;
+      for (let j = 0; j < dirs.length; j++) if (dirs[j] === revDir){ nextKey = keys[j]; break; }
+      if (nextKey === -1 || occupiedSet.has(nextKey)) break;
+      cur = nextKey; steps++;
+    }
+    if (steps > bestSteps){ bestSteps = steps; best = { player: target, toKey: cur }; }
+  }
+  return best;
+}
+// bepaalt vanuit een net gezet pad de richting van de LAATSTE stap — voor Terugtrekbevel, dat de
+// tegenstander terug wil duwen langs de kant waar hij net vandaan kwam. Geen stap gezet (leeg of
+// 1-cel pad, bv. een Noodtransport dat direct op het doel landde) geeft -1 terug (onbekend).
+function lastStepDirection(graph, path){
+  if (!path || path.length < 2) return -1;
+  const from = path[path.length - 2], to = path[path.length - 1];
+  const neigh = graph.adjKey[from], dirs = graph.adjDir[from];
+  for (let j = 0; j < neigh.length; j++) if (neigh[j] === to) return dirs[j];
+  return -1;
 }
 
 // Duwstoot: onder de tegenstanders die nu aan mij grenzen, kies de zet die hun afstand tot
@@ -544,7 +677,7 @@ function pickEnd(graph, layersKeys, layersParent, step, targetKey, occupiedSet, 
 // lost één beurt op: DP over (cel, binnenkomstrichting) per stap, t/m de geworpen som.
 // Houdt alle lagen bij (klein: <=12 stappen, elk een paar honderd toestanden) zodat
 // het uiteindelijk gekozen pad achteraf teruggelezen kan worden voor de heatmap.
-function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
+function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand, allowUturn){
   const { adjKey, adjDir } = graph;
   const layersKeys = [[startKey]], layersDirs = [[-1]], layersParent = [[]];
   let wasBlocked = false;
@@ -559,7 +692,7 @@ function resolveMove(graph, startKey, steps, occupiedSet, targetKey, rand){
       const neigh = adjKey[ck], dirs = adjDir[ck];
       for (let j = 0; j < neigh.length; j++){
         const d = dirs[j];
-        if (cd !== -1 && d === (cd + 2) % 4) continue; // geen U-turn
+        if (!allowUturn && cd !== -1 && d === (cd + 2) % 4) continue; // geen U-turn (Snelroute schakelt dit voor 1 beurt uit)
         const nk = neigh[j];
         if (occupiedSet.has(nk)){ wasBlocked = true; continue; } // bezet vakje blokkeert
         // eigen doel exact geraakt: beurt eindigt meteen, rest van de worp vervalt —
@@ -616,6 +749,12 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     actionUses: 0,
     cards: [],             // beloningskaarten in de hand (max ACTION_CARD_HAND_MAX)
     skipEnergyRoll: false, // getroffen door Kortsluiting: mist de eerstvolgende energiesteen
+    lockedNextTurn: false, // getroffen door Vergrendeling: mist volgende beurt energie- én kaartslot
+    rollPenalty: 0,        // getroffen door Stroomonderbreking: -N stappen op de eerstvolgende worp
+    barrierCell: null,     // getroffen door Noodbarrière: dit vakje telt als bezet tijdens de eerstvolgende beurt
+    reorderBlocked: false, // getroffen door Signaalstoring: eerstvolgende doelwissel-poging mislukt
+    reservedEnergy: 0,     // opgespaard door Reservetank: komt bij het begin van de volgende beurt bij de energie
+    lastDir: -1,           // laatst gelopen richting (voor Terugtrekbevel), -1 = nog nooit gelopen
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
@@ -637,6 +776,12 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee en staat niemand in de weg
       turnCount++;
+      // Reservetank: energie die vorige beurt opgespaard is, komt er nu bij — VÓÓR de energiesteen
+      // van deze beurt, zodat het plafond van deze beurt gewoon weer gewoon telt.
+      if (player.reservedEnergy){
+        player.energy = Math.min(ENERGY_MAX, player.energy + player.reservedEnergy);
+        player.reservedEnergy = 0;
+      }
       // Energie-acties en kaarten hebben ELK hun eigen actie-slot per beurt (max 1 van elk) —
       // vroeger deelden ze één gezamenlijk slot ("hooguit 1 actie per beurt, kaart of energie").
       // Drie kaarten hebben echter een GRATIS variant van een energie-actie (Stuwlading↔Stuwstoot:
@@ -648,6 +793,14 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       // voor een dubbele/onzinnige swap.
       let energyActionUsed = false;   // hooguit 1 energie-actie per beurt
       let cardActionUsed = false;     // hooguit 1 kaart spelen per beurt
+      // Vergrendeling: als deze speler vorige beurt geraakt is, mist hij nu ZOWEL het energie- als
+      // het kaartslot — dat blokkeert vanzelf alle `!energyActionUsed`/`!cardActionUsed`-checks
+      // hieronder voor de rest van deze beurt, dus geen aparte if-ketting nodig per actie/kaart.
+      if (player.lockedNextTurn){
+        player.lockedNextTurn = false;
+        energyActionUsed = true;
+        cardActionUsed = true;
+      }
 
       // 1. energiesteen rolt mee (tenzij Kortsluiting die deze beurt blokkeert). Het niveau
       //    wordt geteld NA het bijschrijven, want dat is wat deze speler deze beurt kan inzetten.
@@ -671,8 +824,17 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         useActionCard(player, 'valve', deck, extra);
         cardActionUsed = true;
       }
+      // Reservetank: dezelfde situatie als Overdrukklep (energie ging verloren), maar dan
+      // uitgesteld i.p.v. direct gered — Overdrukklep gaat dus voor als een speler beide heeft.
+      if (!cardActionUsed && player.cards.includes('tank') && energyGain.wasted > 0){
+        const saved = Math.min(3, energyGain.wasted);
+        player.reservedEnergy += saved;
+        extra.energyWasted -= saved;
+        useActionCard(player, 'tank', deck, extra);
+        cardActionUsed = true;
+      }
       if (!cardActionUsed && player.cards.includes('short')){
-        const victim = pickShortCircuitTarget(players, pIdx);
+        const victim = pickShortCircuitTarget(players, pIdx, rand);
         if (victim){
           victim.skipEnergyRoll = true;
           useActionCard(player, 'short', deck, extra);
@@ -685,19 +847,73 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         cardActionUsed = true;
       }
 
+      // 1c. de vier nieuwe hinder-kaarten die een tegenstander raken zonder dat de eigen worp of
+      //     het eigen doel iets verandert: Vergrendeling/Stroomonderbreking/Noodbarrière/
+      //     Signaalstoring pakken allemaal de koploper (zelfde heuristiek als Kortsluiting).
+      //     Terugtrekbevel staat in stap 2 hieronder, naast Duwstoot — die vereist net als
+      //     Terugtrekbevel een AANGRENZENDE tegenstander, vandaar dezelfde groepering.
+      if (!cardActionUsed && player.cards.includes('lockdown')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.lockedNextTurn, rand);
+        if (victim){
+          victim.lockedNextTurn = true;
+          useActionCard(player, 'lockdown', deck, extra);
+          cardActionUsed = true;
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('outage')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.rollPenalty > 0, rand);
+        if (victim){
+          victim.rollPenalty = 2;
+          useActionCard(player, 'outage', deck, extra);
+          cardActionUsed = true;
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('barrier')){
+        const occNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
+        const target = pickBarrierTarget(graph, players, occNow, pIdx, rand);
+        if (target){
+          target.player.barrierCell = target.cell;
+          useActionCard(player, 'barrier', deck, extra);
+          cardActionUsed = true;
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('jam')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.reorderBlocked, rand);
+        if (victim){
+          victim.reorderBlocked = true;
+          useActionCard(player, 'jam', deck, extra);
+          cardActionUsed = true;
+        }
+      }
+      // 1d. Kaartenruil: bots gebruiken 'm alleen om een Prioriteitspas (heeft toch geen
+      //     mechanisch effect voor een bot) om te ruilen tegen de bovenste aflegkaart.
+      //     Herinnering: schuift Zwaartekracht-laarzen/Stuwlading (breed inzetbaar) naar de top
+      //     van de trekstapel als die in de bovenste 3 zitten, anders blijft de volgorde gelijk —
+      //     bots spelen 'm dus ook zonder duidelijke winst, puur om de kaart niet te laten liggen.
+      if (!cardActionUsed && player.cards.includes('trade') && player.cards.includes('scan') && deck.discard.length){
+        performCardTrade(player, 'scan', deck);
+        useActionCard(player, 'trade', deck, extra);
+        cardActionUsed = true;
+      }
+      if (!cardActionUsed && player.cards.includes('peek') && deck.draw.length){
+        performPeekReorder(deck);
+        useActionCard(player, 'peek', deck, extra);
+        cardActionUsed = true;
+      }
+
       // 2. doel bepalen: Herkalibratie (gratis, kaart) en Herprioritering (betaald, energie)
-      //    doen hetzelfde (energyReorderTarget) en blijven daarom elkaar uitsluiten via
-      //    `targetSwapped`, los van de brede kaart/energie-sloten hierboven.
+      //    doen hetzelfde (reorderWouldHelp/applyReorderSwap) en blijven daarom elkaar uitsluiten
+      //    via `targetSwapped`, los van de brede kaart/energie-sloten hierboven. Signaalstoring
+      //    kan een OP ZICH geldige wissel laten mislukken — de kaart/energie wordt dan wel
+      //    verbruikt (de speler wist niet dat 'm dit overkwam).
       let targetLabel = player.order[player.nextIdx];
       let targetSwapped = false;
-      if (!cardActionUsed && player.cards.includes('recal')){
-        const swapped = energyReorderTarget(graph, player, player.pos);
-        if (swapped !== null){
-          targetLabel = swapped;
-          useActionCard(player, 'recal', deck, extra);
-          cardActionUsed = true;
-          targetSwapped = true;
-        }
+      if (!cardActionUsed && player.cards.includes('recal') && reorderWouldHelp(graph, player, player.pos)){
+        useActionCard(player, 'recal', deck, extra);
+        cardActionUsed = true;
+        targetSwapped = true;
+        if (player.reorderBlocked) player.reorderBlocked = false;
+        else targetLabel = applyReorderSwap(player);
       }
       if (!cardActionUsed && player.cards.includes('shove')){
         const shove = pickShoveMove(graph, players, pIdx);
@@ -707,24 +923,42 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
           cardActionUsed = true;
         }
       }
-      if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
-        const swapped = energyReorderTarget(graph, player, player.pos);
-        if (swapped !== null){
-          targetLabel = swapped;
-          player.energy -= ENERGY_ACTIONS.reorder.cost;
-          player.actionUses++;
-          energyActionUsed = true;
+      if (!cardActionUsed && player.cards.includes('recoil')){
+        const occNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
+        const push = pickRecoilMove(graph, players, occNow, pIdx);
+        if (push){
+          push.player.pos = push.toKey;
+          useActionCard(player, 'recoil', deck, extra);
+          cardActionUsed = true;
         }
+      }
+      if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost && reorderWouldHelp(graph, player, player.pos)){
+        player.energy -= ENERGY_ACTIONS.reorder.cost;
+        player.actionUses++;
+        energyActionUsed = true;
+        if (player.reorderBlocked) player.reorderBlocked = false;
+        else targetLabel = applyReorderSwap(player);
       }
       const targetKey = graph.questCells[targetLabel];
 
       const occupied = new Set();
       for (let j = 0; j < 4; j++) if (j !== pIdx && !players[j].rank) occupied.add(players[j].pos);
+      // Noodbarrière: geldt precies voor deze ene beurt en verdwijnt daarna vanzelf, ongeacht of
+      // de speler er daadwerkelijk tegenaan liep.
+      if (player.barrierCell !== null){
+        occupied.add(player.barrierCell);
+        player.barrierCell = null;
+      }
 
       // 3. beweging: Zwaartekracht-laarzen vervangt de worp helemaal; anders de gewone
-      //    loopstenen met Stuwlading (kaart) of Stuwstoot (energie) als derde steen — die twee
-      //    doen hetzelfde (een 3e loopsteen) en blijven daarom via else-if elkaar uitsluiten.
-      let move, roll = 0, usedBoots = false;
+      //    loopstenen met Herkansing (kaart, herrolt de laagste steen) vóór Stuwlading (kaart) of
+      //    Stuwstoot (energie) als derde steen — die twee doen hetzelfde (een 3e loopsteen) en
+      //    blijven daarom via else-if elkaar uitsluiten. Stroomonderbreking trekt er ná alle
+      //    stenen 2 stappen af (min. 1). Snelroute schakelt de geen-U-turn-regel voor de REST van
+      //    deze beurt uit — geldt dus ook voor de eventuele Blinde-Vlek-herberekening en de
+      //    vervolgstap ná een Noodtransport hieronder, vandaar dat `allowUturn` los bijgehouden
+      //    wordt in plaats van 'm alleen aan deze ene resolveMove()-aanroep mee te geven.
+      let move, roll = 0, usedBoots = false, allowUturn = false;
       if (!cardActionUsed && player.cards.includes('boots')){
         const bootsMove = resolveGravityBoots(graph, player.pos, 10, occupied, targetKey);
         if (bootsMove){
@@ -735,7 +969,13 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         }
       }
       if (!usedBoots){
-        roll = simRollD6(rand) + simRollD6(rand);
+        let d1 = simRollD6(rand), d2 = simRollD6(rand);
+        if (!cardActionUsed && player.cards.includes('reroll')){
+          if (d1 <= d2) d1 = simRollD6(rand); else d2 = simRollD6(rand);
+          useActionCard(player, 'reroll', deck, extra);
+          cardActionUsed = true;
+        }
+        roll = d1 + d2;
         if (!cardActionUsed && player.cards.includes('boostcell')){
           roll += simRollD6(rand);
           useActionCard(player, 'boostcell', deck, extra);
@@ -746,7 +986,16 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
           player.actionUses++;
           energyActionUsed = true;
         }
-        move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand);
+        if (player.rollPenalty){
+          roll = Math.max(1, roll - player.rollPenalty);
+          player.rollPenalty = 0;
+        }
+        if (!cardActionUsed && player.cards.includes('fastlane')){
+          allowUturn = true;
+          useActionCard(player, 'fastlane', deck, extra);
+          cardActionUsed = true;
+        }
+        move = resolveMove(graph, player.pos, roll, occupied, targetKey, rand, allowUturn);
       }
 
       // 4. Blinde Vlek (kaart) lost een blokkade op door de zet te herberekenen vanaf de
@@ -759,7 +1008,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       //    32,4% voor de goedkoopste actie) en was een fout, geen ontwerpkeuze.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
+        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand, allowUturn);
         if (retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck, extra);
@@ -777,7 +1026,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
           // de sprong kan de opdracht zelf al pakken; anders loop je vanaf daar verder
           move = jump.banked
             ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
-            : resolveMove(graph, jump.key, roll, occupied, targetKey, rand);
+            : resolveMove(graph, jump.key, roll, occupied, targetKey, rand, allowUturn);
         }
       }
       // 5. Herbevoorrading als sluitstuk: alleen als er verder geen ANDERE kaart te spelen viel
@@ -790,6 +1039,11 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       }
 
       player.pos = move.key;
+      // voor Terugtrekbevel: de richting van de LAATSTE stap deze beurt, zodat een tegenstander
+      // je later "terug de kant op kan duwen waar je net vandaan liep". Geen stap gezet (bv. een
+      // Noodtransport dat direct op het doel landde) laat de vorige bekende richting gewoon staan.
+      const stepDir = lastStepDirection(graph, move.path);
+      if (stepDir !== -1) player.lastDir = stepDir;
       player.turnsOnTarget++;
       extra.totalTurns++;
       if (move.wasBlocked) extra.blockedTurns++;

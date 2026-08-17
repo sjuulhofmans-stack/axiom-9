@@ -344,14 +344,21 @@ Check minimaal:
    elders op de pagina (bv. het seed-invoerveld) niet worden onderschept.
    Bot-beurten spelen zichzelf meteen door (geen animatie/wachttijd), mens-
    beurten blijven volledig interactief. Met 1 speler staan Kortsluiting/Blinde
-   Vlek/Duwstoot/Prioriteitspas nog altijd permanent uitgeschakeld (geen
-   tegenstanders); met 2+ spelers werken Kortsluiting/Duwstoot/Prioriteitspas
-   via een klikbare doelwit-kiezer (een kaart-knop per tegenstander), en Blinde
-   Vlek wordt vanzelf aangeboden (ja/nee) zodra je route door een tegenstander
-   geblokkeerd wordt — nooit los klikbaar in het actiepaneel. Overdrukklep werkt
-   hetzelfde: permanent uitgeschakeld in het paneel, en verschijnt pas als
-   ja/nee-aanbod vlak ná het gooien, als er energie boven het plafond verloren
-   dreigt te gaan. Bij een gedeelde score op het eind (gelijke energie én
+   Vlek/Duwstoot/Prioriteitspas EN de vijf nieuwe hinder-kaarten (Vergrendeling/
+   Stroomonderbreking/Noodbarrière/Terugtrekbevel/Signaalstoring) nog altijd
+   permanent uitgeschakeld (geen tegenstanders); met 2+ spelers werken
+   Kortsluiting/Duwstoot/Prioriteitspas/Vergrendeling/Stroomonderbreking/
+   Noodbarrière/Terugtrekbevel/Signaalstoring via een klikbare doelwit-kiezer
+   (een kaart-knop per tegenstander; Duwstoot/Terugtrekbevel alleen aangrenzende
+   tegenstanders, Noodbarrière alleen tegenstanders met een lege buurcel), en
+   Blinde Vlek wordt vanzelf aangeboden (ja/nee) zodra je route door een
+   tegenstander geblokkeerd wordt — nooit los klikbaar in het actiepaneel.
+   Overdrukklep en Reservetank werken hetzelfde: permanent uitgeschakeld in het
+   paneel, en verschijnen pas als ja/nee-aanbod vlak ná het gooien, als er
+   energie boven het plafond verloren dreigt te gaan (heb je beide op zak, dan
+   staan er twee "Ja"-knoppen naast elkaar). Herkansing is ook zo'n reactief
+   aanbod, vlak ná het dobbelen, vóór het Overdrukklep/Reservetank-moment. Bij
+   een gedeelde score op het eind (gelijke energie én
    evenveel actiekaarten) moet de melding "delen de winst/Ne plaats" tonen, net
    als in "Automatisch". **Direct na "Potje starten" (of "Nieuw potje" →
    "Potje starten") moet het EERSTE wat je ziet altijd de echte startopstelling
@@ -386,6 +393,25 @@ Check minimaal:
    (vóórdat je een tab hebt aangeklikt) mag de solo-opzet-UI (spelerskeuze/
    "Potje starten") niet zichtbaar zijn, want "Automatisch" is de
    standaard-actieve tab.
+15. De 10 nieuwe kaarten in "Zelf spelen": Vergrendeling/Stroomonderbreking/
+   Noodbarrière/Signaalstoring openen (net als Kortsluiting/Duwstoot/
+   Prioriteitspas) een doelwit-kiezer, en dat kan nu ook MIDDENIN het lopen —
+   de oude groene aanklikbare vakjes moeten dan verdwijnen zolang de kiezer
+   openstaat en na een keuze weer correct terugkomen. Terugtrekbevel toont
+   alleen tegenstanders die zowel aangrenzend zijn ALS al minstens 1 stap
+   gelopen hebben deze partij. Een vergrendelde beurt (na Vergrendeling)
+   slaat "Energie-actie kiezen" en "Boots/Stuwlading kiezen" allebei over en
+   springt direct naar dobbelen, met een logregel die dat meldt. Herkansing
+   verschijnt als ja/nee-aanbod meteen na een worp, vóór je kunt lopen, en de
+   dobbelstenen-HUD moet het nieuwe cijfer tonen als je "ja" kiest. Speel je
+   zowel Overdrukklep als Reservetank in de hand, dan toont het aanbod na een
+   overloop-worp beide als losse knoppen. Snelroute moet een stap terug
+   toestaan die normaal (geen-U-turn) niet zou mogen, maar alleen NA het
+   spelen van de kaart — stappen die je al vóór het spelen zette blijven aan
+   de oude regel gebonden. Kaartenruil is uitgeschakeld zolang je 'm als
+   enige kaart in de hand hebt (geen "andere kaart" om te ruilen). Herinnering
+   toont de bovenste 3 van de trekstapel in trekvolgorde (eerste knop = eerst
+   getrokken) en "niet wijzigen" laat de volgorde exact zoals hij was.
 
 - **Energie** (`95-simulate.js`, bovenaan): naast de twee loopstenen rolt elke
   beurt een derde steen mee met kanten `– 1 1 2 2 3` (`ENERGY_DIE_FACES`),
@@ -844,6 +870,103 @@ Check minimaal:
     wijziging — er is geen proactieve "leg maar af als de kaart toch niet gebruikt wordt"-logica
     toegevoegd aan de bot-AI. Afleggen is dus uitsluitend een keuze die een mens in "Zelf spelen"
     heeft.
+
+- **10 nieuwe beloningskaarten** (gebruikersverzoek: 5 die een tegenstander kunnen tegenhouden of
+  vertragen, 5 vrij te kiezen). De stapel bestaat nu uit 20 typen × 2 = 40 kaarten (was 20). Alle
+  10 zitten in `ACTION_CARDS`/`ACTION_CARD_ICONS`/`ACTION_CARD_TINTS` in `95-simulate.js`, met
+  resolutielogica en AI-heuristieken in alle drie de bot-engines (`simulateOneGame`, de bot-tak
+  van `96-walk.js`, `soloResolveBotTurn`) én de mens-interactieve flow in `97-solo.js`.
+  - **De 5 hinder-kaarten** (danger-tint, net als Kortsluiting/Duwstoot):
+    - **Vergrendeling** — tegenstander mist zijn eerstvolgende energie- ÉN kaartactie in één klap
+      (zwaarder dan Kortsluiting, die alleen de energiesteen blokkeert). Bot/mens: zet
+      `victim.lockedNextTurn`; aan het begin van het slachtoffer se volgende beurt worden
+      `energyActionUsed`/`cardActionUsed` (bots) resp. `soloLockedThisTurn` (mens) meteen op
+      "gebruikt" gezet, wat automatisch alle kaart-/energiecontroles die beurt blokkeert — geen
+      aparte if-ketting per actie nodig. Voor de mens slaat dit bovendien `choose-action`/
+      `choose-preroll` helemaal over: `soloBeginHumanTurn()` gaat rechtstreeks door naar dobbelen.
+    - **Stroomonderbreking** — tegenstander gooit zijn eerstvolgende worp met 2 stappen minder
+      (minimaal 1). Wordt toegepast NA een eventuele Stuwlading/Stuwstoot-derde-steen, dus die
+      compenseert 'm gedeeltelijk.
+    - **Noodbarrière** — blokkeert tijdelijk een lege buurcel van een tegenstander (telt als bezet
+      tijdens diens eerstvolgende beurt, verdwijnt daarna vanzelf — ongeacht of de speler er
+      daadwerkelijk tegenaan liep). Een tegenstander zonder lege buurcel (zeldzaam, volledig
+      ingesloten) komt niet in aanmerking als doelwit.
+    - **Terugtrekbevel** — duwt een AANGRENZENDE tegenstander tot 2 vakjes terug, langs de
+      richting waar die net vandaan liep (`player.lastDir`, bijgehouden na elke voltooide zet in
+      alle drie de engines). Vereist dus zowel adjacentie als een bekende looprichting (een
+      tegenstander die nog nooit gelopen heeft komt niet in aanmerking) — gegarandeerd effect
+      (geen "geen lege plek"-uitzondering zoals Duwstoot soms heeft), dus zwaarder per gebruik.
+    - **Signaalstoring** — saboteert de EERSTVOLGENDE doelwissel-poging van een tegenstander
+      (Herkalibratie óf Herprioritering, wat 'm het eerst probeert): de kaart/energie wordt gewoon
+      verbruikt, maar de wissel zelf mislukt. Hiervoor is `energyReorderTarget()` gesplitst in
+      `reorderWouldHelp()` (alleen de check) en `applyReorderSwap()` (de daadwerkelijke wissel) —
+      de aanroeper kan er nu tussenuit met `player.reorderBlocked` zonder de afstandsberekening
+      dubbel te hoeven doen.
+  - **De 5 neutrale kaarten**:
+    - **Herkansing** — herrolt de LAAGSTE van je twee loopstenen (Stuwlading/Stuwstoot's 3e steen
+      doet niet mee). Voor de mens een reactief ja/nee-keuzemoment vlak ná het dobbelen (nieuwe
+      fase `'reroll-offer'`, vóór een eventueel Overdrukklep/Reservetank-aanbod) — past
+      `soloMove.roll`/`stepsLeft` bij met de delta.
+    - **Kaartenruil** — ruil een kaart uit je hand tegen de kaart die nu bovenop de aflegstapel
+      ligt (`performCardTrade()`). Bots gebruiken 'm alleen om een nutteloze Prioriteitspas weg te
+      ruilen; een mens ruilt automatisch de ENIGE andere kaart in de hand (bij hand-grootte 2 is
+      dat ondubbelzinnig — met alleen Kaartenruil zelf in de hand is de knop uitgeschakeld).
+    - **Reservetank** — dezelfde situatie als Overdrukklep (energie zou boven het plafond gaan),
+      maar de redding komt pas je VOLGENDE beurt binnen in plaats van meteen. Overdrukklep gaat
+      voor als een bot beide op zak heeft; een mens met beide krijgt de keuze in hetzelfde
+      aanbod-paneel als Overdrukklep (`soloOfferValveSave()` toont nu 0-2 knoppen, afhankelijk van
+      welke van de twee in de hand zitten).
+    - **Snelroute** — schakelt de geen-U-turn-regel voor de REST van de beurt uit. Kreeg hiervoor
+      een `allowUturn`-parameter op `resolveMove()` (default `false`, dus alle bestaande
+      aanroepen blijven ongewijzigd). Voor bots moet dit vóór de worp beslist zijn (het wordt in
+      dezelfde stap als de worp zelf toegepast); voor de mens kan het op elk moment TIJDENS het
+      lopen — `soloEffectiveLastDir()` geeft dan `-1` (geen beperking) terug i.p.v. de echte
+      `soloMove.lastDir`, wat automatisch doorwerkt in elke aanroep van `soloLegalNextCells()`.
+    - **Herinnering** — bekijk de bovenste 3 kaarten van de gedeelde trekstapel en zet er hooguit 1
+      van bovenaan (`deck.draw` trekt van het EIND via `.pop()`, dus "boven" = de laatste
+      elementen — `performPeekReorder()` voor bots, een eigen keuzepaneel met "zet deze bovenaan"-
+      knoppen plus "niet wijzigen" voor de mens). Bots schuiven Zwaartekracht-laarzen/Stuwlading
+      naar boven als die aanwezig zijn (breed inzetbaar, ongeacht welke opdracht je hebt); verder
+      blijft de volgorde gelijk.
+  - **`WALK_SOLO_NO_OPPONENT_CARDS` uitgebreid** met de 5 hinder-kaarten (naast de bestaande
+    Kortsluiting/Blinde Vlek/Duwstoot/Prioriteitspas) — met 1 speler (geen bots) staan ze allemaal
+    uit, met een tooltip die uitlegt waarom.
+  - **Gevonden en gefixt tijdens het meten van de nieuwe kaarten: een echte, pre-existing
+    scheefheid in de koploper-heuristiek.** Een eerste 15.000-potjes-batch op de nieuwe kaarten
+    liet startpositie 3.1 stelselmatig 2-2,5 procentpunt lager winnen dan 3.4 — buiten de
+    foutmarge, en consistent over meerdere onafhankelijke runs (dus geen toeval). Oorzaak:
+    `pickShortCircuitTarget()` (het bestaande "raak de koploper"-algoritme achter Kortsluiting,
+    ongewijzigd sinds vóór deze sessie) koos bij een GELIJKE stand altijd de EERSTE tegenstander
+    die de lus tegenkwam — en de spelers-array staat vast op volgorde 3.1→3.2→3.3→3.4 (alleen
+    `strategy` en de beurtvolgorde worden geloot, de array-volgorde zelf niet). Bij een tie (heel
+    gewoon vroeg in het potje, als iedereen nog op 0 opdrachten staat) werd dus stelselmatig de
+    LAAGST geïndexeerde tegenstander geraakt. Dat gold al voor Kortsluiting alleen, maar bleef
+    destijds onder de meetdrempel (spreiding 0,5 procentpunt in eerdere runs); de vier nieuwe
+    koploper-kaarten (Vergrendeling/Stroomonderbreking/Noodbarrière/Signaalstoring) hergebruiken
+    dezelfde `pickLeaderTarget()`-heuristiek, en met vijf kaarten die allemaal dezelfde kant op
+    duwen werd het effect groot genoeg om te meten. Fix: reservoir sampling (bij elke NIEUWE tie
+    1/n kans om 'm over te nemen) in zowel `pickShortCircuitTarget()` als `pickLeaderTarget()`,
+    met de bestaande `rand`-stroom als bron — blijft dus deterministisch per seed, net als de rest
+    van de simulatie. Geverifieerd over twee nieuwe onafhankelijke runs van 15.000 potjes ná de
+    fix: spreiding terug naar 1,0 procentpunt, ruim binnen de foutmarge van ±0,7, en geen
+    richting-consistente scheefheid meer tussen de vier startposities.
+  - **Herijkte cijfers ná alle 10 nieuwe kaarten én de fairness-fix** (15.000 potjes): dood-vrij
+    bleef 100% (geen "koudste tegel" op 0,0%), eerlijkheid per startpositie binnen foutmarge
+    (spreiding 1,0 procentpunt), eindklassering per startpositie telt op tot 100% per kolom met
+    gem. plaats 2,48-2,53. De energie-actie-winstpercentages verschoven licht binnen de
+    verwachte ruis (Stuwstoot 31,3% → 30,4%, Herprioritering 27,0% → 28,0%, Noodtransport
+    34,1% → 34,3%, geen energie 7,5% → 7,4%) — geen van de verschuivingen is groter dan de
+    foutmarge, dus geen aanwijzing dat de nieuwe kaarten de bestaande energie-strategieën
+    herbalanceren. Elke nieuwe kaart wordt gebruikt: de vier koploper-kaarten (Vergrendeling/
+    Stroomonderbreking/Noodbarrière/Signaalstoring) rond 0,92-0,93× per potje (breed toepasbaar,
+    geen zeldzame voorwaarde), Terugtrekbevel 0,25× (vereist adjacentie ÉN een bekende
+    looprichting, dus zeldzamer — vergelijkbaar met Duwstoot's 0,26×), Herkansing/Snelroute/
+    Herinnering rond 0,93× (bijna altijd bruikbaar), Reservetank 0,59× (net als Overdrukklep
+    afhankelijk van energieverlies boven het plafond), Kaartenruil 0,13× (smalle bot-voorwaarde:
+    alleen om een Prioriteitspas kwijt te raken). Gezien de bewust ZWAARDERE aard van Vergrendeling
+    en Terugtrekbevel (zie de inschatting die aan de implementatie voorafging) zou een volgende
+    balans-blik zich vooral op die twee moeten richten als de trekkans ooit aangepast wordt — voor
+    nu blijven alle 10 met gelijke kans (2 exemplaren) in de gedeelde stapel van 40.
 
 ## Nog te doen
 

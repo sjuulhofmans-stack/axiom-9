@@ -7,11 +7,12 @@
 // 96-walk.js), zodat jij niet op ze hoeft te wachten.
 //
 // Met 1 speler (geen bots) is er niemand die je blokkeert, en hebben Kortsluiting, Blinde Vlek,
-// Duwstoot en Prioriteitspas allemaal een tegenstander nodig — die staan dan uit, net als
-// Prioriteitspas ook in de bot-simulatie geen effect heeft. Zodra er wél andere spelers zijn
-// (mens of bot) blokkeren jullie elkaars vakjes net als in "Automatisch", en werken die vier
-// kaarten ook — met een doelwit dat JIJ zelf kiest via een klein keuzepaneel.
-const WALK_SOLO_NO_OPPONENT_CARDS = ['short', 'blind', 'shove', 'scan'];
+// Duwstoot, Prioriteitspas en de vijf nieuwe hinder-kaarten (Vergrendeling/Stroomonderbreking/
+// Noodbarrière/Terugtrekbevel/Signaalstoring) allemaal een tegenstander nodig — die staan dan
+// uit, net als Prioriteitspas ook in de bot-simulatie geen effect heeft. Zodra er wél andere
+// spelers zijn (mens of bot) blokkeren jullie elkaars vakjes net als in "Automatisch", en werken
+// al die kaarten ook — met een doelwit dat JIJ zelf kiest via een klein keuzepaneel.
+const WALK_SOLO_NO_OPPONENT_CARDS = ['short', 'blind', 'shove', 'scan', 'lockdown', 'outage', 'barrier', 'recoil', 'jam'];
 
 const walkModeAutoBtn = document.getElementById('walkModeAuto');
 const walkModeSoloBtn = document.getElementById('walkModeSolo');
@@ -79,6 +80,8 @@ function soloRebuildSetup(){
       startLabel: isHuman ? SIM_START_LABELS[i] : null,   // mens: alvast een unieke standaardplek
       pos: null,
       skipEnergyRoll: false, actionUses: 0,
+      lockedNextTurn: false, rollPenalty: 0, barrierCell: null, reorderBlocked: false,
+      reservedEnergy: 0, lastDir: -1,
     });
   }
   soloRenderSetupUI();
@@ -131,12 +134,15 @@ let soloFinished = 0;
 let soloFinishTarget = 1;
 let soloActiveIdx = -1;       // wie van soloPlayers nu interactief aan zet is (mens)
 let soloTargetKey = null;
-// 'idle' | 'choose-action' | 'choose-preroll' | 'target-pick' | 'valve-offer' | 'blind-offer' |
-// 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
+// 'idle' | 'choose-action' | 'choose-preroll' | 'target-pick' | 'reroll-offer' | 'valve-offer' |
+// 'blind-offer' | 'peek-pick' | 'rolling' | 'moving' | 'boots-direction' | 'jump-target' |
+// 'game-over'
 // 'choose-action' = energie-actie kiezen (of overslaan); 'choose-preroll' = Zwaartekracht-laarzen/
 // Stuwlading kiezen (of overslaan) — de enige twee kaarten die per se vóór de worp moeten, omdat ze
 // het mechanisme van de worp zelf raken. Alle andere kaarten spelen/afleggen kan op elk moment
-// tijdens 'moving' (zie soloRenderMoveCardRow) — geen aparte fase daarvoor nodig.
+// tijdens 'moving' (zie soloRenderMoveCardRow) — geen aparte fase daarvoor nodig, BEHALVE
+// Herkansing ('reroll-offer', reageert op de zojuist gevallen worp, dus vlak ná het dobbelen) en
+// Herinnering ('peek-pick', eigen kleine keuzepaneel voor de bovenste 3 van de trekstapel).
 let soloPhase = 'idle';
 let soloRunId = 0;
 let soloMove = null;            // { d1, d2, d3, roll, stepsLeft, lastDir, path }
@@ -147,6 +153,8 @@ let soloUsedCardId = null;      // id uit ACTION_CARDS (GESPEELD), voor de logre
 let soloDiscardedCardId = null; // id uit ACTION_CARDS (AFGELEGD i.p.v. gespeeld), voor de logregel
 let soloTargetSwapped = false;  // Herkalibratie (kaart) en Herprioritering (energie) doen dezelfde
                                  // doelwissel — zodra de een 'm deze beurt al deed, blokkeert dit de ander
+let soloLockedThisTurn = false; // getroffen door Vergrendeling: energie- én kaartslot allebei "op"
+let soloFastlaneActive = false; // Snelroute gespeeld deze beurt: geen-U-turn-regel geldt niet meer
 let soloPendingBoost = false;   // Stuwstoot/Stuwlading: deze beurt een 3e loopsteen
 let soloUsedBoots = false;
 let soloUsedJump = false;
@@ -157,8 +165,8 @@ let soloBlindOfferAvailable = false; // deze stap geblokkeerd door een tegenstan
 function solo(){ return soloPlayers[soloActiveIdx]; }
 // Energie-actie en kaartactie zijn TWEE LOSSE sloten per beurt (max 1 van elk) — een kaart
 // AFLEGGEN gebruikt hetzelfde kaart-slot als een kaart SPELEN, dus telt ook mee.
-function soloEnergyActionUsed(){ return !!soloUsedEnergyId; }
-function soloCardActionUsed(){ return !!(soloUsedCardId || soloDiscardedCardId); }
+function soloEnergyActionUsed(){ return !!soloUsedEnergyId || soloLockedThisTurn; }
+function soloCardActionUsed(){ return !!(soloUsedCardId || soloDiscardedCardId) || soloLockedThisTurn; }
 // alle andere spelers die nog meespelen — voor blokkeren en doelwit-keuzes
 function soloOthers(){ return soloPlayers.filter(p => p.idx !== soloActiveIdx && !p.rank); }
 function soloOccupied(){ return new Set(soloOthers().map(p => p.pos)); }
@@ -359,9 +367,11 @@ function soloDiscardCard(id){
   soloAfterCardAction();
 }
 // ---------- tijdens het lopen: altijd-zichtbare kaartenrij (spelen óf afleggen) ----------
-// Boots/Stuwlading horen hierboven al bij de pre-roll-fase, en Blinde Vlek/Overdrukklep blijven
-// puur reactief (zie soloOfferBlindSpot/soloOfferValveSave) — die drie dus hier uitsluiten.
-const SOLO_MOVE_ROW_EXCLUDE = ['boots', 'boostcell', 'blind', 'valve'];
+// Boots/Stuwlading horen hierboven al bij de pre-roll-fase; Blinde Vlek/Overdrukklep/Reservetank
+// blijven puur reactief (zie soloOfferBlindSpot/soloOfferValveSave — die laatste twee bieden zich
+// samen aan); Herkansing reageert op de net-gevallen worp (soloOfferReroll, vlak ná het dobbelen)
+// — die zes dus hier uitsluiten.
+const SOLO_MOVE_ROW_EXCLUDE = ['boots', 'boostcell', 'blind', 'valve', 'tank', 'reroll'];
 function soloRenderMoveCardRow(){
   if (!walkSoloActionsEl) return;
   if (soloCardActionUsed()){ walkSoloActionsEl.innerHTML = ''; return; }
@@ -373,10 +383,14 @@ function soloRenderMoveCardRow(){
     let disabled = false, reason = null;
     if (noOpponents && WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in dit potje'; }
     else if (id === 'shove' && !soloShoveTargets().length){ disabled = true; reason = 'geen tegenstander naast je'; }
+    else if (id === 'recoil' && !soloRecoilTargets().length){ disabled = true; reason = 'geen aangrenzende tegenstander die al gelopen heeft'; }
+    else if (id === 'barrier' && !soloBarrierTargets().length){ disabled = true; reason = 'geen tegenstander met een lege buurcel'; }
     else if (id === 'scan' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'short' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
     else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
     else if (id === 'recal' && soloTargetSwapped){ disabled = true; reason = 'je doel is deze beurt al gewisseld'; }
+    else if (id === 'trade' && (!p.cards.find(c => c !== 'trade') || !soloDeck.discard.length)){ disabled = true; reason = 'geen andere kaart om te ruilen'; }
+    else if (id === 'peek' && !soloDeck.draw.length){ disabled = true; reason = 'trekstapel is leeg'; }
     return soloCardWithDiscard(id, disabled, reason);
   }).join('');
   walkSoloActionsEl.innerHTML = `<div class="action-card-row">${cards}</div>`;
@@ -392,14 +406,35 @@ if (walkSoloActionsEl){
   });
 }
 
-// ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas ----------
-// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen)
+// ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas + de 5 nieuwe hinder-kaarten ----------
+// wie er nu naast je staat (voor Duwstoot/Terugtrekbevel — die kunnen alleen een AANGRENZENDE
+// tegenstander raken). Terugtrekbevel heeft daarnaast nog een bekende looprichting nodig
+// (lastDir !== -1) om te weten welke kant "terug" is.
 function soloShoveTargets(){
   const neigh = new Set(soloGraph.adjKey[solo().pos]);
   return soloOthers().filter(p => neigh.has(p.pos));
 }
+function soloRecoilTargets(){
+  return soloShoveTargets().filter(p => p.lastDir !== -1);
+}
+// Noodbarrière: alleen tegenstanders die nog minstens één lege buurcel hebben komen in aanmerking
+function soloBarrierTargets(){
+  const occNow = soloOccupied();
+  return soloOthers().filter(p => soloGraph.adjKey[p.pos].some(k => !occNow.has(k) && k !== solo().pos));
+}
+const SOLO_TARGET_PICKER_LABELS = {
+  short: 'Kortsluiting', shove: 'Duwstoot', scan: 'Prioriteitspas',
+  lockdown: 'Vergrendeling', outage: 'Stroomonderbreking', barrier: 'Noodbarrière',
+  recoil: 'Terugtrekbevel', jam: 'Signaalstoring',
+};
+function soloTargetPickerTargets(cardId){
+  if (cardId === 'shove') return soloShoveTargets();
+  if (cardId === 'recoil') return soloRecoilTargets();
+  if (cardId === 'barrier') return soloBarrierTargets();
+  return soloOthers();
+}
 function soloEnterTargetPicker(cardId){
-  const targets = cardId === 'shove' ? soloShoveTargets() : soloOthers();
+  const targets = soloTargetPickerTargets(cardId);
   if (!targets.length) return;
   soloPhase = 'target-pick';
   soloHideDirPad();
@@ -410,7 +445,7 @@ function soloEnterTargetPicker(cardId){
   soloClearClickable();
   btnWalkSoloSkip.hidden = true;
   btnWalkSoloRoll.hidden = true;
-  const label = { short: 'Kortsluiting', shove: 'Duwstoot', scan: 'Prioriteitspas' }[cardId];
+  const label = SOLO_TARGET_PICKER_LABELS[cardId];
   walkSoloActionsEl.innerHTML =
     `<div class="walk-target-picker-hint">Kies een doelwit voor <b>${label}</b>:</div>` +
     `<div class="action-card-row">` + targets.map(t =>
@@ -471,7 +506,111 @@ function soloResolveTargetCard(cardId, targetIdx){
     }
     paintWalkPawns(soloGraph, soloPlayers, p.idx);
     soloAfterCardAction();
+  } else if (cardId === 'lockdown'){
+    victim.lockedNextTurn = true;
+    useActionCard(p, 'lockdown', soloDeck);
+    soloUsedCardId = 'lockdown';
+    walkLog(`Je speelt <b>Vergrendeling</b> op ${victim.name}: die mist zijn volgende energie- én kaartactie.`, null, p);
+    soloAfterCardAction();
+  } else if (cardId === 'outage'){
+    victim.rollPenalty = 2;
+    useActionCard(p, 'outage', soloDeck);
+    soloUsedCardId = 'outage';
+    walkLog(`Je speelt <b>Stroomonderbreking</b> op ${victim.name}: die gooit 2 stappen minder.`, null, p);
+    soloAfterCardAction();
+  } else if (cardId === 'barrier'){
+    const occNow = soloOccupied(); occNow.add(p.pos);
+    const spot = soloGraph.adjKey[victim.pos].find(k => !occNow.has(k));
+    useActionCard(p, 'barrier', soloDeck);
+    soloUsedCardId = 'barrier';
+    if (spot !== undefined){
+      victim.barrierCell = spot;
+      walkLog(`Je speelt <b>Noodbarrière</b> naast ${victim.name}.`, null, p);
+    } else {
+      walkLog(`Je speelt <b>Noodbarrière</b>, maar er was geen lege plek naast ${victim.name}.`, null, p);
+    }
+    soloAfterCardAction();
+  } else if (cardId === 'recoil'){
+    const revDir = (victim.lastDir + 2) % 4;
+    const occNow = soloOccupied(); occNow.add(p.pos);
+    let cur = victim.pos, steps = 0;
+    for (let s = 0; s < 2; s++){
+      const dirs = soloGraph.adjDir[cur], keys = soloGraph.adjKey[cur];
+      let nextKey = -1;
+      for (let j = 0; j < dirs.length; j++) if (dirs[j] === revDir){ nextKey = keys[j]; break; }
+      if (nextKey === -1 || occNow.has(nextKey)) break;
+      cur = nextKey; steps++;
+    }
+    useActionCard(p, 'recoil', soloDeck);
+    soloUsedCardId = 'recoil';
+    if (steps > 0){
+      victim.pos = cur;
+      walkLog(`Je speelt <b>Terugtrekbevel</b> op ${victim.name} en duwt die ${steps} vakje(s) terug.`, null, p);
+    } else {
+      walkLog(`Je speelt <b>Terugtrekbevel</b> op ${victim.name}, maar er was geen ruimte om terug te duwen.`, null, p);
+    }
+    paintWalkPawns(soloGraph, soloPlayers, p.idx);
+    soloAfterCardAction();
+  } else if (cardId === 'jam'){
+    victim.reorderBlocked = true;
+    useActionCard(p, 'jam', soloDeck);
+    soloUsedCardId = 'jam';
+    walkLog(`Je speelt <b>Signaalstoring</b> op ${victim.name}: diens eerstvolgende doelwissel mislukt.`, null, p);
+    soloAfterCardAction();
   }
+}
+
+// ---------- Herinnering: bovenste 3 van de trekstapel bekijken en eventueel herschikken ----------
+// drawActionCard() trekt van het EIND van soloDeck.draw via pop(), dus "boven" = de laatste
+// elementen. Je kiest er hooguit 1 om helemaal bovenaan te zetten; de rest blijft in dezelfde
+// relatieve volgorde staan.
+function soloEnterPeekPicker(){
+  if (!soloDeck.draw.length) return;
+  soloPhase = 'peek-pick';
+  soloHideDirPad();
+  soloClearClickable();
+  btnWalkSoloSkip.hidden = true;
+  btnWalkSoloRoll.hidden = true;
+  const n = Math.min(3, soloDeck.draw.length);
+  const top = soloDeck.draw.slice(soloDeck.draw.length - n).reverse();  // bovenste kaart eerst getoond
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Bovenste ${n} van de trekstapel — kies er hooguit 1 om bovenaan te zetten:</div>` +
+    `<div class="action-card-row">` + top.map((id, i) =>
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-peek="${i}" title="${ACTION_CARDS[id].name}">
+        <span class="action-card-name" style="margin-top:22px;">${ACTION_CARDS[id].name}</span>
+        <span class="action-card-hint">${ACTION_CARDS[id].hint}</span>
+      </button>`
+    ).join('') +
+    `<button type="button" class="action-card action-card--lg action-card--plain" data-peek="none" title="Volgorde laten zoals hij is">
+      <span class="action-card-name" style="margin-top:22px;">Niet wijzigen</span>
+    </button></div>`;
+  walkSoloActionsEl.dataset.peekOrder = top.join(',');
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'peek-pick') return;
+    const btn = e.target.closest('button[data-peek]');
+    if (!btn) return;
+    soloResolvePeekPick(btn.dataset.peek === 'none' ? null : parseInt(btn.dataset.peek, 10));
+  });
+}
+function soloResolvePeekPick(chosenPos){
+  const p = solo();
+  const top = walkSoloActionsEl.dataset.peekOrder.split(',');  // top[0] = eerstvolgende trekking
+  const n = top.length;
+  if (chosenPos !== null){
+    const [chosen] = top.splice(chosenPos, 1);
+    top.unshift(chosen);   // wordt de eerstvolgende trekking
+  }
+  // soloDeck.draw trekt van het EIND (pop()), dus top[0] (eerstvolgende trekking) hoort
+  // helemaal achteraan in soloDeck.draw, top[1] daarvoor, enzovoort.
+  for (let i = 0; i < n; i++) soloDeck.draw[soloDeck.draw.length - 1 - i] = top[i];
+  useActionCard(p, 'peek', soloDeck);
+  soloUsedCardId = 'peek';
+  walkLog(chosenPos !== null
+    ? `Je speelt <b>Herinnering</b>: <b>${ACTION_CARDS[top[0]].name}</b> ligt nu bovenop de trekstapel.`
+    : `Je speelt <b>Herinnering</b>: je laat de volgorde zoals hij is.`, null, p);
+  soloAfterCardAction();
 }
 
 // Kan nu op TWEE plekken vandaan aangeroepen worden: vóór de worp (Boots/Stuwlading, vanuit
@@ -479,7 +618,11 @@ function soloResolveTargetCard(cardId, targetIdx){
 // soloRenderMoveCardRow) — soloAfterCardAction() regelt zelf welke kant op na afloop.
 function soloPlayCard(id){
   if (id === 'boots'){ soloEnterBootsDirection(); return; }
-  if (id === 'short' || id === 'shove' || id === 'scan'){ soloEnterTargetPicker(id); return; }
+  if (['short', 'shove', 'scan', 'lockdown', 'outage', 'barrier', 'recoil', 'jam'].includes(id)){
+    soloEnterTargetPicker(id);
+    return;
+  }
+  if (id === 'peek'){ soloEnterPeekPicker(); return; }
   const p = solo();
   if (id === 'ration'){
     simGainEnergy(p, 3);
@@ -491,12 +634,17 @@ function soloPlayCard(id){
     // Herkalibratie en Herprioritering doen dezelfde doelwissel — is die deze beurt al gebeurd
     // (via de ander), dan blijft deze kaart in de hand
     if (soloTargetSwapped) return;
-    soloUnconditionalSwap();
     useActionCard(p, 'recal', soloDeck);
     soloUsedCardId = 'recal';
     soloTargetSwapped = true;
-    soloRefreshTarget();
-    walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
+    if (p.reorderBlocked){
+      p.reorderBlocked = false;
+      walkLog(`Je <b>Herkalibratie</b> wordt gesaboteerd door Signaalstoring — geen wissel.`, null, p);
+    } else {
+      soloUnconditionalSwap();
+      soloRefreshTarget();
+      walkLog(`Je speelt <b>Herkalibratie</b>: nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
+    }
     soloAfterCardAction();
   } else if (id === 'boostcell'){
     soloPendingBoost = true;
@@ -511,6 +659,20 @@ function soloPlayCard(id){
     soloUsedCardId = 'resupply';
     walkLog(`Je speelt <b>Herbevoorrading</b> en trekt meteen <b>${drawn ? ACTION_CARDS[drawn].name : 'niets — stapel leeg'}</b>.`, null, p);
     soloAfterCardAction();
+  } else if (id === 'trade'){
+    const other = p.cards.find(c => c !== 'trade');
+    if (!other || !soloDeck.discard.length) return;
+    performCardTrade(p, other, soloDeck);
+    useActionCard(p, 'trade', soloDeck);
+    soloUsedCardId = 'trade';
+    walkLog(`Je speelt <b>Kaartenruil</b>: ${ACTION_CARDS[other].name} geruild tegen een nieuwe kaart.`, null, p);
+    soloAfterCardAction();
+  } else if (id === 'fastlane'){
+    soloFastlaneActive = true;
+    useActionCard(p, 'fastlane', soloDeck);
+    soloUsedCardId = 'fastlane';
+    walkLog(`Je speelt <b>Snelroute</b>: de geen-U-turn-regel geldt de rest van deze beurt niet meer voor jou.`, null, p);
+    soloAfterCardAction();
   }
 }
 function soloUseEnergyAction(id){
@@ -524,10 +686,15 @@ function soloUseEnergyAction(id){
     walkLog(`Je zet <b>Stuwstoot</b> in (−3): deze beurt met 3 loopstenen.`, null, p);
     soloProceedToPrerollCard();
   } else if (id === 'reorder'){
-    soloUnconditionalSwap();
     soloTargetSwapped = true;
-    soloRefreshTarget();
-    walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
+    if (p.reorderBlocked){
+      p.reorderBlocked = false;
+      walkLog(`Je <b>Herprioritering</b> wordt gesaboteerd door Signaalstoring — geen wissel, energie wel kwijt.`, null, p);
+    } else {
+      soloUnconditionalSwap();
+      soloRefreshTarget();
+      walkLog(`Je zet <b>Herprioritering</b> in (−6): nieuw doel ${p.deck[p.nextIdx]}.`, null, p);
+    }
     soloProceedToPrerollCard();
   } else if (id === 'jump'){
     soloEnterJumpTarget();
@@ -715,24 +882,71 @@ function soloRollDice(){
   soloMove = { d1, d2, d3, roll, stepsLeft: roll, lastDir: -1, path: [solo().pos] };
   btnWalkSoloRoll.hidden = true;
   renderWalkScore(soloPlayers, soloActiveIdx);
-  if (soloEnergyGain.wasted > 0 && solo().cards.includes('valve') && !soloCardActionUsed()){
+  // Herkansing reageert op de net-gevallen worp, dus vóór het Overdrukklep/Reservetank-moment
+  // (dat reageert pas op het RESULTAAT — energie boven het plafond — dus de volgorde maakt daar
+  // verder niets uit, maar Herkansing moet wél als eerste, want die verandert de worp zelf).
+  if (solo().cards.includes('reroll') && !soloCardActionUsed()){
+    soloOfferReroll();
+    return;
+  }
+  soloContinueAfterRoll();
+}
+function soloContinueAfterRoll(){
+  const p = solo();
+  if (soloEnergyGain.wasted > 0 && !soloCardActionUsed() && (p.cards.includes('valve') || p.cards.includes('tank'))){
     soloOfferValveSave();
     return;
   }
   soloAdvanceMovePhase();
 }
-// Overdrukklep is nu óók puur reactief: je weet pas of er energie verloren dreigt te gaan zodra
-// je 'm gegooid hebt, dus deze aanbieding komt — net als Blinde Vlek — vanzelf, meteen ná de worp.
+// Herkansing is een kort ja/nee-keuzemoment vlak ná het dobbelen — herrolt de LAAGSTE van de
+// twee loopstenen (Stuwlading/Stuwstoot doen geen mee, die staan al vast als 3e steen).
+function soloOfferReroll(){
+  soloPhase = 'reroll-offer';
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Speel <b>Herkansing</b> om je laagste loopsteen opnieuw te gooien?</div>` +
+    `<div class="action-card-row">` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-reroll="yes"><span class="action-card-name" style="margin-top:22px;">Ja, speel Herkansing</span></button>` +
+      `<button type="button" class="action-card action-card--lg action-card--plain" data-reroll="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>` +
+    `</div>`;
+}
+if (walkSoloActionsEl){
+  walkSoloActionsEl.addEventListener('click', (e) => {
+    if (soloPhase !== 'reroll-offer') return;
+    const btn = e.target.closest('button[data-reroll]');
+    if (!btn) return;
+    const p = solo();
+    if (btn.dataset.reroll === 'yes'){
+      const lowerIsD1 = soloMove.d1 <= soloMove.d2;
+      const before = lowerIsD1 ? soloMove.d1 : soloMove.d2;
+      const rerolled = simRollD6(soloRand);
+      if (lowerIsD1) soloMove.d1 = rerolled; else soloMove.d2 = rerolled;
+      const delta = rerolled - before;
+      soloMove.roll += delta;
+      soloMove.stepsLeft += delta;
+      useActionCard(p, 'reroll', soloDeck);
+      soloUsedCardId = 'reroll';
+      renderWalkDice(soloMove.d1, soloMove.d2, soloEnergyRoll, false, soloMove.d3);
+      walkLog(`Je speelt <b>Herkansing</b>: ${before} → ${rerolled} (${delta >= 0 ? '+' : ''}${delta} stap${delta === 1 || delta === -1 ? '' : 'pen'}).`, null, p);
+    }
+    walkSoloActionsEl.innerHTML = '';
+    soloContinueAfterRoll();
+  });
+}
+// Overdrukklep (direct redden) en Reservetank (uitgesteld redden) zijn allebei puur reactief: je
+// weet pas of er energie verloren dreigt te gaan zodra je gegooid hebt, dus deze aanbieding komt
+// — net als Blinde Vlek — vanzelf, meteen ná de worp. Heb je beide op zak, dan kies je zelf welke.
 function soloOfferValveSave(){
   soloPhase = 'valve-offer';
   const p = solo();
   walkLog(`Je gooide ${soloEnergyRoll} energie, maar ${soloEnergyGain.wasted} ging verloren boven het plafond van ${ENERGY_MAX}.`, null, p);
+  const options = [];
+  if (p.cards.includes('valve')) options.push(`<button type="button" class="action-card action-card--lg action-card--plain" data-valve="valve"><span class="action-card-name" style="margin-top:22px;">Ja, Overdrukklep</span><span class="action-card-hint">meteen gered</span></button>`);
+  if (p.cards.includes('tank')) options.push(`<button type="button" class="action-card action-card--lg action-card--plain" data-valve="tank"><span class="action-card-name" style="margin-top:22px;">Ja, Reservetank</span><span class="action-card-hint">komt volgende beurt terug</span></button>`);
+  options.push(`<button type="button" class="action-card action-card--lg action-card--plain" data-valve="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>`);
   walkSoloActionsEl.innerHTML =
-    `<div class="walk-target-picker-hint">Speel <b>Overdrukklep</b> om tot 3 daarvan alsnog te redden?</div>` +
-    `<div class="action-card-row">` +
-      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="yes"><span class="action-card-name" style="margin-top:22px;">Ja, speel Overdrukklep</span></button>` +
-      `<button type="button" class="action-card action-card--lg action-card--plain" data-valve="no"><span class="action-card-name" style="margin-top:22px;">Nee</span></button>` +
-    `</div>`;
+    `<div class="walk-target-picker-hint">Energie redden boven het plafond?</div>` +
+    `<div class="action-card-row">${options.join('')}</div>`;
 }
 if (walkSoloActionsEl){
   walkSoloActionsEl.addEventListener('click', (e) => {
@@ -740,7 +954,7 @@ if (walkSoloActionsEl){
     const btn = e.target.closest('button[data-valve]');
     if (!btn) return;
     const p = solo();
-    if (btn.dataset.valve === 'yes'){
+    if (btn.dataset.valve === 'valve'){
       const saved = Math.min(3, soloEnergyGain.wasted);
       p.energy += saved;
       soloEnergyGain.wasted -= saved;
@@ -748,6 +962,13 @@ if (walkSoloActionsEl){
       soloUsedCardId = 'valve';
       walkLog(`Je speelt <b>Overdrukklep</b>: +${saved} energie gered → ${p.energy}.`, null, p);
       renderWalkScore(soloPlayers, soloActiveIdx);
+    } else if (btn.dataset.valve === 'tank'){
+      const saved = Math.min(3, soloEnergyGain.wasted);
+      p.reservedEnergy += saved;
+      soloEnergyGain.wasted -= saved;
+      useActionCard(p, 'tank', soloDeck);
+      soloUsedCardId = 'tank';
+      walkLog(`Je speelt <b>Reservetank</b>: +${saved} energie komt je volgende beurt terug.`, null, p);
     }
     walkSoloActionsEl.innerHTML = '';
     soloAdvanceMovePhase();
@@ -761,14 +982,17 @@ if (btnWalkSoloSkip) btnWalkSoloSkip.addEventListener('click', () => {
   else if (soloPhase === 'choose-preroll') soloProceedToRoll();
 });
 
+// Snelroute schakelt de geen-U-turn-regel voor de REST van de beurt uit — een `lastDir` van -1
+// betekent voor soloLegalNextCells() "geen beperking", precies zoals bij de allereerste stap.
+function soloEffectiveLastDir(){ return soloFastlaneActive ? -1 : soloMove.lastDir; }
 function soloAdvanceMovePhase(){
   const occ = soloOccupied();
-  const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, occ);
+  const legal = soloLegalNextCells(soloGraph, solo().pos, soloEffectiveLastDir(), occ);
   if (!legal.length){
     // geen vervolgstap: ofwel een muur (echt doodlopend), ofwel puur tegenstanders in de weg
     // — in dat laatste geval mag Blinde Vlek de blokkade negeren, als je 'm hebt en nog geen
     // andere actie deze beurt hebt gebruikt
-    const legalIgnoringBlock = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, null);
+    const legalIgnoringBlock = soloLegalNextCells(soloGraph, solo().pos, soloEffectiveLastDir(), null);
     soloBlindOfferAvailable = legalIgnoringBlock.length > 0
       && solo().cards.includes('blind') && !soloCardActionUsed();
     if (soloBlindOfferAvailable){
@@ -816,7 +1040,7 @@ if (walkSoloActionsEl){
       soloUsedCardId = 'blind';
       walkLog(`Je speelt <b>Blinde Vlek</b>: bezette vakjes tellen deze beurt niet mee.`, null, solo());
       soloPhase = 'moving';
-      const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, null);
+      const legal = soloLegalNextCells(soloGraph, solo().pos, soloEffectiveLastDir(), null);
       soloMarkClickable(soloGraph, legal.map(l => l.key));
       soloRenderDirPad(legal);
       renderSoloMeta(soloMove.stepsLeft);
@@ -830,7 +1054,7 @@ if (walkSoloActionsEl){
 }
 function soloHandleMoveClick(key){
   const occ = soloOccupied();
-  const legal = soloLegalNextCells(soloGraph, solo().pos, soloMove.lastDir, soloPhase === 'moving' && soloUsedCardId === 'blind' ? null : occ);
+  const legal = soloLegalNextCells(soloGraph, solo().pos, soloEffectiveLastDir(), soloPhase === 'moving' && soloUsedCardId === 'blind' ? null : occ);
   const match = legal.find(l => l.key === key);
   if (!match) return;
   const p = solo();
@@ -930,12 +1154,20 @@ function soloBeginHumanTurn(pIdx){
   soloUsedCardId = null;
   soloDiscardedCardId = null;
   soloTargetSwapped = false;
+  soloLockedThisTurn = false;
+  soloFastlaneActive = false;
   soloPendingBoost = false;
   soloUsedBoots = false;
   soloUsedJump = false;
   soloMove = null;
 
   const p = solo();
+  // Reservetank: energie die vorige beurt opgespaard is, komt er nu bij — vóór de energiesteen
+  // van deze beurt, zodat het plafond van deze beurt gewoon weer telt.
+  if (p.reservedEnergy){
+    p.energy = Math.min(ENERGY_MAX, p.energy + p.reservedEnergy);
+    p.reservedEnergy = 0;
+  }
   // Energie wordt nu pas gegooid zodra je zelf beweegt (dobbelen, Zwaartekracht-laarzen of
   // Noodtransport) -- niet meer automatisch bij het begin van de beurt (gebruikersverzoek: "de
   // energie komt er pas bij vanaf de eerste keer dat ze dobbelen"). `null` betekent "nog niet
@@ -955,6 +1187,15 @@ function soloBeginHumanTurn(pIdx){
   btnWalkSoloRoll.hidden = true;
   btnWalkSoloSkip.hidden = false;
   btnWalkSoloSkip.textContent = 'Geen actie, gewoon dobbelen';
+  // Vergrendeling: mist deze beurt ZOWEL het energie- als het kaartslot — meteen doorschuiven
+  // naar dobbelen, precies als bij de bots.
+  if (p.lockedNextTurn){
+    p.lockedNextTurn = false;
+    soloLockedThisTurn = true;   // sluit zowel het energie- als het kaartslot deze hele beurt
+    walkLog(`Je zit deze beurt <b>vergrendeld</b> — geen energie-actie of kaart mogelijk.`, null, p);
+    soloProceedToRoll();
+    return;
+  }
   soloPhase = 'choose-action';
   soloRenderActionPanel();
 }
@@ -970,8 +1211,18 @@ function soloResolveBotTurn(player){
   // zelfde opzet als simulateOneGame() in 95-simulate.js, zie de uitgebreide toelichting daar
   // voor de drie paren (Stuwlading/Stuwstoot, Herkalibratie/Herprioritering, Blinde Vlek/
   // Noodtransport) die elkaar nog wél uitsluiten binnen hún ene bewegingsmoment.
+  if (player.reservedEnergy){
+    player.energy = Math.min(ENERGY_MAX, player.energy + player.reservedEnergy);
+    player.reservedEnergy = 0;
+  }
   let energyActionUsed = false;
   let cardActionUsed = false;
+  if (player.lockedNextTurn){
+    player.lockedNextTurn = false;
+    energyActionUsed = true;
+    cardActionUsed = true;
+    walkLog(`${player.name} zit deze beurt <b>vergrendeld</b> — geen energie-actie of kaart mogelijk.`, null, player);
+  }
 
   let energyRoll = 0, energyGain = { gained: 0, wasted: 0 };
   if (player.skipEnergyRoll){ player.skipEnergyRoll = false; }
@@ -983,8 +1234,14 @@ function soloResolveBotTurn(player){
     useActionCard(player, 'valve', soloDeck);
     cardActionUsed = true;
   }
+  if (!cardActionUsed && player.cards.includes('tank') && energyGain.wasted > 0){
+    const saved = Math.min(3, energyGain.wasted);
+    player.reservedEnergy += saved;
+    useActionCard(player, 'tank', soloDeck);
+    cardActionUsed = true;
+  }
   if (!cardActionUsed && player.cards.includes('short')){
-    const victim = pickShortCircuitTarget(soloPlayers, pIdx);
+    const victim = pickShortCircuitTarget(soloPlayers, pIdx, soloRand);
     if (victim){
       victim.skipEnergyRoll = true;
       useActionCard(player, 'short', soloDeck);
@@ -998,16 +1255,67 @@ function soloResolveBotTurn(player){
     cardActionUsed = true;
   }
 
+  // de vier nieuwe hinder-kaarten die een tegenstander raken zonder dat de eigen worp/het eigen
+  // doel iets verandert — zelfde koploper-heuristiek als Kortsluiting.
+  if (!cardActionUsed && player.cards.includes('lockdown')){
+    const victim = pickLeaderTarget(soloPlayers, pIdx, p => p.lockedNextTurn, soloRand);
+    if (victim){
+      victim.lockedNextTurn = true;
+      useActionCard(player, 'lockdown', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Vergrendeling</b> op ${victim.name}.`, null, player);
+    }
+  }
+  if (!cardActionUsed && player.cards.includes('outage')){
+    const victim = pickLeaderTarget(soloPlayers, pIdx, p => p.rollPenalty > 0, soloRand);
+    if (victim){
+      victim.rollPenalty = 2;
+      useActionCard(player, 'outage', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Stroomonderbreking</b> op ${victim.name}.`, null, player);
+    }
+  }
+  if (!cardActionUsed && player.cards.includes('barrier')){
+    const occNow = new Set(soloPlayers.filter(p => !p.rank).map(p => p.pos));
+    const target = pickBarrierTarget(soloGraph, soloPlayers, occNow, pIdx, soloRand);
+    if (target){
+      target.player.barrierCell = target.cell;
+      useActionCard(player, 'barrier', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Noodbarrière</b> naast ${target.player.name}.`, null, player);
+    }
+  }
+  if (!cardActionUsed && player.cards.includes('jam')){
+    const victim = pickLeaderTarget(soloPlayers, pIdx, p => p.reorderBlocked, soloRand);
+    if (victim){
+      victim.reorderBlocked = true;
+      useActionCard(player, 'jam', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Signaalstoring</b> op ${victim.name}.`, null, player);
+    }
+  }
+  if (!cardActionUsed && player.cards.includes('trade') && player.cards.includes('scan') && soloDeck.discard.length){
+    performCardTrade(player, 'scan', soloDeck);
+    useActionCard(player, 'trade', soloDeck);
+    cardActionUsed = true;
+  }
+  if (!cardActionUsed && player.cards.includes('peek') && soloDeck.draw.length){
+    performPeekReorder(soloDeck);
+    useActionCard(player, 'peek', soloDeck);
+    cardActionUsed = true;
+  }
+
   let targetLabel = player.deck[player.nextIdx];
   let targetSwapped = false;
-  // energyReorderTarget() leest/schrijft player.order — de batch-speler heet zijn stapel zo,
-  // maar hier (net als in 96-walk.js) heet 'ie deck. Een shim die naar dezelfde array wijst
-  // (geen kopie) laat de swap gewoon doorwerken op player.deck. Zie de kanttekening bij
-  // pickShoveMove hierboven — dit is precies de val die daar staat beschreven.
+  // reorderWouldHelp()/applyReorderSwap() lezen/schrijven player.order — de batch-speler heet
+  // zijn stapel zo, maar hier (net als in 96-walk.js) heet 'ie deck. Een shim die naar dezelfde
+  // array wijst (geen kopie) laat de swap gewoon doorwerken op player.deck. Zie de kanttekening
+  // bij pickShoveMove hierboven — dit is precies de val die daar staat beschreven.
   const shim = { order: player.deck, nextIdx: player.nextIdx };
-  if (!cardActionUsed && player.cards.includes('recal')){
-    const swapped = energyReorderTarget(soloGraph, shim, player.pos);
-    if (swapped !== null){ targetLabel = swapped; useActionCard(player, 'recal', soloDeck); cardActionUsed = true; targetSwapped = true; }
+  if (!cardActionUsed && player.cards.includes('recal') && reorderWouldHelp(soloGraph, shim, player.pos)){
+    useActionCard(player, 'recal', soloDeck); cardActionUsed = true; targetSwapped = true;
+    if (player.reorderBlocked){ player.reorderBlocked = false; walkLog(`${player.name}'s Herkalibratie wordt gesaboteerd door Signaalstoring.`, null, player); }
+    else { targetLabel = applyReorderSwap(shim); }
   }
   if (!cardActionUsed && player.cards.includes('shove')){
     const shove = pickShoveMove(soloGraph, soloPlayers, pIdx);
@@ -1018,33 +1326,58 @@ function soloResolveBotTurn(player){
       walkLog(`${player.name} gebruikt <b>Duwstoot</b> op ${shove.player.name}.`, null, player);
     }
   }
-  if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
-    const swapped = energyReorderTarget(soloGraph, shim, player.pos);
-    if (swapped !== null){ targetLabel = swapped; player.energy -= ENERGY_ACTIONS.reorder.cost; player.actionUses++; energyActionUsed = true; }
+  if (!cardActionUsed && player.cards.includes('recoil')){
+    const occNow = new Set(soloPlayers.filter(p => !p.rank).map(p => p.pos));
+    const push = pickRecoilMove(soloGraph, soloPlayers, occNow, pIdx);
+    if (push){
+      push.player.pos = push.toKey;
+      useActionCard(player, 'recoil', soloDeck);
+      cardActionUsed = true;
+      walkLog(`${player.name} gebruikt <b>Terugtrekbevel</b> op ${push.player.name}.`, null, player);
+    }
+  }
+  if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost && reorderWouldHelp(soloGraph, shim, player.pos)){
+    player.energy -= ENERGY_ACTIONS.reorder.cost; player.actionUses++; energyActionUsed = true;
+    if (player.reorderBlocked){ player.reorderBlocked = false; walkLog(`${player.name}'s Herprioritering wordt gesaboteerd door Signaalstoring.`, null, player); }
+    else { targetLabel = applyReorderSwap(shim); }
   }
   const targetKey = soloGraph.questCells[targetLabel];
 
   const occupied = new Set();
   for (const other of soloPlayers) if (other.idx !== pIdx && !other.rank) occupied.add(other.pos);
+  // Noodbarrière geldt voor deze ENE beurt en verdwijnt daarna vanzelf
+  if (player.barrierCell !== null){
+    occupied.add(player.barrierCell);
+    player.barrierCell = null;
+  }
 
-  let move, roll = 0, usedBoots = false;
+  let move, roll = 0, usedBoots = false, allowUturn = false;
   if (!cardActionUsed && player.cards.includes('boots')){
     const bootsMove = resolveGravityBoots(soloGraph, player.pos, 10, occupied, targetKey);
     if (bootsMove){ move = bootsMove; usedBoots = true; useActionCard(player, 'boots', soloDeck); cardActionUsed = true; }
   }
   if (!usedBoots){
-    roll = simRollD6(soloRand) + simRollD6(soloRand);
+    let d1 = simRollD6(soloRand), d2 = simRollD6(soloRand);
+    if (!cardActionUsed && player.cards.includes('reroll')){
+      if (d1 <= d2) d1 = simRollD6(soloRand); else d2 = simRollD6(soloRand);
+      useActionCard(player, 'reroll', soloDeck); cardActionUsed = true;
+    }
+    roll = d1 + d2;
     if (!cardActionUsed && player.cards.includes('boostcell')){
       roll += simRollD6(soloRand); useActionCard(player, 'boostcell', soloDeck); cardActionUsed = true;
     } else if (!energyActionUsed && player.strategy === 'boost' && player.energy >= ENERGY_ACTIONS.boost.cost){
       roll += simRollD6(soloRand); player.energy -= ENERGY_ACTIONS.boost.cost; player.actionUses++; energyActionUsed = true;
     }
-    move = resolveMove(soloGraph, player.pos, roll, occupied, targetKey, soloRand);
+    if (player.rollPenalty){ roll = Math.max(1, roll - player.rollPenalty); player.rollPenalty = 0; }
+    if (!cardActionUsed && player.cards.includes('fastlane')){
+      allowUturn = true; useActionCard(player, 'fastlane', soloDeck); cardActionUsed = true;
+    }
+    move = resolveMove(soloGraph, player.pos, roll, occupied, targetKey, soloRand, allowUturn);
   }
 
   let blindResolvedBlock = false;
   if (!move.bankedQuest && !cardActionUsed && player.cards.includes('blind') && move.wasBlocked){
-    const retry = resolveMove(soloGraph, player.pos, roll, new Set(), targetKey, soloRand);
+    const retry = resolveMove(soloGraph, player.pos, roll, new Set(), targetKey, soloRand, allowUturn);
     if (retry.key !== move.key){ move = retry; useActionCard(player, 'blind', soloDeck); cardActionUsed = true; blindResolvedBlock = true; }
   }
   if (!blindResolvedBlock && !move.bankedQuest && !energyActionUsed && player.strategy === 'jump' && player.energy >= ENERGY_ACTIONS.jump.cost){
@@ -1053,7 +1386,7 @@ function soloResolveBotTurn(player){
       player.energy -= ENERGY_ACTIONS.jump.cost; player.actionUses++; energyActionUsed = true;
       move = jump.banked
         ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
-        : resolveMove(soloGraph, jump.key, roll, occupied, targetKey, soloRand);
+        : resolveMove(soloGraph, jump.key, roll, occupied, targetKey, soloRand, allowUturn);
     }
   }
   if (!cardActionUsed && player.cards.includes('resupply')){
@@ -1064,6 +1397,8 @@ function soloResolveBotTurn(player){
   }
 
   player.pos = move.key;
+  const stepDir = lastStepDirection(soloGraph, move.path);
+  if (stepDir !== -1) player.lastDir = stepDir;
   paintWalkPawns(soloGraph, soloPlayers, pIdx);
 
   if (move.bankedQuest){

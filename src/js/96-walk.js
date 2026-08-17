@@ -362,6 +362,12 @@ async function runWalkSimulation(){
     actionUses: 0,
     cards: [],               // beloningskaarten in de hand (max ACTION_CARD_HAND_MAX)
     skipEnergyRoll: false,   // getroffen door Kortsluiting: mist de eerstvolgende energiesteen
+    lockedNextTurn: false,   // getroffen door Vergrendeling: mist volgende beurt energie- én kaartslot
+    rollPenalty: 0,          // getroffen door Stroomonderbreking: -N stappen op de eerstvolgende worp
+    barrierCell: null,       // getroffen door Noodbarrière: dit vakje telt als bezet tijdens de eerstvolgende beurt
+    reorderBlocked: false,   // getroffen door Signaalstoring: eerstvolgende doelwissel-poging mislukt
+    reservedEnergy: 0,       // opgespaard door Reservetank: komt bij het begin van de volgende beurt bij de energie
+    lastDir: -1,             // laatst gelopen richting (voor Terugtrekbevel), -1 = nog nooit gelopen
     rank: 0,                // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     doneCells: [],          // opdrachtvakjes die DEZE speler al gehad heeft
   }));
@@ -399,6 +405,12 @@ async function runWalkSimulation(){
       const player = players[pIdx];
       if (player.rank) continue;   // binnen: speelt niet meer mee
       turn++;
+      // Reservetank: energie die vorige beurt opgespaard is, komt er nu bij — vóór de
+      // energiesteen van deze beurt, zodat het plafond van deze beurt gewoon weer telt.
+      if (player.reservedEnergy){
+        player.energy = Math.min(ENERGY_MAX, player.energy + player.reservedEnergy);
+        player.reservedEnergy = 0;
+      }
       // Energie-acties en kaarten hebben ELK hun eigen actie-slot per beurt (max 1 van elk) —
       // zelfde opzet als simulateOneGame() in 95-simulate.js, zie de uitgebreide toelichting
       // daar voor de drie paren (Stuwlading/Stuwstoot, Herkalibratie/Herprioritering, Blinde
@@ -407,6 +419,14 @@ async function runWalkSimulation(){
       let cardActionUsed = false;     // hooguit 1 kaart spelen per beurt
       let usedEnergyAction = null; // id uit ENERGY_ACTIONS, voor de logregel
       let usedCardId = null;       // id uit ACTION_CARDS, voor de logregel
+      // Vergrendeling: als deze speler vorige beurt geraakt is, mist hij nu ZOWEL het energie- als
+      // het kaartslot deze beurt.
+      if (player.lockedNextTurn){
+        player.lockedNextTurn = false;
+        energyActionUsed = true;
+        cardActionUsed = true;
+        walkLog(`${player.name} zit deze beurt <b>vergrendeld</b> — geen energie-actie of kaart mogelijk.`, null, player);
+      }
 
       // energiesteen eerst (tenzij Kortsluiting die deze beurt blokkeert), zodat wat je deze
       // beurt rolt meteen inzetbaar is — zelfde volgorde als simulateOneGame()
@@ -425,8 +445,14 @@ async function runWalkSimulation(){
         useActionCard(player, 'valve', deck);
         cardActionUsed = true; usedCardId = 'valve';
       }
+      if (!cardActionUsed && player.cards.includes('tank') && energyGain.wasted > 0){
+        const saved = Math.min(3, energyGain.wasted);
+        player.reservedEnergy += saved;
+        useActionCard(player, 'tank', deck);
+        cardActionUsed = true; usedCardId = 'tank';
+      }
       if (!cardActionUsed && player.cards.includes('short')){
-        const victim = pickShortCircuitTarget(players, pIdx);
+        const victim = pickShortCircuitTarget(players, pIdx, rand);
         if (victim){
           victim.skipEnergyRoll = true;
           useActionCard(player, 'short', deck);
@@ -439,19 +465,77 @@ async function runWalkSimulation(){
         cardActionUsed = true; usedCardId = 'ration';
       }
 
+      // fase 1b: de vier nieuwe hinder-kaarten die een tegenstander raken zonder dat de eigen
+      // worp/het eigen doel iets verandert — zelfde koploper-heuristiek als Kortsluiting.
+      // Terugtrekbevel staat hieronder naast Duwstoot (allebei vereisen een AANGRENZENDE
+      // tegenstander).
+      if (!cardActionUsed && player.cards.includes('lockdown')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.lockedNextTurn, rand);
+        if (victim){
+          victim.lockedNextTurn = true;
+          useActionCard(player, 'lockdown', deck);
+          cardActionUsed = true; usedCardId = 'lockdown';
+          walkLog(`${player.name} gebruikt <b>Vergrendeling</b> op ${victim.name}.`, null, player);
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('outage')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.rollPenalty > 0, rand);
+        if (victim){
+          victim.rollPenalty = 2;
+          useActionCard(player, 'outage', deck);
+          cardActionUsed = true; usedCardId = 'outage';
+          walkLog(`${player.name} gebruikt <b>Stroomonderbreking</b> op ${victim.name}.`, null, player);
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('barrier')){
+        const occNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
+        const target = pickBarrierTarget(graph, players, occNow, pIdx, rand);
+        if (target){
+          target.player.barrierCell = target.cell;
+          useActionCard(player, 'barrier', deck);
+          cardActionUsed = true; usedCardId = 'barrier';
+          walkLog(`${player.name} gebruikt <b>Noodbarrière</b> naast ${target.player.name}.`, null, player);
+        }
+      }
+      if (!cardActionUsed && player.cards.includes('jam')){
+        const victim = pickLeaderTarget(players, pIdx, p => p.reorderBlocked, rand);
+        if (victim){
+          victim.reorderBlocked = true;
+          useActionCard(player, 'jam', deck);
+          cardActionUsed = true; usedCardId = 'jam';
+          walkLog(`${player.name} gebruikt <b>Signaalstoring</b> op ${victim.name}.`, null, player);
+        }
+      }
+      // fase 1c: Kaartenruil (ruilt een nutteloze Prioriteitspas tegen de bovenste aflegkaart) en
+      // Herinnering (schuift Zwaartekracht-laarzen/Stuwlading naar de top van de trekstapel) —
+      // zie de toelichting bij performCardTrade()/performPeekReorder() in 95-simulate.js.
+      if (!cardActionUsed && player.cards.includes('trade') && player.cards.includes('scan') && deck.discard.length){
+        performCardTrade(player, 'scan', deck);
+        useActionCard(player, 'trade', deck);
+        cardActionUsed = true; usedCardId = 'trade';
+      }
+      if (!cardActionUsed && player.cards.includes('peek') && deck.draw.length){
+        performPeekReorder(deck);
+        useActionCard(player, 'peek', deck);
+        cardActionUsed = true; usedCardId = 'peek';
+      }
+
       // fase 2: doel bepalen — Herkalibratie (kaart, gratis) en Herprioritering (energie, betaald)
-      // doen hetzelfde (energyReorderTarget) en blijven daarom elkaar uitsluiten via
-      // `targetSwapped`; Duwstoot verplaatst een tegenstander, niet jezelf, dus geen conflict
+      // doen hetzelfde (reorderWouldHelp/applyReorderSwap) en blijven daarom elkaar uitsluiten via
+      // `targetSwapped`; Duwstoot verplaatst een tegenstander, niet jezelf, dus geen conflict.
+      // Signaalstoring kan een OP ZICH geldige wissel laten mislukken (kaart/energie wel verbruikt).
       let targetLabel = player.deck[player.nextIdx];
       let targetSwapped = false;
-      const shim = { order: player.deck, nextIdx: player.nextIdx };  // energyReorderTarget() werkt op `order`
-      if (!cardActionUsed && player.cards.includes('recal')){
-        const swapped = energyReorderTarget(graph, shim, player.pos);
-        if (swapped !== null){
-          targetLabel = swapped;
-          useActionCard(player, 'recal', deck);
-          cardActionUsed = true; usedCardId = 'recal';
-          targetSwapped = true;
+      const shim = { order: player.deck, nextIdx: player.nextIdx };  // reorderWouldHelp()/applyReorderSwap() werken op `order`
+      if (!cardActionUsed && player.cards.includes('recal') && reorderWouldHelp(graph, shim, player.pos)){
+        useActionCard(player, 'recal', deck);
+        cardActionUsed = true; usedCardId = 'recal';
+        targetSwapped = true;
+        if (player.reorderBlocked){
+          player.reorderBlocked = false;
+          walkLog(`${player.name}'s Herkalibratie wordt gesaboteerd door Signaalstoring.`, null, player);
+        } else {
+          targetLabel = applyReorderSwap(shim);
         }
       }
       if (!cardActionUsed && player.cards.includes('shove')){
@@ -463,13 +547,25 @@ async function runWalkSimulation(){
           walkLog(`${player.name} gebruikt <b>Duwstoot</b> op ${shove.player.name}.`, null, player);
         }
       }
-      if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost){
-        const swapped = energyReorderTarget(graph, shim, player.pos);
-        if (swapped !== null){
-          targetLabel = swapped;
-          player.energy -= ENERGY_ACTIONS.reorder.cost;
-          player.actionUses++;
-          energyActionUsed = true; usedEnergyAction = 'reorder';
+      if (!cardActionUsed && player.cards.includes('recoil')){
+        const occNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
+        const push = pickRecoilMove(graph, players, occNow, pIdx);
+        if (push){
+          push.player.pos = push.toKey;
+          useActionCard(player, 'recoil', deck);
+          cardActionUsed = true; usedCardId = 'recoil';
+          walkLog(`${player.name} gebruikt <b>Terugtrekbevel</b> op ${push.player.name}.`, null, player);
+        }
+      }
+      if (!targetSwapped && !energyActionUsed && player.strategy === 'reorder' && player.energy >= ENERGY_ACTIONS.reorder.cost && reorderWouldHelp(graph, shim, player.pos)){
+        player.energy -= ENERGY_ACTIONS.reorder.cost;
+        player.actionUses++;
+        energyActionUsed = true; usedEnergyAction = 'reorder';
+        if (player.reorderBlocked){
+          player.reorderBlocked = false;
+          walkLog(`${player.name}'s Herprioritering wordt gesaboteerd door Signaalstoring.`, null, player);
+        } else {
+          targetLabel = applyReorderSwap(shim);
         }
       }
       const targetKey = graph.questCells[targetLabel];
@@ -514,16 +610,23 @@ async function runWalkSimulation(){
         return true;
       }
 
+      // Noodbarrière geldt voor deze ENE beurt en verdwijnt daarna vanzelf, ongeacht of de
+      // speler er daadwerkelijk tegenaan liep.
+      const barrierCellThisTurn = player.barrierCell;
+      player.barrierCell = null;
       const occupiedNow = () => {
         const occ = new Set();
         for (const other of players) if (other.idx !== pIdx && !walkIsIn(other)) occ.add(other.pos);
+        if (barrierCellThisTurn !== null) occ.add(barrierCellThisTurn);
         return occ;
       };
 
       // fase 3: beweging — Zwaartekracht-laarzen vervangt de worp helemaal; anders de gewone
-      // loopstenen met Stuwlading (kaart) of Stuwstoot (energie) als derde steen — die twee
-      // doen hetzelfde en blijven daarom via else-if elkaar uitsluiten
-      let move, d1 = 0, d2 = 0, d3 = null, roll = 0, usedBoots = false;
+      // loopstenen, met Herkansing (kaart, herrolt de laagste steen) vóór Stuwlading (kaart) of
+      // Stuwstoot (energie) als derde steen — die twee doen hetzelfde en blijven daarom via
+      // else-if elkaar uitsluiten. Stroomonderbreking trekt er ná alle stenen 2 stappen af (min.
+      // 1). Snelroute schakelt de geen-U-turn-regel voor de REST van deze beurt uit (`allowUturn`).
+      let move, d1 = 0, d2 = 0, d3 = null, roll = 0, usedBoots = false, allowUturn = false;
       if (!cardActionUsed && player.cards.includes('boots')){
         const bootsMove = resolveGravityBoots(graph, player.pos, 10, occupiedNow(), targetKey);
         if (bootsMove){
@@ -541,6 +644,11 @@ async function runWalkSimulation(){
           `<span class="walk-die-sum energy">+${energyRoll} energie</span>`;
       } else {
         d1 = simRollD6(rand); d2 = simRollD6(rand);
+        if (!cardActionUsed && player.cards.includes('reroll')){
+          if (d1 <= d2) d1 = simRollD6(rand); else d2 = simRollD6(rand);
+          useActionCard(player, 'reroll', deck);
+          cardActionUsed = true; usedCardId = 'reroll';
+        }
         if (!cardActionUsed && player.cards.includes('boostcell')){
           d3 = simRollD6(rand);
           useActionCard(player, 'boostcell', deck);
@@ -553,19 +661,30 @@ async function runWalkSimulation(){
         }
         renderWalkDice(d1, d2, energyRoll, false, d3);
         roll = d1 + d2 + (d3 || 0);
+        if (player.rollPenalty){
+          const before = roll;
+          roll = Math.max(1, roll - player.rollPenalty);
+          player.rollPenalty = 0;
+          walkLog(`${player.name} loopt met <b>Stroomonderbreking</b> ${before - roll} stap(pen) minder deze beurt.`, null, player);
+        }
+        if (!cardActionUsed && player.cards.includes('fastlane')){
+          allowUturn = true;
+          useActionCard(player, 'fastlane', deck);
+          cardActionUsed = true; usedCardId = 'fastlane';
+        }
       }
       if (aborted()) return;
       await walkTick(Math.min(500, walkSpeed().rollMs));
       if (aborted()) return;
 
-      if (!usedBoots) move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand);
+      if (!usedBoots) move = resolveMove(graph, player.pos, roll, occupiedNow(), targetKey, rand, allowUturn);
 
       // fase 4: Blinde Vlek (kaart) en Noodtransport (energie) lossen allebei een blokkade op
       // — blijven elkaar uitsluiten binnen dit ene bewegingsmoment (`blindResolvedBlock`), zie
       // de toelichting in simulateOneGame(). Noodtransport mag TUSSENTIJDS.
       let blindResolvedBlock = false;
       if (!move.bankedQuest && !cardActionUsed && !usedBoots && player.cards.includes('blind') && move.wasBlocked){
-        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand);
+        const retry = resolveMove(graph, player.pos, roll, new Set(), targetKey, rand, allowUturn);
         if (retry.key !== move.key){
           move = retry;
           useActionCard(player, 'blind', deck);
@@ -582,7 +701,7 @@ async function runWalkSimulation(){
           if (!await walkPath(jump.path, true)) return;
           move = jump.banked
             ? { key: jump.key, path: [jump.key], stepsUsed: 0, bankedQuest: true, wasBlocked: false }
-            : resolveMove(graph, jump.key, roll, occupiedNow(), targetKey, rand);
+            : resolveMove(graph, jump.key, roll, occupiedNow(), targetKey, rand, allowUturn);
         }
       }
       // fase 5: Herbevoorrading als sluitstuk — alleen als er verder geen ANDERE kaart speelde
@@ -597,6 +716,9 @@ async function runWalkSimulation(){
       }
 
       if (!await walkPath(move.path, usedBoots)) return;
+      // voor Terugtrekbevel: de richting van de LAATSTE stap deze beurt
+      const stepDir = lastStepDirection(graph, move.path);
+      if (stepDir !== -1) player.lastDir = stepDir;
 
       const rollText = usedBoots ? `🥾 ${move.stepsUsed} van 10 stappen rechtdoor` : walkRollText(d1, d2, d3, roll);
       // beide kunnen nu tegelijk waar zijn (energie-actie EN kaart zijn losse sloten per beurt),
