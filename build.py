@@ -38,6 +38,7 @@ JS_ORDER = [
     "95-simulate.js",
     "96-walk.js",
     "97-solo.js",
+    "98-cards.js",
 ]
 
 
@@ -75,6 +76,16 @@ def build() -> pathlib.Path:
     if not card_images:
         sys.exit(f"FOUT: geen kaartafbeeldingen gevonden in {cards_dir}")
 
+    # Hetzelfde voor de opdrachtkaarten (src/assets/quests/2.1.webp enz.). Deze map MAG leeg
+    # zijn: zonder foto tekent renderQuestCardFace() de kaart zelf na, en dan loopt de
+    # kamernaam bovendien mee met de indeling.
+    quests_dir = SRC / "assets" / "quests"
+    quest_images = {}
+    for path in sorted(quests_dir.glob("*.webp")):
+        quest_images[path.stem] = (
+            "data:image/webp;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+        )
+
     js_parts = []
     for name in JS_ORDER:
         chunk = read(SRC / "js" / name)
@@ -82,11 +93,14 @@ def build() -> pathlib.Path:
     js = "\n\n".join(js_parts)
     js = js.replace("{{TILES}}", json.dumps(tiles, separators=(",", ":")))
     js = js.replace("{{CARD_IMAGES}}", json.dumps(card_images, separators=(",", ":")))
+    js = js.replace("{{QUEST_IMAGES}}", json.dumps(quest_images, separators=(",", ":")))
 
     if "{{TILES}}" in js:
         sys.exit("FOUT: {{TILES}} placeholder niet vervangen")
     if "{{CARD_IMAGES}}" in js:
         sys.exit("FOUT: {{CARD_IMAGES}} placeholder niet vervangen")
+    if "{{QUEST_IMAGES}}" in js:
+        sys.exit("FOUT: {{QUEST_IMAGES}} placeholder niet vervangen")
 
     html = template.replace("{{CSS}}", css)
     html = html.replace("{{JS}}", js)

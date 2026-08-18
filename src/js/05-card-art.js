@@ -6,3 +6,8 @@
 // weergave op een retina-scherm), en zo blijft de hele set onder de 140 KB. De volledige
 // drukversie staat los in Canva; deze kopie is puur voor het scherm.
 const ACTION_CARD_IMAGES = {{CARD_IMAGES}};
+
+// Idem voor de opdrachtkaarten, maar dan uit src/assets/quests/ met het label als
+// bestandsnaam ("2.1.webp"). Die map mag leeg zijn: staat er geen foto, dan tekent
+// renderQuestCardFace() in 98-cards.js de kaart zelf na.
+const QUEST_CARD_IMAGES = {{QUEST_IMAGES}};

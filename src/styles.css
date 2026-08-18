@@ -699,6 +699,113 @@
   }
   .walk-card-vault-text .sub{font-family:var(--font-mono); font-size:10px; color:var(--text-dim);}
 
+  /* ---------- tabblad "Kaarten": de vitrine ---------- */
+  .cards-shelf{
+    display:grid; gap:16px; padding:4px 0 2px;
+    /* clamp i.p.v. een vaste ondergrens: op een telefoon (375px) zakt de minimumbreedte naar
+       140px zodat er twee kaarten naast elkaar passen in plaats van één hele lange kolom,
+       op een groot scherm blijft hij op 192px staan */
+    grid-template-columns:repeat(auto-fill, minmax(clamp(140px, 20vw, 192px), 1fr));
+  }
+  .cards-subhead{
+    font-family:var(--font-mono); font-size:10.5px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--card-tint, var(--text-dim)); margin:22px 0 10px;
+    display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line-dim); padding-bottom:7px;
+  }
+  .cards-subhead:first-child{margin-top:6px;}
+  .cards-subhead span{font-size:9.5px; letter-spacing:.1em; color:var(--text-dim); text-transform:none;}
+  .card-show{
+    padding:0; background:none; border:none; cursor:pointer; text-align:left;
+    display:flex; flex-direction:column; gap:8px;
+    transition:transform .13s;
+  }
+  /* De kaart binnenin rekent al zijn maten in cqw uit; de container moet daarom de
+     OMHULLING zijn en niet de kaart zelf, anders verwijst de padding van de kaart naar
+     een breedte die ze zelf beïnvloedt en klopt er niets meer van. */
+  .card-show-face{display:block; border-radius:10px; container-type:inline-size;}
+  .card-show-face img{
+    width:100%; aspect-ratio:63/88; object-fit:cover; border-radius:10px; display:block;
+    box-shadow:0 4px 14px rgba(0,0,0,.55);
+    transition:box-shadow .13s;
+  }
+  .card-show:hover{transform:translateY(-4px);}
+  .card-show:hover .card-show-face img,
+  .card-show:hover .card-show-face > .card-drawn,
+  .card-show:hover .card-show-face > .quest-card{
+    box-shadow:0 0 0 2px var(--card-tint), 0 0 26px var(--card-glow, transparent), 0 10px 22px rgba(0,0,0,.5);
+  }
+  .card-show-cap{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .card-show-cap b{
+    font-family:var(--font-display); font-size:14px; font-weight:700; color:#eef3f8;
+    text-transform:uppercase; letter-spacing:.02em; line-height:1.15;
+  }
+  .card-show-cap span{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.4;}
+
+  /* Nagetekende opdrachtkaart — zelfde opbouw als het Canva-ontwerp: badge met het nummer
+     linksboven, titel rechts, groot icoon in het midden, kamer onderaan. De accentkleur komt
+     per opdracht mee als --q-tint (zie QUEST_CARD_ART in 98-cards.js). */
+  .quest-card{
+    position:relative; display:flex; flex-direction:column;
+    width:100%; aspect-ratio:63/88; border-radius:10px; padding:6.8cqw 6.2cqw 6cqw;
+    background:
+      radial-gradient(ellipse at 18% -6%, color-mix(in srgb, var(--q-tint) 16%, transparent) 0%, transparent 58%),
+      linear-gradient(168deg, #121820 0%, #0a0e13 78%);
+    box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 0 0 1px color-mix(in srgb, var(--q-tint) 34%, transparent);
+    color:var(--q-tint); overflow:hidden;
+    /* alles hierbinnen is in cqw uitgedrukt (container = .card-show-face / .cards-zoom-face),
+       zodat dezelfde kaart klopt in de vitrine (~190px breed) én in het vergrootvenster
+       (~360px) — anders blijven icoon en tekst op hun vaste pixelmaat staan en zwemt de
+       vergrote kaart in de leegte */
+  }
+  .quest-card::before{                       /* accentstreepje bovenaan, als op het ontwerp */
+    content:''; position:absolute; top:0; left:38%; width:24cqw; height:1.6cqw; background:var(--q-tint);
+  }
+  .quest-card-top{display:flex; align-items:center; justify-content:space-between; gap:4cqw;}
+  .quest-card-badge{
+    flex:none; width:19.8cqw; height:19.8cqw; border-radius:50%;
+    border:.8cqw solid var(--q-tint); display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:7.8cqw; color:var(--q-tint);
+  }
+  .quest-card-kicker{
+    font-family:var(--font-mono); font-size:3.9cqw; letter-spacing:.32em; color:var(--q-tint);
+  }
+  /* eigen regel over de volle breedte, anders botst een lange titel als
+     BEVEILIGINGSRONDE tegen de nummerbadge aan */
+  .quest-card-title{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:7.5cqw; line-height:1.05; color:#eef3f8;
+    text-align:right; margin-top:4cqw; overflow-wrap:anywhere;
+  }
+  .quest-card-icon{width:34cqw; height:34cqw; margin:auto; display:block;}
+  .quest-card-rule{height:1px; background:var(--q-tint); opacity:.3; margin:0 0 4.5cqw;}
+  .quest-card-foot{display:flex; flex-direction:column; gap:1.5cqw;}
+  .quest-card-foot .quest-card-kicker{color:var(--text-dim); letter-spacing:.28em;}
+  .quest-card-room{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:7.3cqw; line-height:1; color:var(--q-tint);
+  }
+
+  /* vergroten: kaart in het midden, klik waar dan ook om te sluiten */
+  .cards-zoom{
+    position:fixed; inset:0; background:rgba(4,7,10,.88); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; padding:24px; z-index:120;
+    cursor:zoom-out;
+  }
+  .cards-zoom[hidden]{display:none;}
+  .cards-zoom-inner{display:flex; flex-direction:column; align-items:center; gap:12px; max-width:100%;}
+  .cards-zoom-face{width:min(360px, 74vw, calc((100vh - 190px) * 63 / 88)); container-type:inline-size;}
+  .cards-zoom-face img{width:100%; aspect-ratio:63/88; object-fit:cover; border-radius:12px; display:block;}
+  .cards-zoom-cap{
+    margin:0; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;
+  }
+  .cards-zoom-cap b{
+    font-family:var(--font-display); font-size:19px; font-weight:700; color:#eef3f8;
+    text-transform:uppercase; letter-spacing:.05em;
+  }
+  .cards-zoom-cap span{font-family:var(--font-mono); font-size:11px; color:var(--text-dim);}
+  .cards-zoom .hint{margin:0;}
+
   .card-overlay{
     position:fixed; inset:0; background:rgba(4,7,10,.86); backdrop-filter:blur(3px);
     display:flex; align-items:center; justify-content:center; padding:18px; z-index:110;

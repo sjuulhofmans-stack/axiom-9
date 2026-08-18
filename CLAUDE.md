@@ -30,6 +30,12 @@ src/
   index.html          HTML-skelet met placeholders {{CSS}} {{JS}} {{LOGO}}
   styles.css          alle opmaak (~16 KB)
   assets/logo.b64     logo als base64 — hier zelden iets aan doen
+  assets/quests/*.webp OPTIONEEL — foto's van de fysieke opdrachtkaarten, bestandsnaam is
+                      het label ("2.1.webp"). Staat de map leeg (de normale situatie), dan
+                      tekent renderQuestCardFace() in 98-cards.js de kaart zelf na en loopt
+                      de kamernaam mee met de indeling. Canva-exports zijn vanuit deze
+                      omgeving niet te downloaden (netwerkbeleid blokkeert
+                      export-download.canva.com), dus dit gaat via een handmatige upload.
   assets/cards/*.webp de fysieke actiekaarten (Canva-ontwerp), 520px breed.
                       De bestandsnaam MOET het kaart-id uit ACTION_CARDS zijn
                       (boots.webp, condenser.webp, ...); build.py bakt ze in als
@@ -57,6 +63,9 @@ src/
     97-solo.js        stap-voor-stap "zelf spelen": jij bestuurt één menselijke speler
                       tussen bots, met actiekaarten (Kortsluiting, Duwstoot,
                       Prioriteitspas, Zwaartekracht-laarzen, Koerscorrectie, ...)
+    98-cards.js       tabblad "Kaarten": vitrine met alle 9 opdrachtkaarten en 18 actie-
+                      kaarten, klik om te vergroten. QUEST_CARD_ART (accentkleur + icoon
+                      per opdracht) staat hier ook.
 build.py              plakt alles tot dist/axiom9.html (JS_ORDER bepaalt de volgorde,
                       dus een nieuw js/-bestand moet je daar ook toevoegen)
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
@@ -84,6 +93,8 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | iets aan de solo-modus / actiekaarten        | `97-solo.js` (kaartdefinities zelf staan in `95-simulate.js`, `ACTION_CARDS`/`ENERGY_ACTIONS`) |
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
+| iets aan het tabblad "Kaarten" (vitrine)     | `98-cards.js`, opmaak in `styles.css` onder "tabblad Kaarten" |
+| het icoon of de kleur van een opdrachtkaart  | `98-cards.js` (`QUEST_CARD_ART`) |
 
 ## Spelregels die in de code zitten
 
@@ -173,7 +184,10 @@ Check minimaal:
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
-8. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
+8. Tabblad "Kaarten" → 9 opdrachtkaarten + 18 actiekaarten, elk met een plaatje of een
+   nagetekende kaart; klikken vergroot en Escape/klik sluit. Op 375px breed passen er
+   twee kaarten naast elkaar en mag de pagina niet horizontaal schuiven.
+9. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
    echt stilzetten (geen achtergrondlus die doorloopt).

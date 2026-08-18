@@ -115,6 +115,7 @@ const tabPanels = {
   map: document.getElementById('tabMap'),
   simulate: document.getElementById('tabSimulate'),
   walk: document.getElementById('tabWalk'),
+  cards: document.getElementById('tabCards'),
 };
 function switchTab(name){
   for (const btn of tabButtons){
@@ -126,5 +127,7 @@ function switchTab(name){
   // het stap-voor-stap-bord staat verborgen zolang zijn tab dicht is en wordt daarom pas
   // getekend zodra je hem opent (en opnieuw, want de indeling kan intussen gewijzigd zijn)
   if (name === 'walk' && !walkRunning) renderWalkBoard();
+  // de kamernaam op een opdrachtkaart hangt aan de tegel, dus bij elk openen opnieuw opbouwen
+  if (name === 'cards') renderCardsTab();
 }
 tabButtons.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));

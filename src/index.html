@@ -26,6 +26,7 @@
     <button class="tab-btn active" id="tabBtnMap" data-tab="map" role="tab" aria-selected="true">Kaart maken</button>
     <button class="tab-btn" id="tabBtnSimulate" data-tab="simulate" role="tab" aria-selected="false">Simulatie</button>
     <button class="tab-btn" id="tabBtnWalk" data-tab="walk" role="tab" aria-selected="false">Stap voor stap</button>
+    <button class="tab-btn" id="tabBtnCards" data-tab="cards" role="tab" aria-selected="false">Kaarten</button>
   </div>
 
   <div id="tabMap" class="tab-panel" role="tabpanel">
@@ -281,6 +282,28 @@
 
   <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
        kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
+  <div id="tabCards" class="tab-panel" role="tabpanel" hidden>
+    <div class="panel">
+      <h2>Opdrachtkaarten</h2>
+      <p class="hint">De negen opdrachten uit reeks 2. De kamer onderaan een kaart wordt opgezocht bij de tegel waar het opdrachtvakje op ligt, dus verplaats je een label in de tegel-editor, dan verandert de kaart mee. Klik een kaart aan om hem groot te bekijken.</p>
+      <div class="cards-shelf" id="cardsQuestGrid"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Actiekaarten</h2>
+      <p class="hint">Alle achttien actiekaarten, gegroepeerd per categorie. Van elke kaart zitten er <b>twee</b> in de gedeelde trekstapel (36 kaarten); je trekt er een zodra je een opdracht voltooit en houdt er hoogstens twee op hand.</p>
+      <div id="cardsActionWrap"></div>
+    </div>
+  </div>
+
+  <div id="cardsZoom" class="cards-zoom" hidden>
+    <div class="cards-zoom-inner">
+      <div class="cards-zoom-face" id="cardsZoomFace"></div>
+      <p class="cards-zoom-cap" id="cardsZoomCap"></p>
+      <p class="hint">Klik ergens om te sluiten</p>
+    </div>
+  </div>
+
   <div id="cardOverlay" class="card-overlay" hidden>
     <div class="card-panel" role="dialog" aria-modal="true" aria-labelledby="cardPanelTitle">
       <div class="card-panel-head">
