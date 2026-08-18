@@ -1,0 +1,63 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Stroomonderbreking.dc.html",
+      "x": 720,
+      "y": 0,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Noodbarriere.dc.html",
+      "x": 1440,
+      "y": 0,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Terugtrekbevel.dc.html",
+      "x": 2160,
+      "y": 0,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Signaalstoring.dc.html",
+      "x": 0,
+      "y": 990,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Kaartenruil.dc.html",
+      "x": 720,
+      "y": 990,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Snelroute.dc.html",
+      "x": 1440,
+      "y": 990,
+      "w": 630,
+      "h": 880
+    },
+    {
+      "file": "Herinnering.dc.html",
+      "x": 2160,
+      "y": 990,
+      "w": 630,
+      "h": 880
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
