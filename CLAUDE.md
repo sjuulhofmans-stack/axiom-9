@@ -95,6 +95,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
 | iets aan het tabblad "Kaarten" (vitrine)     | `98-cards.js`, opmaak in `styles.css` onder "tabblad Kaarten" |
+| een sectie toevoegen aan de simulatie-uitslag | `95-simulate.js`: `simSectionOpen('Titel')` — die sluit de vorige sectie vanzelf, en `simSectionCloseAll()` sluit de laatste |
 | een getal in beeld brengen                   | `nl(x, digits)` in `10-rules.js` — Nederlandse komma. NIET voor CSS-waarden (`style.width`), daar moet de punt blijven |
 | het icoon of de kleur van een opdrachtkaart  | `98-cards.js` (`QUEST_CARD_ART`) |
 
@@ -187,7 +188,8 @@ Check minimaal:
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
 8. Simulatie-uitslag begint met vier conclusievakjes (Eerlijk? / Vastgelopen / Dode tegels /
-   Speelduur). Alle getallen in beeld gebruiken een Nederlandse komma.
+   Speelduur); de tien detailsecties eronder staan dicht en gaan los of met één knop open.
+   Alle getallen in beeld gebruiken een Nederlandse komma.
 9. Tabblad "Kaarten" → 9 opdrachtkaarten + 18 actiekaarten, elk met een plaatje of een
    nagetekende kaart; klikken vergroot en Escape/klik sluit. Op 375px breed passen er
    twee kaarten naast elkaar en mag de pagina niet horizontaal schuiven.

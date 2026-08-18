@@ -1257,6 +1257,21 @@ function computeQuestDistances(graph){
   return dist;
 }
 
+// Elke sectie van de uitslag is een <details>. De conclusie bovenaan blijft altijd staan; het
+// bewijsmateriaal eronder vouw je open als je het wilt nakijken. Zonder dit was de uitslag
+// ~3900px aan tabellen achter elkaar, allemaal even zwaar opgemaakt.
+let simSectionOpened = false;
+function simSectionOpen(title){
+  const close = simSectionOpened ? '</div></details>' : '';
+  simSectionOpened = true;
+  return `${close}<details class="sim-section"><summary class="sim-subhead">${title}</summary><div class="sim-section-body">`;
+}
+function simSectionCloseAll(){
+  const close = simSectionOpened ? '</div></details>' : '';
+  simSectionOpened = false;
+  return close;
+}
+
 // de 5 tegels met het minste verkeer (genormaliseerd per vakje, zodat grote en kleine tegels
 // eerlijk vergeleken worden) — dit zijn de "lussen waar geen enkele speler komt" uit de heatmap,
 // nu met naam, positie en hoe ver ze van een opdracht liggen.
@@ -1374,6 +1389,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const avgGap = extra.winGapCount ? (extra.winGapSum / extra.winGapCount) : 0;
   const nailBiterPct = extra.winGapCount ? (extra.nailBiters / extra.winGapCount * 100) : 0;
 
+  simSectionOpened = false;
   let html = `<p class="hint"><b>${n}</b> potjes gesimuleerd op indeling <b>${layout.join(',')}</b>`;
   if (stuckCount) html += ` — <span style="color:var(--danger)">${stuckCount} vastgelopen</span> (afgekapt na ${SIM_MAX_TURNS} beurten, niet meegeteld in de percentages)`;
   html += `.</p>`;
@@ -1403,7 +1419,9 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
       `mediaan ${median} · min ${min} · max ${max} (alle spelers samen)`) +
     `</div>`;
 
-  html += `<h3 class="sim-subhead">Eerlijkheid per startpositie</h3>`;
+  html += `<div class="sim-expand-row"><button type="button" class="small ghost" id="btnSimExpand" aria-expanded="false">Alle details uitklappen</button></div>`;
+
+  html += simSectionOpen('Eerlijkheid per startpositie');
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>Winst% (±95%-marge)</th><th>Gem. beurten tot winst</th></tr></thead><tbody>${rows}</tbody></table>`;
   html += `<p class="hint">Balans: ${verdict} (spreiding <b>${nl(spread, 1)}</b> procentpunt, gem. foutmarge ±<b>${nl(avgMoe, 1)}</b>).</p>`;
 
@@ -1417,22 +1435,22 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const avgRank = total ? counts.reduce((s, c, i) => s + c * (i + 1), 0) / total : 0;
     return `<tr><td>${lbl}</td>${cells}<td class="num">${nl(avgRank, 2)}</td></tr>`;
   }).join('');
-  html += `<h3 class="sim-subhead">Eindklassering per startpositie</h3>`;
+  html += simSectionOpen('Eindklassering per startpositie');
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>1e</th><th>2e</th><th>3e</th><th>4e</th><th>Gem. plaats</th></tr></thead><tbody>${rankRows}</tbody></table>`;
   html += `<p class="hint">Er wordt doorgespeeld tot de <b>nummer 3</b> binnen is; de laatste speler is dan automatisch vierde. Bij een eerlijk bord ligt elke kolom rond de 25% en de gemiddelde plaats rond de 2,50.</p>`;
 
-  html += `<h3 class="sim-subhead">Eerlijkheid per beurtvolgorde</h3>`;
+  html += simSectionOpen('Eerlijkheid per beurtvolgorde');
   html += `<table class="sim-table"><thead><tr><th>Beurtvolgorde</th><th>Winst%</th></tr></thead><tbody>${seatRows}</tbody></table>`;
 
-  html += `<h3 class="sim-subhead">Eerlijkheid per opdrachtvakje</h3>`;
+  html += simSectionOpen('Eerlijkheid per opdrachtvakje');
   html += `<table class="sim-table"><thead><tr><th>Opdracht</th><th>Gem. beurten om te bereiken</th><th>Keer bereikt</th></tr></thead><tbody>${questRows}</tbody></table>`;
   html += `<p class="hint">Hoe hoger het gemiddelde, hoe afgelegener dat opdrachtvakje ligt vanaf waar spelers 'm meestal moeten benaderen.</p>`;
 
-  html += `<h3 class="sim-subhead">Speelduur</h3>`;
+  html += simSectionOpen('Speelduur');
   html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${nl(avg, 1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
   html += renderHistogram(gameLengths);
 
-  html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
+  html += simSectionOpen('Spanning en blokkeren');
   html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${nl(avgGap, 1)}</b> opdracht(en) achter — <b>${nl(nailBiterPct, 0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${nl(blockedPct, 1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
 
   // ---------- energie ----------
@@ -1478,7 +1496,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
       `<td class="num">${nl(avgRank, 2)}</td>` +
       `<td class="num">${nl(usesPerGame, 1)}</td></tr>`;
   }).join('');
-  html += `<h3 class="sim-subhead">Welke energie-actie wint?</h3>`;
+  html += simSectionOpen('Welke energie-actie wint?');
   html += `<table class="sim-table"><thead><tr><th>Strategie</th><th>Winst% (±95%-marge)</th><th>Top 2</th><th>Gem. plaats</th><th>Keer ingezet</th></tr></thead><tbody>${stratRows}</tbody></table>`;
   html += `<p class="hint">Elk potje zit één speler per strategie, geloot over de startposities. Een speler zet zijn actie in zodra hij 'm kan betalen — Herprioritering wisselt <b>blind</b> zodra de huidige opdracht verder dan ${REORDER_BLIND_THRESHOLD} vakjes weg ligt (de volgende kaart ligt dichtgeslagen, dus kan tegenvallen), en Noodtransport alleen als de gewone zet de opdracht nog niet pakte. Bij vier gelijkwaardige strategieën staat iedereen op 25% winst en gemiddelde plaats 2,50; wie daar significant boven zit, is te sterk.</p>`;
 
@@ -1492,25 +1510,35 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const drawsPerGame = played ? (extra.cardDraws / played) : 0;
   const handFullPct = extra.cardDraws + extra.handFullOnBank
     ? (extra.handFullOnBank / (extra.cardDraws + extra.handFullOnBank) * 100) : 0;
-  html += `<h3 class="sim-subhead">Beloningskaarten</h3>`;
+  html += simSectionOpen('Beloningskaarten');
   html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${nl(drawsPerGame, 1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${nl(handFullPct, 1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
   html += `<table class="sim-table"><thead><tr><th>Kaart</th><th>Keer gebruikt per potje</th></tr></thead><tbody>${cardRows}</tbody></table>`;
   html += `<p class="hint">Prioriteitspas heeft in deze simulatie geen mechanisch effect (het is pure informatie voor een mens aan tafel) en wordt daarom nooit ingezet — 0,00 hierboven is dus verwacht, niet een bug. Een getrokken Prioriteitspas bezet wel een handslot tot het potje afloopt.</p>`;
 
-  html += `<h3 class="sim-subhead">Energie</h3>`;
+  html += simSectionOpen('Energie');
   html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${nl(energyPerTurn, 2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
   html += `<p class="hint">Een speler heeft gemiddeld <b>${nl(energyAvg, 1)}</b> energie op zak, staat <b>${nl(energyAtCap, 1)}%</b> van zijn beurten op het plafond, en <b>${nl(energyWastePct, 1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
   html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
   html += `<div class="sim-hist">${energyBars}</div>`;
   html += `<table class="sim-table"><thead><tr><th>Kosten van een actie</th><th>Aandeel beurten waarin je 'm kunt betalen</th></tr></thead><tbody>${affordRows.join('')}</tbody></table>`;
 
-  html += `<h3 class="sim-subhead">Drukte op het bord</h3>`;
+  html += simSectionOpen('Drukte op het bord');
   html += `<p class="hint">Hoe vaak elk vakje betreden werd over alle ${played} meegetelde potjes — laat bottleneck-gangen en nauwelijks gebruikte hoekjes zien.</p>`;
   html += renderHeatmap(graph, heatmap);
   html += `<p class="hint" style="margin-top:12px;">Koudste tegels — de kandidaten voor een "lus zonder opdracht waar niemand komt":</p>`;
   html += renderColdZones(graph, heatmap);
 
+  html += simSectionCloseAll();
   simResultsEl.innerHTML = html;
+
+  const expandBtn = document.getElementById('btnSimExpand');
+  expandBtn.addEventListener('click', () => {
+    const sections = simResultsEl.querySelectorAll('details.sim-section');
+    const open = expandBtn.getAttribute('aria-expanded') !== 'true';
+    sections.forEach(d => { d.open = open; });
+    expandBtn.setAttribute('aria-expanded', String(open));
+    expandBtn.textContent = open ? 'Alle details inklappen' : 'Alle details uitklappen';
+  });
   simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${formatSimSeconds(elapsedMs)}</span>`;
 }
 

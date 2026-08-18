@@ -123,10 +123,12 @@ function renderCardsTab(){
   cardsQuestGrid.innerHTML = '';
   for (const label of QUEST_CARD_IDS){
     const tint = QUEST_CARD_ART[label].tint;
+    // Het nummer staat al groot op de kaart zelf; in het bijschrift eiste "2.1 · " kostbare
+    // breedte op, waardoor de naam op een telefoon middenin een woord afbrak.
     cardsQuestGrid.appendChild(cardsShelfItem(
       renderQuestCardFace(label), '', tint,
-      `${label} · ${QUEST_NAMES[label] || label}`,
-      `kamer: ${questCardRoom(label)}`,
+      QUEST_NAMES[label] || label,
+      `${label} · kamer ${questCardRoom(label)}`,
     ));
   }
 
