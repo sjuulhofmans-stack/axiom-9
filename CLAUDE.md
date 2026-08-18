@@ -30,11 +30,14 @@ src/
   index.html          HTML-skelet met placeholders {{CSS}} {{JS}} {{LOGO}}
   styles.css          alle opmaak (~16 KB)
   assets/logo.b64     logo als base64 — hier zelden iets aan doen
-  assets/cards/*.webp de 10 fysieke actiekaarten (Canva-ontwerp), 520px breed.
+  assets/cards/*.webp de fysieke actiekaarten (Canva-ontwerp), 520px breed.
                       De bestandsnaam MOET het kaart-id uit ACTION_CARDS zijn
                       (boots.webp, condenser.webp, ...); build.py bakt ze in als
                       ACTION_CARD_IMAGES via src/js/05-card-art.js. Nieuwe kaart
                       = plaatje erbij zetten en opnieuw bouwen, verder niets.
+                      Ontbreekt een plaatje, dan tekent renderPrintedCardFace()
+                      de kaart na met het inline SVG-icoon (zie 95-simulate.js),
+                      dus het venster blijft werken zonder ontwerp.
   data/tiles.json     de 20 tegels + de vorm van een tegel (pattern)
   js/
     00-data.js        laadt tiles.json, bouwt tileLookup, globale state (layout, selectedSlot)

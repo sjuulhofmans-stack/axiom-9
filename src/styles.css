@@ -751,6 +751,43 @@
     color:var(--text-dim); background:var(--hull); border:1px solid var(--line-dim);
     border-radius:4px; padding:5px 7px;
   }
+
+  /* Kaart zonder fotokaart: dezelfde indeling nagetekend met het inline SVG-icoon, zodat het
+     venster ook werkt voor kaarten waarvoor nog geen Canva-ontwerp bestaat. */
+  .card-drawn{
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    width:100%; aspect-ratio:63/88; border-radius:10px; padding:14px 12px 12px;
+    background:linear-gradient(168deg, var(--panel-2) 0%, var(--hull) 78%);
+    box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 0 0 1px var(--card-tint);
+    color:var(--card-tint); text-align:center; overflow:hidden;
+  }
+  .card-drawn::before{                       /* accentstreepje bovenaan, als op de fotokaarten */
+    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:52px; height:3px; background:var(--card-tint);
+  }
+  .card-drawn-kicker{
+    font-family:var(--font-mono); font-size:8px; letter-spacing:.34em; color:var(--text-dim);
+  }
+  .card-drawn-title{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:16px; line-height:1.1; color:#eef3f8; margin-top:3px;
+  }
+  .card-drawn-icon{width:64px; height:64px; margin:auto 0;}
+  .card-drawn-rule{width:70%; height:1px; background:var(--card-tint); opacity:.35; margin-bottom:9px;}
+  .card-drawn-text{
+    font-family:var(--font-display); font-size:12.5px; line-height:1.25; color:var(--text);
+    margin-bottom:6px;
+  }
+  .card-drawn-cat{
+    align-self:flex-end; font-family:var(--font-mono); font-size:7px; letter-spacing:.14em;
+    color:var(--card-tint); border:1px solid var(--card-tint); border-radius:3px; padding:4px 5px;
+  }
+  /* miniatuur in de kluis voor een kaart zonder fotokaart */
+  .walk-card-vault-blank{
+    width:26px; height:36px; border-radius:3px; margin-left:-9px; flex:none;
+    background:linear-gradient(168deg, var(--panel-2), var(--hull));
+    border:1px solid var(--card-tint); box-shadow:0 1px 4px rgba(0,0,0,.5);
+  }
   /* duidelijk vinkje op de gekozen kaart, zodat selectie niet te verwarren is met hover */
   .card-pick.is-selected::after{
     content:'✓'; position:absolute; top:9px; left:9px; z-index:2;
