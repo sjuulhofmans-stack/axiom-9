@@ -277,11 +277,17 @@ function soloRefreshTarget(){
 // ---------- actiepaneel (begin van de beurt) ----------
 function renderEnergySoloButton(id, disabled, reason){
   const act = ENERGY_ACTIONS[id];
-  const title = reason ? `${act.name} — ${reason}` : `${act.name} — ${act.hint}`;
-  return `<button type="button" class="action-card action-card--lg action-card--plain${disabled ? ' is-disabled' : ''}" data-energy="${id}"${disabled ? ' disabled' : ''} title="${title}">
-    <span class="action-card-cost">${act.cost}</span>
-    <span class="action-card-name" style="margin-top:22px;">${act.name}</span>
-    <span class="action-card-hint">${act.hint}</span>
+  const title = reason ? `${act.name} — ${reason}` : `${act.name} (${act.cost} energie) — ${act.note || act.hint}`;
+  // Bewust GEEN .action-card hier: dat kaartje is 108px breed en met z'n drieën passen ze niet
+  // in de 300px-zijkolom — de derde viel op een tweede rij, en dwong je ze smaller te maken,
+  // brak "HERPRIORITERING" middenin het woord af. Als volle-breedte-rij is er ruimte zat voor
+  // de naam én de uitleg op één regel.
+  return `<button type="button" class="energy-pick${disabled ? ' is-disabled' : ''}" data-energy="${id}"${disabled ? ' disabled' : ''} title="${title}">
+    <span class="energy-pick-cost">${act.cost}</span>
+    <span class="energy-pick-text">
+      <b>${act.name}</b>
+      <span>${reason || act.hint}</span>
+    </span>
   </button>`;
 }
 // De 'choose-action'-fase toont ALLEEN de energie-acties — die moet je immers vóór het dobbelen
@@ -293,12 +299,18 @@ function soloRenderActionPanel(){
   const energyBtns = ['boost', 'reorder', 'jump'].map(id =>
     renderEnergySoloButton(id, p.energy < ENERGY_ACTIONS[id].cost)
   ).join('');
-  walkSoloActionsEl.innerHTML = `<div class="action-card-row">${energyBtns}</div>`;
+  // Kun je er geen enkele betalen, zeg dat dan met zoveel woorden — drie uitgegrijsde rijen
+  // zien er anders uit alsof het paneel stuk is.
+  const allLocked = ['boost', 'reorder', 'jump'].every(id => p.energy < ENERGY_ACTIONS[id].cost);
+  const note = allLocked
+    ? `<p class="hint energy-pick-none">Je hebt <b>${p.energy}</b> energie — te weinig voor een actie. Gooi gewoon; je energiesteen vult je voorraad weer aan.</p>`
+    : '';
+  walkSoloActionsEl.innerHTML = `<div class="energy-pick-list">${energyBtns}</div>${note}`;
 }
 if (walkSoloActionsEl){
   walkSoloActionsEl.addEventListener('click', (e) => {
     if (soloPhase !== 'choose-action') return;
-    const btn = e.target.closest('button.action-card');
+    const btn = e.target.closest('button.energy-pick');
     if (!btn || btn.disabled || btn.classList.contains('is-disabled')) return;
     if (btn.dataset.energy) soloUseEnergyAction(btn.dataset.energy);
   });

@@ -222,7 +222,12 @@
   .sim-table th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:.08em;}
   .sim-table td.num, .sim-table th:not(:first-child){text-align:right;}
   .sim-table td.num{font-variant-numeric:tabular-nums; color:var(--amber);}
-  .quest-table th{text-align:left;}
+  /* De opdrachtentabel heeft geen getalkolommen, dus alles links. Deze regel stond er al,
+     maar verloor het van `.sim-table th:not(:first-child)` hierboven (die is specifieker),
+     waardoor "Naam" en "Ligt in" rechts stonden en de waarden eronder links. */
+  .sim-table.quest-table th{text-align:left;}
+  /* op 375px is de tabel 2px breder dan zijn kader; laat hem daar liever scrollen dan uitsteken */
+  #questRegister{overflow-x:auto;}
 
   .sim-subhead{
     font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -399,6 +404,13 @@
     scrollbar-gutter: stable;
   }
   @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
+  /* Voordat er een potje loopt is alles hierbinnen leeg, en dan stond er alleen een omkaderd
+     blok van ~160px (de min-height van .walk-meta) zonder inhoud. Zodra er ook maar iets in
+     staat — een beurtregel, een stand, een statusmelding of het solo-actiepaneel — komt het
+     paneel vanzelf weer terug. */
+  .walk-info-panel:has(#walkMeta:empty):has(#walkScoreActive:empty):has(#walkStatus:empty):has(#walkSoloPanel[hidden]){
+    display:none;
+  }
   /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
      breedte hier valt `.walk-player` terug op zijn intrinsieke inhoudsbreedte (véél breder dan
      de 300px kolom) omdat `flex:none` de 210px-minimumbreedte van de brede-rij-variant negeert.
@@ -553,6 +565,9 @@
   .action-card-name{
     font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--text);
     line-height:1.2;
+    /* zonder dit steken lange namen (HERPRIORITERING, NOODTRANSPORT) links en rechts
+       buiten het 108px brede kaartje — een woord breekt van zichzelf nergens af */
+    max-width:100%; overflow-wrap:anywhere;
   }
   .action-card-hint{
     font-family:var(--font-mono); color:var(--text-dim); line-height:1.35;
@@ -580,9 +595,38 @@
   .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
 
   .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
-  /* een kaart-knop met een los "Afleggen"-knopje eronder (zie soloCardWithDiscard in 97-solo.js) */
-  .action-card-wrap{display:flex; flex-direction:column; align-items:stretch; gap:4px; width:108px;}
-  .action-card-wrap button.small{padding:5px 8px; font-size:11px; width:100%;}
+  /* De drie energie-acties uit de solo-modus: volle-breedte-rijen in plaats van kaartjes.
+     Als 108px-kaartjes pasten ze niet met z'n drieën in de 300px-zijkolom (de derde viel op
+     een tweede rij) en smaller gemaakt brak "Herprioritering" middenin het woord af. */
+  .energy-pick-list{display:flex; flex-direction:column; gap:6px;}
+  .energy-pick{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:8px 10px; border-radius:5px; cursor:pointer;
+    background:linear-gradient(150deg, var(--panel-2), var(--hull));
+    border:1px solid var(--line); font-family:var(--font-display);
+    transition:border-color .12s, transform .1s, box-shadow .12s;
+  }
+  .energy-pick-cost{
+    flex:none; width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-mono); font-size:12px; font-weight:700;
+    color:var(--start); border:1px solid var(--start); background:rgba(85,214,138,.09);
+  }
+  .energy-pick-text{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .energy-pick-text b{
+    font-size:13px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--text);
+    line-height:1.15;
+  }
+  .energy-pick-text span{
+    font-family:var(--font-mono); font-size:9.5px; line-height:1.35; color:var(--text-dim);
+  }
+  .energy-pick:not(.is-disabled):hover{
+    border-color:var(--start); transform:translateY(-1px);
+    box-shadow:0 4px 12px rgba(0,0,0,.4), 0 0 0 1px var(--start);
+  }
+  .energy-pick.is-disabled{opacity:.45; cursor:not-allowed;}
+  .energy-pick.is-disabled .energy-pick-cost{color:var(--text-dim); border-color:var(--line); background:none;}
+  .energy-pick-none{margin:8px 0 0;}
 
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
@@ -746,6 +790,8 @@
   .card-show-cap b{
     font-family:var(--font-display); font-size:14px; font-weight:700; color:#eef3f8;
     text-transform:uppercase; letter-spacing:.02em; line-height:1.15;
+    /* op 375px is een kolom 147px breed; "Stroomonderbreking" stak er 35px buiten */
+    overflow-wrap:anywhere;
   }
   .card-show-cap span{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.4;}
 
@@ -986,10 +1032,13 @@
     font-family:var(--font-mono); font-size:14px; padding:9px 10px; border-radius:4px;
   }
   .tile-thumb{position:relative;}
+  /* De knop loopt mee in de kopregel (#id · letter · ✎). Stond hij absoluut rechtsboven, dan
+     dekte hij de positieletter helemaal af en liep de kamernaam op de regel eronder deels
+     achter hem langs — zichtbaar bij Cafetaria, Serverruimte, Ziekenboeg, Kernreactor. */
   .edit-btn{
-    position:absolute; top:4px; right:4px; width:24px; height:24px; min-height:0;
+    flex:none; width:20px; height:20px; min-height:0;
     display:flex; align-items:center; justify-content:center; padding:0;
-    font-size:13px; line-height:1; border-radius:4px;
+    font-size:12px; line-height:1; border-radius:4px;
     background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
   }
   .edit-btn:hover{border-color:var(--amber); color:var(--amber);}
@@ -1016,12 +1065,16 @@
   #board.hide-letters .letter-badge{display:none;}
 
   .room-label{
-    position:absolute; left:0; z-index:1;
+    position:absolute; left:0; z-index:3;
     top:calc(var(--cell) * 5 + 5px);
     width:calc(var(--cell) * 8 + 7px); height:calc(var(--cell) * 3 + 2px);
     display:flex; align-items:flex-end; justify-content:flex-start; padding-left:4px; padding-bottom:3px;
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
-    color:#fff; opacity:.32; mix-blend-mode:overlay;
+    /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
+       prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
+       "Kernreactor" verloor zo zijn laatste letters. Vaste kleur met een donkere schaduw
+       leest op allebei de ondergronden. */
+    color:#c9d6e2; opacity:.55; text-shadow:0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8);
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
   }
@@ -1072,8 +1125,9 @@
   .tile-thumb.active{border-color:var(--amber); box-shadow:0 0 10px rgba(255,181,69,.3);}
   .tile-thumb .id{
     font-family:var(--font-mono); font-size:10px; color:var(--text-dim); margin-bottom:5px;
-    display:flex; justify-content:space-between;
+    display:flex; align-items:center; gap:5px; min-height:20px;
   }
+  .tile-thumb .id-num{margin-right:auto;}
   .tile-thumb .id b{color:var(--amber);}
   .room-tag{
     font-family:var(--font-mono); font-size:9.5px; margin-bottom:5px; letter-spacing:.02em;
@@ -1152,6 +1206,13 @@
     footer{font-size:10.5px; padding:0 8px;}
   }
 
+  /* terugvaloptie als downloaden niet mag (zie DOWNLOAD_BLOCKED in 90-editor.js) */
+  .data-dump{
+    width:100%; margin-top:6px; padding:8px; border-radius:5px; resize:vertical;
+    background:var(--hull); border:1px solid var(--line); color:var(--text);
+    font-family:var(--font-mono); font-size:10px; line-height:1.45; white-space:pre;
+  }
+
   .scroll-hint{
     display:none; text-align:center; font-family:var(--font-mono); font-size:10.5px;
     color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px;
@@ -1170,7 +1231,7 @@
     </div>
     <div class="status">
       <div><span class="dot"></span>SYSTEEM ACTIEF</div>
-      <div>SEED: <b id="statSeed">—</b></div>
+      <div>SEED: <b id="statSeed" title="De seed waarmee de huidige indeling is gegenereerd">origineel</b></div>
     </div>
   </header>
 
@@ -1229,7 +1290,11 @@
         <div class="field">
           <label>Delen</label>
           <button id="btnDownload" class="small">⇩ Download deze pagina (met wijzigingen)</button>
-          <p class="hint" style="margin-top:6px;">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
+          <p class="hint" style="margin-top:6px;" id="downloadHint">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
+          <div id="downloadFallback" hidden>
+            <p class="hint">Dit is de tegeldata van je huidige bord. Plak hem over <code>src/data/tiles.json</code> heen en draai <code>python3 build.py</code>.</p>
+            <textarea id="downloadJson" class="data-dump" readonly rows="6" spellcheck="false"></textarea>
+          </div>
         </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
@@ -1430,10 +1495,6 @@
     </div>
   </div>
 
-  <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
-
-  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
-       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="tabCards" class="tab-panel" role="tabpanel" hidden>
     <div class="panel">
       <h2>Opdrachtkaarten</h2>
@@ -1448,6 +1509,10 @@
     </div>
   </div>
 
+  <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
+
+  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
+       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="cardsZoom" class="cards-zoom" hidden>
     <div class="cards-zoom-inner">
       <div class="cards-zoom-face" id="cardsZoomFace"></div>
@@ -1456,6 +1521,8 @@
     </div>
   </div>
 
+  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
+       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="cardOverlay" class="card-overlay" hidden>
     <div class="card-panel" role="dialog" aria-modal="true" aria-labelledby="cardPanelTitle">
       <div class="card-panel-head">
@@ -2202,7 +2269,7 @@ function renderPalette(){
     card.className = 'tile-thumb' + (selectedSlot===slotIdx || highlightTile===tid ? ' active' : '');
     const badge = isCornerTile(tid) ? ' 🔒' : (tid===START_TILE ? ' ★' : '');
     const roomName = ROOM_NAMES[tid];
-    card.innerHTML = `<div class="id"><span>#${tid}${badge}</span><b>${letterForSlot(slotIdx)}</b></div>` +
+    card.innerHTML = `<div class="id"><span class="id-num">#${tid}${badge}</span><b>${letterForSlot(slotIdx)}</b></div>` +
       `<div class="room-tag ${roomName ? 'room' : 'corridor'}">${roomName || ('Gang ' + tid)}</div>`;
     const editBtn = document.createElement('button');
     editBtn.className = 'edit-btn';
@@ -2216,7 +2283,10 @@ function renderPalette(){
       editBtn.addEventListener('pointerdown', (e)=> e.stopPropagation());
     }
     editBtn.textContent = '✎';
-    card.appendChild(editBtn);
+    editBtn.setAttribute('aria-label', editBtn.title);
+    // In de kopregel meelopen in plaats van er absoluut overheen liggen: als absolute knop
+    // bedekte hij de positieletter volledig en liep de kamernaam eronder door.
+    card.querySelector('.id').appendChild(editBtn);
     const g = document.createElement('div');
     g.className = 'thumb-grid';
     for (let dr=0; dr<TILE_H; dr++){
@@ -3001,7 +3071,7 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   layout = defaultLayout.slice();
   resetRotations();
   selectedSlot = null; highlightTile = null;
-  statSeed.textContent = '—';
+  statSeed.textContent = 'origineel';
   swapHint.textContent = 'Sleep een tegel over een andere om ze te verwisselen.';
   renderBoard();
 });
@@ -3382,6 +3452,32 @@ document.getElementById('editorRevert').addEventListener('click', ()=>{
 });
 
 // ---------- deze pagina opslaan, inclusief bewerkte tegels ----------
+// Een <a download>.click() faalt geruisloos zodra de pagina in een sandboxed iframe draait —
+// precies hoe hij als Artifact wordt getoond, want die viewer geeft pagina's geen
+// downloadrechten. Er komt geen fout en geen bestand, dus zonder deze controle meldde de knop
+// vrolijk "Opgeslagen ✓" terwijl er niets was opgeslagen. In dat geval tonen we de tegeldata
+// gewoon op de pagina: dat is het enige wat je in de editor verandert, en daarmee kun je in het
+// repo verder (tiles.json + `python3 build.py`).
+const DOWNLOAD_BLOCKED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+if (DOWNLOAD_BLOCKED){
+  const btn = document.getElementById('btnDownload');
+  btn.textContent = '⧉ Toon de tegeldata';
+  document.getElementById('downloadHint').textContent =
+    'Downloaden kan niet in dit venster (de artifact-viewer blokkeert het). Open de tool als los HTML-bestand om hem op te slaan — hieronder staat wel de tegeldata om mee verder te werken.';
+}
+
+// serialiseert de huidige tegels naar hetzelfde formaat als src/data/tiles.json
+function currentTileData(){
+  const fresh = { pattern: DATA.pattern, tiles: {} };
+  for (let tid=1; tid<=20; tid++){
+    fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
+      const [dr,dc] = k.split('_').map(Number);
+      return [dr,dc,v];
+    }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+  }
+  return fresh;
+}
+
 document.getElementById('btnDownload').addEventListener('click', ()=>{
   const problems = validateAllTilesForSave();
   if (problems.size){
@@ -3391,15 +3487,15 @@ document.getElementById('btnDownload').addEventListener('click', ()=>{
     if (editorTile !== null) drawEditorGrid();
     return;
   }
+  const fresh = currentTileData();
+  if (DOWNLOAD_BLOCKED){
+    const box = document.getElementById('downloadFallback');
+    document.getElementById('downloadJson').value = JSON.stringify(fresh, null, 1);
+    box.hidden = false;
+    document.getElementById('downloadJson').select();
+    return;
+  }
   try{
-    // huidige tegeldata serialiseren
-    const fresh = { pattern: DATA.pattern, tiles: {} };
-    for (let tid=1; tid<=20; tid++){
-      fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
-        const [dr,dc] = k.split('_').map(Number);
-        return [dr,dc,v];
-      }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-    }
     let html = '<!DOCTYPE html>\n' + (()=>{
       // gegenereerde DOM (bord, register, editor) tijdelijk leegmaken: die wordt bij het
       // openen toch opnieuw opgebouwd, en scheelt honderden KB's in het bestand
@@ -3429,9 +3525,9 @@ document.getElementById('btnDownload').addEventListener('click', ()=>{
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 1000);
     const btn = document.getElementById('btnDownload');
-    const old = btn.textContent;
+    const label = btn.textContent;
     btn.textContent = 'Opgeslagen ✓';
-    setTimeout(()=>btn.textContent = old, 1500);
+    setTimeout(()=>btn.textContent = label, 1500);
   }catch(err){
     swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan mislukt: ${err.message}</span>`;
   }
@@ -3576,11 +3672,18 @@ let ENERGY_JUMP_RANGE = 13;
 // de alwetende referentie (31,0/32,1/31,0) — dat is de nieuwe prijs.
 const REORDER_BLIND_THRESHOLD = 31;
 
+// `hint` staat OP het kaartje en moet daarom kort blijven — het kaartje is 108px breed en
+// een langere zin duwde de titel er eerder letterlijk uit. De strategische toelichting hoort
+// in `note`, die alleen in de tooltip terechtkomt (zie renderEnergySoloButton in 97-solo.js).
 const ENERGY_ACTIONS = {
-  boost:   { cost: 3, name: 'Stuwstoot',       hint: 'gooi met 3 loopstenen' },
-  reorder: { cost: 2, name: 'Herprioritering', hint: 'wissel blind met de volgende opdracht — alleen de moeite waard als je al een flink stuk van je huidige opdracht vandaan staat' },
-  jump:    { cost: 10, name: 'Noodtransport',   hint: `verplaats tot ${ENERGY_JUMP_RANGE} vakjes vrij` },
-  none:    { cost: 0,  name: 'Geen energie',    hint: 'spaart maar geeft nooit uit' },
+  boost:   { cost: 3,  name: 'Stuwstoot',       hint: 'gooi met 3 loopstenen',
+             note: 'Een derde loopsteen erbij, dus gemiddeld 3,5 stappen extra deze beurt.' },
+  reorder: { cost: 2,  name: 'Herprioritering', hint: 'ruil blind met je volgende opdracht',
+             note: 'Je ziet niet wat je ervoor terugkrijgt — alleen de moeite waard als je nog ver van je huidige opdracht af staat.' },
+  jump:    { cost: 10, name: 'Noodtransport',   hint: `spring vrij tot ${ENERGY_JUMP_RANGE} vakjes ver`,
+             note: 'Geen worp en geen geen-U-turn-regel: je verplaatst je vrij over het bord. Kost je hele voorraad.' },
+  none:    { cost: 0,  name: 'Geen energie',    hint: 'spaart, geeft nooit uit',
+             note: 'Doet niets — staat in de simulatie als ijkpunt tegenover de drie strategieën.' },
 };
 // Elke speler krijgt er per potje één; ze worden geloot over de startposities zodat de
 // strategie nooit samenvalt met een bepaalde startpositie. Zo is één batch een toernooi.
@@ -6176,11 +6279,17 @@ function soloRefreshTarget(){
 // ---------- actiepaneel (begin van de beurt) ----------
 function renderEnergySoloButton(id, disabled, reason){
   const act = ENERGY_ACTIONS[id];
-  const title = reason ? `${act.name} — ${reason}` : `${act.name} — ${act.hint}`;
-  return `<button type="button" class="action-card action-card--lg action-card--plain${disabled ? ' is-disabled' : ''}" data-energy="${id}"${disabled ? ' disabled' : ''} title="${title}">
-    <span class="action-card-cost">${act.cost}</span>
-    <span class="action-card-name" style="margin-top:22px;">${act.name}</span>
-    <span class="action-card-hint">${act.hint}</span>
+  const title = reason ? `${act.name} — ${reason}` : `${act.name} (${act.cost} energie) — ${act.note || act.hint}`;
+  // Bewust GEEN .action-card hier: dat kaartje is 108px breed en met z'n drieën passen ze niet
+  // in de 300px-zijkolom — de derde viel op een tweede rij, en dwong je ze smaller te maken,
+  // brak "HERPRIORITERING" middenin het woord af. Als volle-breedte-rij is er ruimte zat voor
+  // de naam én de uitleg op één regel.
+  return `<button type="button" class="energy-pick${disabled ? ' is-disabled' : ''}" data-energy="${id}"${disabled ? ' disabled' : ''} title="${title}">
+    <span class="energy-pick-cost">${act.cost}</span>
+    <span class="energy-pick-text">
+      <b>${act.name}</b>
+      <span>${reason || act.hint}</span>
+    </span>
   </button>`;
 }
 // De 'choose-action'-fase toont ALLEEN de energie-acties — die moet je immers vóór het dobbelen
@@ -6192,12 +6301,18 @@ function soloRenderActionPanel(){
   const energyBtns = ['boost', 'reorder', 'jump'].map(id =>
     renderEnergySoloButton(id, p.energy < ENERGY_ACTIONS[id].cost)
   ).join('');
-  walkSoloActionsEl.innerHTML = `<div class="action-card-row">${energyBtns}</div>`;
+  // Kun je er geen enkele betalen, zeg dat dan met zoveel woorden — drie uitgegrijsde rijen
+  // zien er anders uit alsof het paneel stuk is.
+  const allLocked = ['boost', 'reorder', 'jump'].every(id => p.energy < ENERGY_ACTIONS[id].cost);
+  const note = allLocked
+    ? `<p class="hint energy-pick-none">Je hebt <b>${p.energy}</b> energie — te weinig voor een actie. Gooi gewoon; je energiesteen vult je voorraad weer aan.</p>`
+    : '';
+  walkSoloActionsEl.innerHTML = `<div class="energy-pick-list">${energyBtns}</div>${note}`;
 }
 if (walkSoloActionsEl){
   walkSoloActionsEl.addEventListener('click', (e) => {
     if (soloPhase !== 'choose-action') return;
-    const btn = e.target.closest('button.action-card');
+    const btn = e.target.closest('button.energy-pick');
     if (!btn || btn.disabled || btn.classList.contains('is-disabled')) return;
     if (btn.dataset.energy) soloUseEnergyAction(btn.dataset.energy);
   });

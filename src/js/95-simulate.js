@@ -124,11 +124,18 @@ let ENERGY_JUMP_RANGE = 13;
 // de alwetende referentie (31,0/32,1/31,0) — dat is de nieuwe prijs.
 const REORDER_BLIND_THRESHOLD = 31;
 
+// `hint` staat OP het kaartje en moet daarom kort blijven — het kaartje is 108px breed en
+// een langere zin duwde de titel er eerder letterlijk uit. De strategische toelichting hoort
+// in `note`, die alleen in de tooltip terechtkomt (zie renderEnergySoloButton in 97-solo.js).
 const ENERGY_ACTIONS = {
-  boost:   { cost: 3, name: 'Stuwstoot',       hint: 'gooi met 3 loopstenen' },
-  reorder: { cost: 2, name: 'Herprioritering', hint: 'wissel blind met de volgende opdracht — alleen de moeite waard als je al een flink stuk van je huidige opdracht vandaan staat' },
-  jump:    { cost: 10, name: 'Noodtransport',   hint: `verplaats tot ${ENERGY_JUMP_RANGE} vakjes vrij` },
-  none:    { cost: 0,  name: 'Geen energie',    hint: 'spaart maar geeft nooit uit' },
+  boost:   { cost: 3,  name: 'Stuwstoot',       hint: 'gooi met 3 loopstenen',
+             note: 'Een derde loopsteen erbij, dus gemiddeld 3,5 stappen extra deze beurt.' },
+  reorder: { cost: 2,  name: 'Herprioritering', hint: 'ruil blind met je volgende opdracht',
+             note: 'Je ziet niet wat je ervoor terugkrijgt — alleen de moeite waard als je nog ver van je huidige opdracht af staat.' },
+  jump:    { cost: 10, name: 'Noodtransport',   hint: `spring vrij tot ${ENERGY_JUMP_RANGE} vakjes ver`,
+             note: 'Geen worp en geen geen-U-turn-regel: je verplaatst je vrij over het bord. Kost je hele voorraad.' },
+  none:    { cost: 0,  name: 'Geen energie',    hint: 'spaart, geeft nooit uit',
+             note: 'Doet niets — staat in de simulatie als ijkpunt tegenover de drie strategieën.' },
 };
 // Elke speler krijgt er per potje één; ze worden geloot over de startposities zodat de
 // strategie nooit samenvalt met een bepaalde startpositie. Zo is één batch een toernooi.

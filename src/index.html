@@ -18,7 +18,7 @@
     </div>
     <div class="status">
       <div><span class="dot"></span>SYSTEEM ACTIEF</div>
-      <div>SEED: <b id="statSeed">—</b></div>
+      <div>SEED: <b id="statSeed" title="De seed waarmee de huidige indeling is gegenereerd">origineel</b></div>
     </div>
   </header>
 
@@ -77,7 +77,11 @@
         <div class="field">
           <label>Delen</label>
           <button id="btnDownload" class="small">⇩ Download deze pagina (met wijzigingen)</button>
-          <p class="hint" style="margin-top:6px;">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
+          <p class="hint" style="margin-top:6px;" id="downloadHint">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
+          <div id="downloadFallback" hidden>
+            <p class="hint">Dit is de tegeldata van je huidige bord. Plak hem over <code>src/data/tiles.json</code> heen en draai <code>python3 build.py</code>.</p>
+            <textarea id="downloadJson" class="data-dump" readonly rows="6" spellcheck="false"></textarea>
+          </div>
         </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
@@ -278,10 +282,6 @@
     </div>
   </div>
 
-  <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
-
-  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
-       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="tabCards" class="tab-panel" role="tabpanel" hidden>
     <div class="panel">
       <h2>Opdrachtkaarten</h2>
@@ -296,6 +296,10 @@
     </div>
   </div>
 
+  <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
+
+  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
+       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="cardsZoom" class="cards-zoom" hidden>
     <div class="cards-zoom-inner">
       <div class="cards-zoom-face" id="cardsZoomFace"></div>
@@ -304,6 +308,8 @@
     </div>
   </div>
 
+  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
+       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
   <div id="cardOverlay" class="card-overlay" hidden>
     <div class="card-panel" role="dialog" aria-modal="true" aria-labelledby="cardPanelTitle">
       <div class="card-panel-head">

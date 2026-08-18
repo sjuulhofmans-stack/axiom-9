@@ -79,7 +79,7 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   layout = defaultLayout.slice();
   resetRotations();
   selectedSlot = null; highlightTile = null;
-  statSeed.textContent = '—';
+  statSeed.textContent = 'origineel';
   swapHint.textContent = 'Sleep een tegel over een andere om ze te verwisselen.';
   renderBoard();
 });

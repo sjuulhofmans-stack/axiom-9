@@ -91,6 +91,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
 | iets aan "stap voor stap" automatisch (pion, tempo, bots) | `96-walk.js` |
 | iets aan de solo-modus / actiekaarten        | `97-solo.js` (kaartdefinities zelf staan in `95-simulate.js`, `ACTION_CARDS`/`ENERGY_ACTIONS`) |
+| de tekst op een energie-actie                | `95-simulate.js` (`ENERGY_ACTIONS`): `hint` staat OP de knop en moet kort blijven, `note` is de tooltip |
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
 | iets aan het tabblad "Kaarten" (vitrine)     | `98-cards.js`, opmaak in `styles.css` onder "tabblad Kaarten" |
@@ -191,6 +192,26 @@ Check minimaal:
    de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
    echt stilzetten (geen achtergrondlus die doorloopt).
+
+## Valkuilen die al een keer misgingen
+
+- **Downloaden werkt niet in de artifact.** De artifact-viewer geeft pagina's geen
+  downloadrechten, dus `<a download>.click()` faalt daar geruisloos — geen fout, geen
+  bestand. `DOWNLOAD_BLOCKED` in `90-editor.js` detecteert dat via
+  `window.self !== window.top` en toont dan de tegeldata als tekst in plaats van een knop
+  die "Opgeslagen ✓" liegt.
+- **`mix-blend-mode` op tekst boven het bord.** De kamernaam stond op `overlay` met wit op
+  32%: leesbaar boven een leeg vakje, volledig weggeblend zodra hij een gevuld vakje kruiste
+  ("Kernreactor" verloor zo zijn laatste letters). Vaste kleur met een donkere `text-shadow`
+  leest op allebei de ondergronden.
+- **`overflow-wrap:anywhere` verandert de min-content-breedte.** Op `.room-tag` liet dat
+  "Serverruimte" ineens afbreken terwijl het net paste. Gebruik het alleen waar een woord
+  echt niet kan passen (kaartbijschriften), niet als algemene veiligheidsklep.
+- **Drie kaartjes van 108px passen niet in de 300px-zijkolom.** De energie-acties zijn
+  daarom volle-breedte-rijen (`.energy-pick`), geen `.action-card`. Smaller maken was geen
+  optie: dan breekt "Herprioritering" middenin het woord.
+- **`.sim-table th:not(:first-child)` is specifieker dan `.quest-table th`.** De
+  opdrachtentabel had daardoor rechts uitgelijnde koppen boven links uitgelijnde cellen.
 
 ## Nog te doen
 

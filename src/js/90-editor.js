@@ -324,6 +324,32 @@ document.getElementById('editorRevert').addEventListener('click', ()=>{
 });
 
 // ---------- deze pagina opslaan, inclusief bewerkte tegels ----------
+// Een <a download>.click() faalt geruisloos zodra de pagina in een sandboxed iframe draait —
+// precies hoe hij als Artifact wordt getoond, want die viewer geeft pagina's geen
+// downloadrechten. Er komt geen fout en geen bestand, dus zonder deze controle meldde de knop
+// vrolijk "Opgeslagen ✓" terwijl er niets was opgeslagen. In dat geval tonen we de tegeldata
+// gewoon op de pagina: dat is het enige wat je in de editor verandert, en daarmee kun je in het
+// repo verder (tiles.json + `python3 build.py`).
+const DOWNLOAD_BLOCKED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+if (DOWNLOAD_BLOCKED){
+  const btn = document.getElementById('btnDownload');
+  btn.textContent = '⧉ Toon de tegeldata';
+  document.getElementById('downloadHint').textContent =
+    'Downloaden kan niet in dit venster (de artifact-viewer blokkeert het). Open de tool als los HTML-bestand om hem op te slaan — hieronder staat wel de tegeldata om mee verder te werken.';
+}
+
+// serialiseert de huidige tegels naar hetzelfde formaat als src/data/tiles.json
+function currentTileData(){
+  const fresh = { pattern: DATA.pattern, tiles: {} };
+  for (let tid=1; tid<=20; tid++){
+    fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
+      const [dr,dc] = k.split('_').map(Number);
+      return [dr,dc,v];
+    }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+  }
+  return fresh;
+}
+
 document.getElementById('btnDownload').addEventListener('click', ()=>{
   const problems = validateAllTilesForSave();
   if (problems.size){
@@ -333,15 +359,15 @@ document.getElementById('btnDownload').addEventListener('click', ()=>{
     if (editorTile !== null) drawEditorGrid();
     return;
   }
+  const fresh = currentTileData();
+  if (DOWNLOAD_BLOCKED){
+    const box = document.getElementById('downloadFallback');
+    document.getElementById('downloadJson').value = JSON.stringify(fresh, null, 1);
+    box.hidden = false;
+    document.getElementById('downloadJson').select();
+    return;
+  }
   try{
-    // huidige tegeldata serialiseren
-    const fresh = { pattern: DATA.pattern, tiles: {} };
-    for (let tid=1; tid<=20; tid++){
-      fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
-        const [dr,dc] = k.split('_').map(Number);
-        return [dr,dc,v];
-      }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-    }
     let html = '<!DOCTYPE html>\n' + (()=>{
       // gegenereerde DOM (bord, register, editor) tijdelijk leegmaken: die wordt bij het
       // openen toch opnieuw opgebouwd, en scheelt honderden KB's in het bestand
@@ -371,9 +397,9 @@ document.getElementById('btnDownload').addEventListener('click', ()=>{
     document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 1000);
     const btn = document.getElementById('btnDownload');
-    const old = btn.textContent;
+    const label = btn.textContent;
     btn.textContent = 'Opgeslagen ✓';
-    setTimeout(()=>btn.textContent = old, 1500);
+    setTimeout(()=>btn.textContent = label, 1500);
   }catch(err){
     swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan mislukt: ${err.message}</span>`;
   }

@@ -215,7 +215,12 @@
   .sim-table th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:.08em;}
   .sim-table td.num, .sim-table th:not(:first-child){text-align:right;}
   .sim-table td.num{font-variant-numeric:tabular-nums; color:var(--amber);}
-  .quest-table th{text-align:left;}
+  /* De opdrachtentabel heeft geen getalkolommen, dus alles links. Deze regel stond er al,
+     maar verloor het van `.sim-table th:not(:first-child)` hierboven (die is specifieker),
+     waardoor "Naam" en "Ligt in" rechts stonden en de waarden eronder links. */
+  .sim-table.quest-table th{text-align:left;}
+  /* op 375px is de tabel 2px breder dan zijn kader; laat hem daar liever scrollen dan uitsteken */
+  #questRegister{overflow-x:auto;}
 
   .sim-subhead{
     font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -392,6 +397,13 @@
     scrollbar-gutter: stable;
   }
   @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
+  /* Voordat er een potje loopt is alles hierbinnen leeg, en dan stond er alleen een omkaderd
+     blok van ~160px (de min-height van .walk-meta) zonder inhoud. Zodra er ook maar iets in
+     staat — een beurtregel, een stand, een statusmelding of het solo-actiepaneel — komt het
+     paneel vanzelf weer terug. */
+  .walk-info-panel:has(#walkMeta:empty):has(#walkScoreActive:empty):has(#walkStatus:empty):has(#walkSoloPanel[hidden]){
+    display:none;
+  }
   /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
      breedte hier valt `.walk-player` terug op zijn intrinsieke inhoudsbreedte (véél breder dan
      de 300px kolom) omdat `flex:none` de 210px-minimumbreedte van de brede-rij-variant negeert.
@@ -546,6 +558,9 @@
   .action-card-name{
     font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--text);
     line-height:1.2;
+    /* zonder dit steken lange namen (HERPRIORITERING, NOODTRANSPORT) links en rechts
+       buiten het 108px brede kaartje — een woord breekt van zichzelf nergens af */
+    max-width:100%; overflow-wrap:anywhere;
   }
   .action-card-hint{
     font-family:var(--font-mono); color:var(--text-dim); line-height:1.35;
@@ -573,9 +588,38 @@
   .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
 
   .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
-  /* een kaart-knop met een los "Afleggen"-knopje eronder (zie soloCardWithDiscard in 97-solo.js) */
-  .action-card-wrap{display:flex; flex-direction:column; align-items:stretch; gap:4px; width:108px;}
-  .action-card-wrap button.small{padding:5px 8px; font-size:11px; width:100%;}
+  /* De drie energie-acties uit de solo-modus: volle-breedte-rijen in plaats van kaartjes.
+     Als 108px-kaartjes pasten ze niet met z'n drieën in de 300px-zijkolom (de derde viel op
+     een tweede rij) en smaller gemaakt brak "Herprioritering" middenin het woord af. */
+  .energy-pick-list{display:flex; flex-direction:column; gap:6px;}
+  .energy-pick{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:8px 10px; border-radius:5px; cursor:pointer;
+    background:linear-gradient(150deg, var(--panel-2), var(--hull));
+    border:1px solid var(--line); font-family:var(--font-display);
+    transition:border-color .12s, transform .1s, box-shadow .12s;
+  }
+  .energy-pick-cost{
+    flex:none; width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-mono); font-size:12px; font-weight:700;
+    color:var(--start); border:1px solid var(--start); background:rgba(85,214,138,.09);
+  }
+  .energy-pick-text{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .energy-pick-text b{
+    font-size:13px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--text);
+    line-height:1.15;
+  }
+  .energy-pick-text span{
+    font-family:var(--font-mono); font-size:9.5px; line-height:1.35; color:var(--text-dim);
+  }
+  .energy-pick:not(.is-disabled):hover{
+    border-color:var(--start); transform:translateY(-1px);
+    box-shadow:0 4px 12px rgba(0,0,0,.4), 0 0 0 1px var(--start);
+  }
+  .energy-pick.is-disabled{opacity:.45; cursor:not-allowed;}
+  .energy-pick.is-disabled .energy-pick-cost{color:var(--text-dim); border-color:var(--line); background:none;}
+  .energy-pick-none{margin:8px 0 0;}
 
   /* speler die binnen is: van het bord af, dus gedempt weergeven */
   .walk-player.done{border-left-color:var(--start); opacity:.62;}
@@ -739,6 +783,8 @@
   .card-show-cap b{
     font-family:var(--font-display); font-size:14px; font-weight:700; color:#eef3f8;
     text-transform:uppercase; letter-spacing:.02em; line-height:1.15;
+    /* op 375px is een kolom 147px breed; "Stroomonderbreking" stak er 35px buiten */
+    overflow-wrap:anywhere;
   }
   .card-show-cap span{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.4;}
 
@@ -979,10 +1025,13 @@
     font-family:var(--font-mono); font-size:14px; padding:9px 10px; border-radius:4px;
   }
   .tile-thumb{position:relative;}
+  /* De knop loopt mee in de kopregel (#id · letter · ✎). Stond hij absoluut rechtsboven, dan
+     dekte hij de positieletter helemaal af en liep de kamernaam op de regel eronder deels
+     achter hem langs — zichtbaar bij Cafetaria, Serverruimte, Ziekenboeg, Kernreactor. */
   .edit-btn{
-    position:absolute; top:4px; right:4px; width:24px; height:24px; min-height:0;
+    flex:none; width:20px; height:20px; min-height:0;
     display:flex; align-items:center; justify-content:center; padding:0;
-    font-size:13px; line-height:1; border-radius:4px;
+    font-size:12px; line-height:1; border-radius:4px;
     background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
   }
   .edit-btn:hover{border-color:var(--amber); color:var(--amber);}
@@ -1009,12 +1058,16 @@
   #board.hide-letters .letter-badge{display:none;}
 
   .room-label{
-    position:absolute; left:0; z-index:1;
+    position:absolute; left:0; z-index:3;
     top:calc(var(--cell) * 5 + 5px);
     width:calc(var(--cell) * 8 + 7px); height:calc(var(--cell) * 3 + 2px);
     display:flex; align-items:flex-end; justify-content:flex-start; padding-left:4px; padding-bottom:3px;
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
-    color:#fff; opacity:.32; mix-blend-mode:overlay;
+    /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
+       prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
+       "Kernreactor" verloor zo zijn laatste letters. Vaste kleur met een donkere schaduw
+       leest op allebei de ondergronden. */
+    color:#c9d6e2; opacity:.55; text-shadow:0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8);
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
   }
@@ -1065,8 +1118,9 @@
   .tile-thumb.active{border-color:var(--amber); box-shadow:0 0 10px rgba(255,181,69,.3);}
   .tile-thumb .id{
     font-family:var(--font-mono); font-size:10px; color:var(--text-dim); margin-bottom:5px;
-    display:flex; justify-content:space-between;
+    display:flex; align-items:center; gap:5px; min-height:20px;
   }
+  .tile-thumb .id-num{margin-right:auto;}
   .tile-thumb .id b{color:var(--amber);}
   .room-tag{
     font-family:var(--font-mono); font-size:9.5px; margin-bottom:5px; letter-spacing:.02em;
@@ -1143,6 +1197,13 @@
     .room-tag{font-size:11px;}
 
     footer{font-size:10.5px; padding:0 8px;}
+  }
+
+  /* terugvaloptie als downloaden niet mag (zie DOWNLOAD_BLOCKED in 90-editor.js) */
+  .data-dump{
+    width:100%; margin-top:6px; padding:8px; border-radius:5px; resize:vertical;
+    background:var(--hull); border:1px solid var(--line); color:var(--text);
+    font-family:var(--font-mono); font-size:10px; line-height:1.45; white-space:pre;
   }
 
   .scroll-hint{
