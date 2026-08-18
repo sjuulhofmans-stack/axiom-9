@@ -65,6 +65,10 @@
 
   /* ---------- tabbladen ---------- */
   .tab-bar{display:flex; gap:4px; margin-bottom:22px; border-bottom:1px solid var(--line);}
+  /* Zonder nowrap brak "Stap voor stap" op een telefoon over drie regels en werd de hele balk
+     62px hoog met ongelijke knoppen. Passen ze niet, dan schuift de balk — het gebruikelijke
+     patroon voor tabbladen op mobiel — in plaats van de labels te verminken. */
+  .tab-btn{white-space:nowrap;}
   .tab-btn{
     font-family:var(--font-mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
     padding:11px 20px; background:transparent; border:1px solid transparent; border-bottom:none;
@@ -1194,7 +1198,16 @@
     .panel{padding:14px;}
     .panel h2{font-size:11.5px;}
 
-    .tab-btn{padding:11px 14px; font-size:11px; min-height:44px;}
+    .tab-bar{
+      overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap;
+      scrollbar-width:none; -webkit-overflow-scrolling:touch;
+      /* vervaagt de rechterrand zodra er nog een tabblad buiten beeld staat, anders lijkt de
+         balk gewoon af te lopen bij "Stap voor stap" en zoek je "Kaarten" nooit */
+      -webkit-mask-image:linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+      mask-image:linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+    }
+    .tab-bar::-webkit-scrollbar{display:none;}
+    .tab-btn{padding:11px 11px; font-size:11px; letter-spacing:.08em; min-height:44px; flex:none;}
 
     input[type=text]{font-size:16px; padding:11px 10px;}
     button{font-size:15px; padding:12px 14px; min-height:44px;}
@@ -1245,8 +1258,21 @@
     font-family:var(--font-mono); font-size:10px; line-height:1.45; white-space:pre;
   }
 
+  /* Op een telefoon wordt het bord tot 40 vakjes breed teruggerekend en houd je vakjes van
+     ~7px over: je ziet de vorm van de indeling wel, maar leest de opdracht- en startvakjes
+     nauwelijks. Passend maken blijft daarom de standaard (je wilt het geheel zien), maar met
+     deze knop schakel je naar een leesbare celgrootte en schuif je horizontaal. Op desktop is
+     de knop overbodig en dus verborgen. */
+  .board-tools{display:none; align-items:center; gap:10px; margin-bottom:8px;}
+  .board-zoom{white-space:nowrap; flex:none;}
   .scroll-hint{
-    display:none; text-align:center; font-family:var(--font-mono); font-size:10.5px;
-    color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px;
+    display:none; text-align:left; font-family:var(--font-mono); font-size:10.5px;
+    color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0;
+  }
+  @media (max-width: 640px){
+    .board-tools{display:flex;}
+    .board-zoom-wrap.is-zoomed #board,
+    .board-zoom-wrap.is-zoomed #walkBoard{ --cell: 20px; }
+    .board-zoom-wrap.is-zoomed .scroll-hint{display:block;}
   }
 

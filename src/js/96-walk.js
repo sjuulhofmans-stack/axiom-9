@@ -73,7 +73,9 @@ function setWalkPaused(on){
     walkPauseWaiters = [];
     for (const res of waiters) res();
   }
-  if (btnWalkPause) btnWalkPause.textContent = walkPaused ? '▶ Hervatten' : '⏸ Pauze';
+  // Geen ⏸/▶ meer: die vallen op systemen zonder emoji-font terug op een leeg blokje (▪),
+  // en het woord zelf zegt precies hetzelfde.
+  if (btnWalkPause) btnWalkPause.textContent = walkPaused ? 'Hervatten' : 'Pauze';
   if (walkPausedFlagEl) walkPausedFlagEl.hidden = !walkPaused;
   // CSS-animaties (rollende dobbelsteen, kloppend doelvakje) horen ook stil te staan
   if (walkPanelEl) walkPanelEl.classList.toggle('walk-is-paused', walkPaused);

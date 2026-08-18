@@ -191,7 +191,9 @@ Check minimaal:
 9. Tabblad "Kaarten" → 9 opdrachtkaarten + 18 actiekaarten, elk met een plaatje of een
    nagetekende kaart; klikken vergroot en Escape/klik sluit. Op 375px breed passen er
    twee kaarten naast elkaar en mag de pagina niet horizontaal schuiven.
-10. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
+10. Op 375px: de tabbalk blijft één regel (schuift horizontaal) en boven elk bord staat een
+   knop "Vergroten" die de cellen op 20px zet.
+11. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
    echt stilzetten (geen achtergrondlus die doorloopt).
@@ -219,6 +221,11 @@ Check minimaal:
   niet scrollbaar maar simpelweg AFGEKAPT — op 375px waren de rechterkolommen van twee
   simulatietabellen onbereikbaar. Vandaar `.sim-table{display:block; overflow-x:auto}` in de
   880px-mediaquery: dan schuift de tabel binnen zijn eigen kader.
+- **Het bord past niet op een telefoon.** 40 vakjes breed betekent cellen van ~7px. Passend
+  maken blijft de standaard (je wilt het geheel zien), maar `.board-zoom` schakelt naar 20px
+  en dan schuift het bord binnen `.board-outer`. De knop staat alleen onder 640px.
+- **Emoji-glyphs als knoplabel.** ⏸ en ▶ vallen op systemen zonder emoji-font terug op een
+  leeg blokje. Gebruik gewoon het woord.
 - **De kamernaam op het bord hoort bovenaan zijn tegel.** Stond hij onderaan, dan viel hij pal
   naast de positieletter van de tegel *eronder* en las je hem bij de verkeerde tegel.
 

@@ -131,3 +131,20 @@ function switchTab(name){
   if (name === 'cards') renderCardsTab();
 }
 tabButtons.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+// ---------- bord vergroten op een telefoon ----------
+// Alleen zichtbaar onder 640px (zie .board-tools in styles.css). "Vergroten" zet de cellen op
+// een leesbare 20px; het bord past dan niet meer en schuift binnen .board-outer.
+document.querySelectorAll('.board-zoom').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const wrap = btn.closest('.board-zoom-wrap');
+    const zoomed = wrap.classList.toggle('is-zoomed');
+    btn.textContent = zoomed ? 'Passend maken' : 'Vergroten';
+    btn.setAttribute('aria-pressed', String(zoomed));
+    if (zoomed){
+      // op het midden van het bord beginnen in plaats van linksboven
+      const outer = wrap.querySelector('.board-outer');
+      outer.scrollLeft = (outer.scrollWidth - outer.clientWidth) / 2;
+    }
+  });
+});

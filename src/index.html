@@ -34,9 +34,14 @@
   <div class="grid-layout">
 
     <div class="panel">
-      <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
-      <div class="board-outer">
-        <div id="board"></div>
+      <div class="board-zoom-wrap">
+        <div class="board-tools">
+          <button type="button" class="small ghost board-zoom">Vergroten</button>
+          <p class="scroll-hint">↔ Swipe om te schuiven</p>
+        </div>
+        <div class="board-outer">
+          <div id="board"></div>
+        </div>
       </div>
     </div>
 
@@ -60,7 +65,7 @@
           <label for="seedInput">Seed</label>
           <div class="seed-row">
             <input type="text" id="seedInput" placeholder="bijv. terra-nova-07" value="axiom-9">
-            <button id="btnDice" class="small" title="Willekeurige seed">🎲</button>
+            <button id="btnDice" class="small" title="Willekeurige seed" aria-label="Willekeurige seed">🎲</button>
           </div>
         </div>
         <div class="btn-row">
@@ -185,7 +190,7 @@
           </div>
           <div class="btn-row">
             <button id="btnWalkStart" class="primary">Simulatie starten</button>
-            <button id="btnWalkPause" class="ghost" disabled>⏸ Pauze</button>
+            <button id="btnWalkPause" class="ghost" disabled>Pauze</button>
             <button id="btnWalkStop" class="ghost" disabled>Stoppen</button>
           </div>
         </div>
@@ -218,9 +223,14 @@
           <div class="walk-board-col">
             <div class="walk-score" id="walkScore"></div>
 
-            <p class="scroll-hint">↔ Swipe om het hele bord te zien</p>
-            <div class="board-outer">
-              <div id="walkBoard"></div>
+            <div class="board-zoom-wrap">
+              <div class="board-tools">
+                <button type="button" class="small ghost board-zoom">Vergroten</button>
+                <p class="scroll-hint">↔ Swipe om te schuiven</p>
+              </div>
+              <div class="board-outer">
+                <div id="walkBoard"></div>
+              </div>
             </div>
 
             <div class="walk-legend">
@@ -250,7 +260,7 @@
 
             <div class="walk-hud">
               <div class="walk-dice" id="walkDice"></div>
-              <span id="walkPausedFlag" class="walk-paused-flag" hidden>⏸ gepauzeerd</span>
+              <span id="walkPausedFlag" class="walk-paused-flag" hidden>gepauzeerd</span>
               <div class="btn-row">
                 <button id="btnWalkSoloRoll" class="primary" hidden>🎲 Gooi de dobbelstenen</button>
                 <button id="btnWalkSoloSkip" class="ghost" hidden>Geen actie, gewoon dobbelen</button>
