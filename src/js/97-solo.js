@@ -451,13 +451,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas ----------
-// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen)
+// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen;
+// de richting waarin hij vliegt wordt daarna geloot, zie shoveDestination)
 // alleen tegenstanders die naast je staan én die daadwerkelijk ruimte hebben om weg te
 // schuiven — iemand die meteen klem zit aanbieden zou je de kaart voor niets laten verspelen
 function soloShoveTargets(){
   const me = solo();
   const neigh = new Set(soloGraph.adjKey[me.pos]);
-  return soloOthers().filter(p => neigh.has(p.pos) && shoveDestination(soloGraph, soloPlayers, me, p));
+  return soloOthers().filter(p => neigh.has(p.pos) && shoveDestination(soloGraph, soloPlayers, p, soloRand));
 }
 function soloEnterTargetPicker(cardId){
   const targets = cardId === 'shove' ? soloShoveTargets() : soloOthers();
@@ -506,15 +507,16 @@ function soloResolveTargetCard(cardId, targetIdx){
     walkLog(`Je speelt <b>Prioriteitspas</b>: ${victim.name}'s volgende opdracht is <b>${label} — ${QUEST_NAMES[label] || ''}</b>.`, null, p);
     soloAfterCardAction();
   } else if (cardId === 'shove'){
-    // recht bij je vandaan, tot SHOVE_DISTANCE vakjes — zelfde berekening als de bot-AI
-    const dest = shoveDestination(soloGraph, soloPlayers, p, victim);
+    // richting wordt geloot, niet gekozen — zelfde berekening als de bot-AI
+    const dest = shoveDestination(soloGraph, soloPlayers, victim, soloRand);
     useActionCard(p, 'shove', soloDeck);
     soloUsedCardId = 'shove';
     if (dest){
       victim.pos = dest.key;
-      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name} en duwt die ${dest.steps} vakje${dest.steps === 1 ? '' : 's'} recht bij je vandaan.`, null, p);
+      const kompas = ['noord', 'oost', 'zuid', 'west'][dest.dir];
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}: die vliegt ${dest.steps} vakje${dest.steps === 1 ? '' : 's'} naar het ${kompas}.`, null, p);
     } else {
-      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}, maar die zit meteen klem — er is geen ruimte om te duwen.`, null, p);
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}, maar die zit helemaal klem — er is geen kant op te duwen.`, null, p);
     }
     paintWalkPawns(soloGraph, soloPlayers, p.idx);
     soloAfterCardAction();
@@ -1060,7 +1062,7 @@ function soloResolveBotTurn(player){
     if (swapped !== null){ targetLabel = swapped; useActionCard(player, 'recal', soloDeck); cardActionUsed = true; targetSwapped = true; }
   }
   if (!cardActionUsed && player.cards.includes('shove')){
-    const shove = pickShoveMove(soloGraph, soloPlayers, pIdx);
+    const shove = pickShoveMove(soloGraph, soloPlayers, pIdx, soloRand);
     if (shove){
       shove.player.pos = shove.toKey;
       useActionCard(player, 'shove', soloDeck);

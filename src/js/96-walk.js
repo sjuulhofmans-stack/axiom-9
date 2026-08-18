@@ -463,7 +463,7 @@ async function runWalkSimulation(){
         }
       }
       if (!cardActionUsed && player.cards.includes('shove')){
-        const shove = pickShoveMove(graph, players, pIdx);
+        const shove = pickShoveMove(graph, players, pIdx, rand);
         if (shove){
           shove.player.pos = shove.toKey;
           useActionCard(player, 'shove', deck);

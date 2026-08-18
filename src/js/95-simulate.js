@@ -408,42 +408,42 @@ function pickShortCircuitTarget(players, selfIdx){
 
 // Duwstoot: onder de tegenstanders die nu aan mij grenzen, kies de zet die hun afstand tot
 // hún eigen doel het meest vergroot — en alleen toepassen als dat ook echt iets oplevert.
-// Duwstoot duwt een AANGRENZENDE tegenstander in één rechte lijn van je vandaan — tot
-// SHOVE_DISTANCE vakjes ver, eerder stoppend bij een muur of een andere speler. De richting
-// ligt dus vast (recht bij je vandaan); je kiest alleen wie je duwt.
-const SHOVE_DISTANCE = 5;
-// Waar komt `target` terecht als hij vanaf zijn huidige vakje van `self` weg schuift?
-// Geeft { key, steps } terug, of null als hij niet naast je staat of meteen klem zit.
-function shoveDestination(graph, players, self, target){
-  const neigh = graph.adjKey[self.pos], dirs = graph.adjDir[self.pos];
-  let dir = -1;
-  for (let j = 0; j < neigh.length; j++) if (neigh[j] === target.pos){ dir = dirs[j]; break; }
-  if (dir === -1) return null;
+// Duwstoot duwt een AANGRENZENDE tegenstander SHOVE_DISTANCE vakjes ver in een WILLEKEURIGE
+// richting — eerder stoppend bij een muur of een andere speler. Je kiest dus alleen wie je
+// duwt, niet waarheen: waar hij belandt is een gok.
+const SHOVE_DISTANCE = 4;
+// Waar komt `target` terecht? Geeft { key, steps, dir } terug, of null als hij in geen enkele
+// richting ook maar één stap kan zetten (helemaal klem).
+// Er wordt geloot onder de richtingen waarin hij DAADWERKELIJK kan bewegen: een richting
+// uitloten die meteen tegen een muur loopt zou de kaart geregeld helemaal niets laten doen,
+// en dat is zonde van een kaart die je met een voltooide opdracht hebt verdiend.
+function shoveDestination(graph, players, target, rand){
   const blocked = new Set();
   for (const p of players) if (!p.rank && p !== target) blocked.add(p.pos);
-  const line = walkStraightLine(graph, target.pos, dir, SHOVE_DISTANCE, blocked);
-  const steps = line.path.length - 1;
-  return steps === 0 ? null : { key: line.path[steps], steps };
-}
-function pickShoveMove(graph, players, selfIdx){
-  const self = players[selfIdx];
-  let best = null, bestGain = 0;
-  for (const nk of graph.adjKey[self.pos]){
-    const target = players.find(p => !p.rank && p.idx !== selfIdx && p.pos === nk);
-    if (!target) continue;
-    const dest = shoveDestination(graph, players, self, target);
-    if (!dest) continue;
-    // batch-spelers noemen hun opdrachtstapel `order`, het tabblad "stap voor stap" noemt
-    // 'm `deck` — deze functie wordt door allebei gebruikt, dus moet met beide overweg kunnen
-    const targetLabel = (target.order || target.deck)[target.nextIdx];
-    const stamp = simBfsDistances(graph, graph.questCells[targetLabel]);
-    const dBefore = simDistLookup(stamp, target.pos);
-    const dAfter = simDistLookup(stamp, dest.key);
-    if (dBefore < 0 || dAfter < 0) continue;
-    const gain = dAfter - dBefore;
-    if (gain > bestGain){ bestGain = gain; best = { player: target, toKey: dest.key }; }
+  const options = [];
+  for (let d = 0; d < 4; d++){
+    const line = walkStraightLine(graph, target.pos, d, SHOVE_DISTANCE, blocked);
+    const steps = line.path.length - 1;
+    if (steps > 0) options.push({ key: line.path[steps], steps, dir: d });
   }
-  return best;
+  if (!options.length) return null;
+  return options[Math.floor(rand() * options.length)];
+}
+// Welke aangrenzende tegenstander duw je? De richting is toch willekeurig, dus er valt niets
+// te optimaliseren aan de bestemming — een bot pakt daarom de koploper onder zijn buren
+// (bij gelijke stand eerlijk geloot, zelfde aanpak als pickShortCircuitTarget).
+function pickShoveMove(graph, players, selfIdx, rand){
+  const self = players[selfIdx];
+  let target = null, bestCount = -1, ties = 0;
+  for (const nk of graph.adjKey[self.pos]){
+    const p = players.find(q => !q.rank && q.idx !== selfIdx && q.pos === nk);
+    if (!p) continue;
+    if (p.completed > bestCount){ target = p; bestCount = p.completed; ties = 1; }
+    else if (p.completed === bestCount){ ties++; if (rand() < 1 / ties) target = p; }
+  }
+  if (!target) return null;
+  const dest = shoveDestination(graph, players, target, rand);
+  return dest ? { player: target, toKey: dest.key, steps: dest.steps } : null;
 }
 
 function simRollEnergy(rand){
@@ -785,7 +785,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         }
       }
       if (!cardActionUsed && player.cards.includes('shove')){
-        const shove = pickShoveMove(graph, players, pIdx);
+        const shove = pickShoveMove(graph, players, pIdx, rand);
         if (shove){
           shove.player.pos = shove.toKey;
           useActionCard(player, 'shove', deck, extra);

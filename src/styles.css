@@ -720,13 +720,17 @@
   }
   /* elke kaart draagt zijn eigen accentkleur via --card-tint (zie de action-card--*-klassen
      die de kaarten hergebruiken), zodat gloed en selectierand vanzelf bij het ontwerp passen */
+  /* De knop is de kaart PLUS een strook eronder voor de reden waarom hij niet speelbaar is.
+     Die strook staat bewust ONDER de kaart en niet eroverheen: de kaart vertelt zelf wat hij
+     doet, en dat wil je juist kunnen lezen op het moment dat je 'm nog niet mag spelen. */
   .card-pick{
     position:relative; padding:0; background:none; border:none; cursor:pointer;
-    border-radius:10px; line-height:0;
+    border-radius:10px; display:flex; flex-direction:column; align-items:stretch; gap:7px;
+    width:230px; max-width:42vw;
     transition:transform .13s, box-shadow .13s;
   }
   .card-pick img{
-    width:230px; max-width:42vw; aspect-ratio:63/88; object-fit:cover;
+    width:100%; aspect-ratio:63/88; object-fit:cover;
     border-radius:10px; display:block;
     box-shadow:0 4px 14px rgba(0,0,0,.55);
   }
@@ -738,15 +742,22 @@
     transform:translateY(-4px);
     box-shadow:0 0 0 3px var(--card-tint), 0 0 34px var(--card-glow), 0 10px 22px rgba(0,0,0,.5);
   }
-  /* Niet speelbaar: gedempt weergegeven met de reden eroverheen. Wél gewoon aanklikbaar —
-     afleggen kan namelijk met elke kaart in je hand, ook met eentje die je nu niet kunt spelen. */
-  .card-pick.is-locked img{opacity:.45; filter:grayscale(.45);}
-  /* net boven het categorievakje rechtsonder, zodat dat zichtbaar blijft */
+  /* Niet speelbaar: licht gedempt, zodat je nog goed kunt lezen wat de kaart doet. Wél gewoon
+     aanklikbaar — afleggen kan met elke kaart in je hand, ook met eentje die je nu niet mag
+     spelen. */
+  .card-pick.is-locked img{opacity:.72;}
   .card-pick-reason{
-    position:absolute; left:8px; right:8px; bottom:19%;
-    font-family:var(--font-mono); font-size:10px; line-height:1.3; text-align:center;
-    color:var(--text); background:rgba(4,7,10,.88); border:1px solid var(--line);
-    border-radius:4px; padding:5px 6px;
+    font-family:var(--font-mono); font-size:10px; line-height:1.35; text-align:center;
+    color:var(--text-dim); background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:4px; padding:5px 7px;
+  }
+  /* duidelijk vinkje op de gekozen kaart, zodat selectie niet te verwarren is met hover */
+  .card-pick.is-selected::after{
+    content:'✓'; position:absolute; top:9px; left:9px; z-index:2;
+    width:24px; height:24px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; color:var(--hull);
+    background:var(--card-tint); box-shadow:0 2px 8px rgba(0,0,0,.6);
   }
   .card-panel-actions{
     display:flex; gap:10px; justify-content:center; flex-wrap:wrap;

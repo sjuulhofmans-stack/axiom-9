@@ -727,13 +727,17 @@
   }
   /* elke kaart draagt zijn eigen accentkleur via --card-tint (zie de action-card--*-klassen
      die de kaarten hergebruiken), zodat gloed en selectierand vanzelf bij het ontwerp passen */
+  /* De knop is de kaart PLUS een strook eronder voor de reden waarom hij niet speelbaar is.
+     Die strook staat bewust ONDER de kaart en niet eroverheen: de kaart vertelt zelf wat hij
+     doet, en dat wil je juist kunnen lezen op het moment dat je 'm nog niet mag spelen. */
   .card-pick{
     position:relative; padding:0; background:none; border:none; cursor:pointer;
-    border-radius:10px; line-height:0;
+    border-radius:10px; display:flex; flex-direction:column; align-items:stretch; gap:7px;
+    width:230px; max-width:42vw;
     transition:transform .13s, box-shadow .13s;
   }
   .card-pick img{
-    width:230px; max-width:42vw; aspect-ratio:63/88; object-fit:cover;
+    width:100%; aspect-ratio:63/88; object-fit:cover;
     border-radius:10px; display:block;
     box-shadow:0 4px 14px rgba(0,0,0,.55);
   }
@@ -745,15 +749,22 @@
     transform:translateY(-4px);
     box-shadow:0 0 0 3px var(--card-tint), 0 0 34px var(--card-glow), 0 10px 22px rgba(0,0,0,.5);
   }
-  /* Niet speelbaar: gedempt weergegeven met de reden eroverheen. Wél gewoon aanklikbaar —
-     afleggen kan namelijk met elke kaart in je hand, ook met eentje die je nu niet kunt spelen. */
-  .card-pick.is-locked img{opacity:.45; filter:grayscale(.45);}
-  /* net boven het categorievakje rechtsonder, zodat dat zichtbaar blijft */
+  /* Niet speelbaar: licht gedempt, zodat je nog goed kunt lezen wat de kaart doet. Wél gewoon
+     aanklikbaar — afleggen kan met elke kaart in je hand, ook met eentje die je nu niet mag
+     spelen. */
+  .card-pick.is-locked img{opacity:.72;}
   .card-pick-reason{
-    position:absolute; left:8px; right:8px; bottom:19%;
-    font-family:var(--font-mono); font-size:10px; line-height:1.3; text-align:center;
-    color:var(--text); background:rgba(4,7,10,.88); border:1px solid var(--line);
-    border-radius:4px; padding:5px 6px;
+    font-family:var(--font-mono); font-size:10px; line-height:1.35; text-align:center;
+    color:var(--text-dim); background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:4px; padding:5px 7px;
+  }
+  /* duidelijk vinkje op de gekozen kaart, zodat selectie niet te verwarren is met hover */
+  .card-pick.is-selected::after{
+    content:'✓'; position:absolute; top:9px; left:9px; z-index:2;
+    width:24px; height:24px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; color:var(--hull);
+    background:var(--card-tint); box-shadow:0 2px 8px rgba(0,0,0,.6);
   }
   .card-panel-actions{
     display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
@@ -3674,42 +3685,42 @@ function pickShortCircuitTarget(players, selfIdx){
 
 // Duwstoot: onder de tegenstanders die nu aan mij grenzen, kies de zet die hun afstand tot
 // hún eigen doel het meest vergroot — en alleen toepassen als dat ook echt iets oplevert.
-// Duwstoot duwt een AANGRENZENDE tegenstander in één rechte lijn van je vandaan — tot
-// SHOVE_DISTANCE vakjes ver, eerder stoppend bij een muur of een andere speler. De richting
-// ligt dus vast (recht bij je vandaan); je kiest alleen wie je duwt.
-const SHOVE_DISTANCE = 5;
-// Waar komt `target` terecht als hij vanaf zijn huidige vakje van `self` weg schuift?
-// Geeft { key, steps } terug, of null als hij niet naast je staat of meteen klem zit.
-function shoveDestination(graph, players, self, target){
-  const neigh = graph.adjKey[self.pos], dirs = graph.adjDir[self.pos];
-  let dir = -1;
-  for (let j = 0; j < neigh.length; j++) if (neigh[j] === target.pos){ dir = dirs[j]; break; }
-  if (dir === -1) return null;
+// Duwstoot duwt een AANGRENZENDE tegenstander SHOVE_DISTANCE vakjes ver in een WILLEKEURIGE
+// richting — eerder stoppend bij een muur of een andere speler. Je kiest dus alleen wie je
+// duwt, niet waarheen: waar hij belandt is een gok.
+const SHOVE_DISTANCE = 4;
+// Waar komt `target` terecht? Geeft { key, steps, dir } terug, of null als hij in geen enkele
+// richting ook maar één stap kan zetten (helemaal klem).
+// Er wordt geloot onder de richtingen waarin hij DAADWERKELIJK kan bewegen: een richting
+// uitloten die meteen tegen een muur loopt zou de kaart geregeld helemaal niets laten doen,
+// en dat is zonde van een kaart die je met een voltooide opdracht hebt verdiend.
+function shoveDestination(graph, players, target, rand){
   const blocked = new Set();
   for (const p of players) if (!p.rank && p !== target) blocked.add(p.pos);
-  const line = walkStraightLine(graph, target.pos, dir, SHOVE_DISTANCE, blocked);
-  const steps = line.path.length - 1;
-  return steps === 0 ? null : { key: line.path[steps], steps };
-}
-function pickShoveMove(graph, players, selfIdx){
-  const self = players[selfIdx];
-  let best = null, bestGain = 0;
-  for (const nk of graph.adjKey[self.pos]){
-    const target = players.find(p => !p.rank && p.idx !== selfIdx && p.pos === nk);
-    if (!target) continue;
-    const dest = shoveDestination(graph, players, self, target);
-    if (!dest) continue;
-    // batch-spelers noemen hun opdrachtstapel `order`, het tabblad "stap voor stap" noemt
-    // 'm `deck` — deze functie wordt door allebei gebruikt, dus moet met beide overweg kunnen
-    const targetLabel = (target.order || target.deck)[target.nextIdx];
-    const stamp = simBfsDistances(graph, graph.questCells[targetLabel]);
-    const dBefore = simDistLookup(stamp, target.pos);
-    const dAfter = simDistLookup(stamp, dest.key);
-    if (dBefore < 0 || dAfter < 0) continue;
-    const gain = dAfter - dBefore;
-    if (gain > bestGain){ bestGain = gain; best = { player: target, toKey: dest.key }; }
+  const options = [];
+  for (let d = 0; d < 4; d++){
+    const line = walkStraightLine(graph, target.pos, d, SHOVE_DISTANCE, blocked);
+    const steps = line.path.length - 1;
+    if (steps > 0) options.push({ key: line.path[steps], steps, dir: d });
   }
-  return best;
+  if (!options.length) return null;
+  return options[Math.floor(rand() * options.length)];
+}
+// Welke aangrenzende tegenstander duw je? De richting is toch willekeurig, dus er valt niets
+// te optimaliseren aan de bestemming — een bot pakt daarom de koploper onder zijn buren
+// (bij gelijke stand eerlijk geloot, zelfde aanpak als pickShortCircuitTarget).
+function pickShoveMove(graph, players, selfIdx, rand){
+  const self = players[selfIdx];
+  let target = null, bestCount = -1, ties = 0;
+  for (const nk of graph.adjKey[self.pos]){
+    const p = players.find(q => !q.rank && q.idx !== selfIdx && q.pos === nk);
+    if (!p) continue;
+    if (p.completed > bestCount){ target = p; bestCount = p.completed; ties = 1; }
+    else if (p.completed === bestCount){ ties++; if (rand() < 1 / ties) target = p; }
+  }
+  if (!target) return null;
+  const dest = shoveDestination(graph, players, target, rand);
+  return dest ? { player: target, toKey: dest.key, steps: dest.steps } : null;
 }
 
 function simRollEnergy(rand){
@@ -4051,7 +4062,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
         }
       }
       if (!cardActionUsed && player.cards.includes('shove')){
-        const shove = pickShoveMove(graph, players, pIdx);
+        const shove = pickShoveMove(graph, players, pIdx, rand);
         if (shove){
           shove.player.pos = shove.toKey;
           useActionCard(player, 'shove', deck, extra);
@@ -5146,7 +5157,7 @@ async function runWalkSimulation(){
         }
       }
       if (!cardActionUsed && player.cards.includes('shove')){
-        const shove = pickShoveMove(graph, players, pIdx);
+        const shove = pickShoveMove(graph, players, pIdx, rand);
         if (shove){
           shove.player.pos = shove.toKey;
           useActionCard(player, 'shove', deck);
@@ -5843,13 +5854,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas ----------
-// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen)
+// wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen;
+// de richting waarin hij vliegt wordt daarna geloot, zie shoveDestination)
 // alleen tegenstanders die naast je staan én die daadwerkelijk ruimte hebben om weg te
 // schuiven — iemand die meteen klem zit aanbieden zou je de kaart voor niets laten verspelen
 function soloShoveTargets(){
   const me = solo();
   const neigh = new Set(soloGraph.adjKey[me.pos]);
-  return soloOthers().filter(p => neigh.has(p.pos) && shoveDestination(soloGraph, soloPlayers, me, p));
+  return soloOthers().filter(p => neigh.has(p.pos) && shoveDestination(soloGraph, soloPlayers, p, soloRand));
 }
 function soloEnterTargetPicker(cardId){
   const targets = cardId === 'shove' ? soloShoveTargets() : soloOthers();
@@ -5898,15 +5910,16 @@ function soloResolveTargetCard(cardId, targetIdx){
     walkLog(`Je speelt <b>Prioriteitspas</b>: ${victim.name}'s volgende opdracht is <b>${label} — ${QUEST_NAMES[label] || ''}</b>.`, null, p);
     soloAfterCardAction();
   } else if (cardId === 'shove'){
-    // recht bij je vandaan, tot SHOVE_DISTANCE vakjes — zelfde berekening als de bot-AI
-    const dest = shoveDestination(soloGraph, soloPlayers, p, victim);
+    // richting wordt geloot, niet gekozen — zelfde berekening als de bot-AI
+    const dest = shoveDestination(soloGraph, soloPlayers, victim, soloRand);
     useActionCard(p, 'shove', soloDeck);
     soloUsedCardId = 'shove';
     if (dest){
       victim.pos = dest.key;
-      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name} en duwt die ${dest.steps} vakje${dest.steps === 1 ? '' : 's'} recht bij je vandaan.`, null, p);
+      const kompas = ['noord', 'oost', 'zuid', 'west'][dest.dir];
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}: die vliegt ${dest.steps} vakje${dest.steps === 1 ? '' : 's'} naar het ${kompas}.`, null, p);
     } else {
-      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}, maar die zit meteen klem — er is geen ruimte om te duwen.`, null, p);
+      walkLog(`Je speelt <b>Duwstoot</b> op ${victim.name}, maar die zit helemaal klem — er is geen kant op te duwen.`, null, p);
     }
     paintWalkPawns(soloGraph, soloPlayers, p.idx);
     soloAfterCardAction();
@@ -6452,7 +6465,7 @@ function soloResolveBotTurn(player){
     if (swapped !== null){ targetLabel = swapped; useActionCard(player, 'recal', soloDeck); cardActionUsed = true; targetSwapped = true; }
   }
   if (!cardActionUsed && player.cards.includes('shove')){
-    const shove = pickShoveMove(soloGraph, soloPlayers, pIdx);
+    const shove = pickShoveMove(soloGraph, soloPlayers, pIdx, soloRand);
     if (shove){
       shove.player.pos = shove.toKey;
       useActionCard(player, 'shove', soloDeck);
