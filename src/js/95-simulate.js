@@ -236,7 +236,7 @@ const ACTION_CARDS = {
   recal:     { name: 'Herkalibratie',         hint: 'gratis wissel met de volgende opdracht' },
   shove:     { name: 'Duwstoot',              hint: 'duw een naastgelegen tegenstander weg' },
   boostcell: { name: 'Stuwlading',            hint: 'gratis derde loopsteen' },
-  condenser: { name: 'Condensator',           hint: 'je energiesteen telt deze beurt dubbel' },
+  condenser: { name: 'Condensator',           hint: 'je energiesteen telt in je volgende beurt dubbel' },
   reroll:    { name: 'Koerscorrectie',        hint: 'gooi je worp opnieuw' },
   scan:      { name: 'Prioriteitspas',        hint: 'bekijk de volgende opdracht van een tegenstander' },
 };
@@ -408,28 +408,40 @@ function pickShortCircuitTarget(players, selfIdx){
 
 // Duwstoot: onder de tegenstanders die nu aan mij grenzen, kies de zet die hun afstand tot
 // hún eigen doel het meest vergroot — en alleen toepassen als dat ook echt iets oplevert.
+// Duwstoot duwt een AANGRENZENDE tegenstander in één rechte lijn van je vandaan — tot
+// SHOVE_DISTANCE vakjes ver, eerder stoppend bij een muur of een andere speler. De richting
+// ligt dus vast (recht bij je vandaan); je kiest alleen wie je duwt.
+const SHOVE_DISTANCE = 5;
+// Waar komt `target` terecht als hij vanaf zijn huidige vakje van `self` weg schuift?
+// Geeft { key, steps } terug, of null als hij niet naast je staat of meteen klem zit.
+function shoveDestination(graph, players, self, target){
+  const neigh = graph.adjKey[self.pos], dirs = graph.adjDir[self.pos];
+  let dir = -1;
+  for (let j = 0; j < neigh.length; j++) if (neigh[j] === target.pos){ dir = dirs[j]; break; }
+  if (dir === -1) return null;
+  const blocked = new Set();
+  for (const p of players) if (!p.rank && p !== target) blocked.add(p.pos);
+  const line = walkStraightLine(graph, target.pos, dir, SHOVE_DISTANCE, blocked);
+  const steps = line.path.length - 1;
+  return steps === 0 ? null : { key: line.path[steps], steps };
+}
 function pickShoveMove(graph, players, selfIdx){
   const self = players[selfIdx];
-  const neigh = graph.adjKey[self.pos];
-  const occupiedNow = new Set(players.filter(p => !p.rank).map(p => p.pos));
   let best = null, bestGain = 0;
-  for (const nk of neigh){
+  for (const nk of graph.adjKey[self.pos]){
     const target = players.find(p => !p.rank && p.idx !== selfIdx && p.pos === nk);
     if (!target) continue;
+    const dest = shoveDestination(graph, players, self, target);
+    if (!dest) continue;
     // batch-spelers noemen hun opdrachtstapel `order`, het tabblad "stap voor stap" noemt
     // 'm `deck` — deze functie wordt door allebei gebruikt, dus moet met beide overweg kunnen
     const targetLabel = (target.order || target.deck)[target.nextIdx];
-    const targetKeyForThem = graph.questCells[targetLabel];
-    const stamp = simBfsDistances(graph, targetKeyForThem);
+    const stamp = simBfsDistances(graph, graph.questCells[targetLabel]);
     const dBefore = simDistLookup(stamp, target.pos);
-    const theirNeigh = graph.adjKey[target.pos];
-    for (const nk2 of theirNeigh){
-      if (occupiedNow.has(nk2)) continue;         // moet naar een leeg vakje
-      const dAfter = simDistLookup(stamp, nk2);
-      if (dAfter < 0) continue;
-      const gain = dAfter - dBefore;
-      if (gain > bestGain){ bestGain = gain; best = { player: target, toKey: nk2 }; }
-    }
+    const dAfter = simDistLookup(stamp, dest.key);
+    if (dBefore < 0 || dAfter < 0) continue;
+    const gain = dAfter - dBefore;
+    if (gain > bestGain){ bestGain = gain; best = { player: target, toKey: dest.key }; }
   }
   return best;
 }
@@ -677,6 +689,7 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
     actionUses: 0,
     cards: [],             // beloningskaarten in de hand (max ACTION_CARD_HAND_MAX)
     skipEnergyRoll: false, // getroffen door Kortsluiting: mist de eerstvolgende energiesteen
+    condenserPending: false, // Condensator gespeeld: de VOLGENDE energiesteen telt dubbel
     rank: 0,       // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     finishTurn: 0, // beurtnummer waarop deze speler binnenkwam
   }));
@@ -718,21 +731,28 @@ function simulateOneGame(graph, rand, heatmap, questStats, extra){
       } else {
         energyRoll = simRollEnergy(rand);
         energyGain = simGainEnergy(player, energyRoll);
+        // Condensator die vorige beurt gespeeld is: deze steen telt dubbel, dus nog eens
+        // dezelfde worp erbij (netjes tegen het plafond aan via simGainEnergy). Rolt de speler
+        // deze beurt helemaal niet (Kortsluiting), dan blijft de Condensator staan voor de
+        // eerstvolgende beurt waarin hij wél gooit — er valt nu immers niets te verdubbelen.
+        if (player.condenserPending){
+          player.condenserPending = false;
+          const bonus = simGainEnergy(player, energyRoll);
+          energyGain.gained += bonus.gained;
+          energyGain.wasted += bonus.wasted;
+          extra.energyRolled += energyRoll;
+        }
       }
       extra.energyRolled += energyRoll;
       extra.energyWasted += energyGain.wasted;
       extra.energyLevels[player.energy]++;
 
-      // 1b. energie-kaarten horen bij de worp die net gevallen is: Condensator verdubbelt 'm,
-      //     Kortsluiting raakt de leider, Noodrantsoen vult aan.
-      // Condensator wordt pas gespeeld NA de energiesteen, dus met kennis van de uitkomst —
-      // verdubbelen betekent simpelweg nog eens `energyRoll` erbij, netjes tegen het plafond
-      // aan (simGainEnergy). Alleen de moeite waard als er ook echt iets bij kan: staat de
-      // speler al (bijna) vol, dan bewaart hij de kaart.
-      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
-        const bonus = simGainEnergy(player, energyRoll);
-        extra.energyRolled += energyRoll;
-        extra.energyWasted += bonus.wasted;
+      // 1b. kaarten die bij de energiefase horen: Kortsluiting raakt de leider, Noodrantsoen
+      //     vult aan, en de Condensator wordt klaargezet voor je VOLGENDE beurt.
+      // Die laatste is dus een investering: je weet nog niet wat je dan gooit. Een bot zet 'm
+      // in zodra er ruimte is om te groeien en er nog geen andere klaarstaat.
+      if (!cardActionUsed && player.cards.includes('condenser') && !player.condenserPending && player.energy < ENERGY_MAX){
+        player.condenserPending = true;
         useActionCard(player, 'condenser', deck, extra);
         cardActionUsed = true;
       }

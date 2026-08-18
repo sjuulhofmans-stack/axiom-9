@@ -362,6 +362,7 @@ async function runWalkSimulation(){
     actionUses: 0,
     cards: [],               // beloningskaarten in de hand (max ACTION_CARD_HAND_MAX)
     skipEnergyRoll: false,   // getroffen door Kortsluiting: mist de eerstvolgende energiesteen
+    condenserPending: false, // Condensator gespeeld: de VOLGENDE energiesteen telt dubbel
     rank: 0,                // 0 = nog aan het spelen; 1..4 = binnengekomen op die plaats
     doneCells: [],          // opdrachtvakjes die DEZE speler al gehad heeft
   }));
@@ -416,11 +417,19 @@ async function runWalkSimulation(){
       } else {
         energyRoll = simRollEnergy(rand);
         energyGain = simGainEnergy(player, energyRoll);
+        // vorige beurt een Condensator gespeeld: deze steen telt dubbel (zie simulateOneGame)
+        if (player.condenserPending){
+          player.condenserPending = false;
+          const bonus = simGainEnergy(player, energyRoll);
+          energyGain.gained += bonus.gained;
+          energyGain.wasted += bonus.wasted;
+          walkLog(`${player.name} verzilvert de <b>Condensator</b>: energiesteen ${energyRoll} telt dubbel.`, null, player);
+        }
       }
 
-      // fase 1: energie-kaarten horen bij de worp die net gevallen is
-      if (!cardActionUsed && player.cards.includes('condenser') && energyRoll > 0 && player.energy < ENERGY_MAX){
-        simGainEnergy(player, energyRoll);   // verdubbelen = nog eens dezelfde worp erbij
+      // fase 1: kaarten rond de energiefase; de Condensator wordt klaargezet voor de VOLGENDE beurt
+      if (!cardActionUsed && player.cards.includes('condenser') && !player.condenserPending && player.energy < ENERGY_MAX){
+        player.condenserPending = true;
         useActionCard(player, 'condenser', deck);
         cardActionUsed = true; usedCardId = 'condenser';
       }
