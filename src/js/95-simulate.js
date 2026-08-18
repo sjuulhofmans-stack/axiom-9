@@ -1260,7 +1260,7 @@ function computeQuestDistances(graph){
 // de 5 tegels met het minste verkeer (genormaliseerd per vakje, zodat grote en kleine tegels
 // eerlijk vergeleken worden) — dit zijn de "lussen waar geen enkele speler komt" uit de heatmap,
 // nu met naam, positie en hoe ver ze van een opdracht liggen.
-function renderColdZones(graph, heatmap){
+function coldZoneRows(graph, heatmap){
   const { H, W } = graph;
   const questDist = computeQuestDistances(graph);
   const visitsPerSlot = new Array(20).fill(0);
@@ -1289,9 +1289,14 @@ function renderColdZones(graph, heatmap){
     });
   }
   rows.sort((a, b) => a.avgPerCell - b.avgPerCell);
+  return rows;
+}
+
+function renderColdZones(graph, heatmap){
+  const rows = coldZoneRows(graph, heatmap);
   const tableRows = rows.slice(0, 5).map(r => {
     const name = ROOM_NAMES[r.tid] || ('Gang ' + r.tid);
-    return `<tr><td>${letterForSlot(r.slotIdx)} — ${name}</td><td class="num">${r.share.toFixed(1)}%</td><td class="num">${r.questDist}</td></tr>`;
+    return `<tr><td>${letterForSlot(r.slotIdx)} — ${name}</td><td class="num">${nl(r.share, 1)}%</td><td class="num">${r.questDist}</td></tr>`;
   }).join('');
   return `<table class="sim-table"><thead><tr><th>Tegel</th><th>Aandeel verkeer</th><th>Verste vakje tot opdracht</th></tr></thead><tbody>${tableRows}</tbody></table>`;
 }
@@ -1346,16 +1351,16 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const pct = played ? (wins / played * 100) : 0;
     const moe = simMarginOfError(wins, played);
     const avgTurns = wins ? (startTurnsSum[lbl] / wins) : null;
-    return `<tr><td>${lbl}</td><td class="num">${pct.toFixed(1)}% ± ${moe.toFixed(1)}</td><td class="num">${avgTurns !== null ? avgTurns.toFixed(1) : '—'}</td></tr>`;
+    return `<tr><td>${lbl}</td><td class="num">${nl(pct, 1)}% ± ${nl(moe, 1)}</td><td class="num">${avgTurns !== null ? nl(avgTurns, 1) : '—'}</td></tr>`;
   }).join('');
   const seatRows = seatWins.map((w, i) => {
     const pct = played ? (w / played * 100) : 0;
-    return `<tr><td>${i + 1}e aan zet</td><td class="num">${pct.toFixed(1)}%</td></tr>`;
+    return `<tr><td>${i + 1}e aan zet</td><td class="num">${nl(pct, 1)}%</td></tr>`;
   }).join('');
   const questRows = SIM_QUEST_LABELS.map(lbl => {
     const qs = questStats[lbl];
     const avg = qs.count ? (qs.turns / qs.count) : null;
-    return `<tr><td>${lbl} — ${QUEST_NAMES[lbl]}</td><td class="num">${avg !== null ? avg.toFixed(1) : '—'}</td><td class="num">${qs.count}</td></tr>`;
+    return `<tr><td>${lbl} — ${QUEST_NAMES[lbl]}</td><td class="num">${avg !== null ? nl(avg, 1) : '—'}</td><td class="num">${qs.count}</td></tr>`;
   }).join('');
 
   const sorted = gameLengths.slice().sort((a, b) => a - b);
@@ -1373,9 +1378,34 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   if (stuckCount) html += ` — <span style="color:var(--danger)">${stuckCount} vastgelopen</span> (afgekapt na ${SIM_MAX_TURNS} beurten, niet meegeteld in de percentages)`;
   html += `.</p>`;
 
+  // De twaalf secties hieronder zijn het bewijsmateriaal; deze vier vakjes beantwoorden de
+  // vraag waar je de simulatie eigenlijk voor draait — is dit bord goed genoeg om te spelen?
+  const coldest = coldZoneRows(graph, heatmap)[0];
+  const verdictItem = (state, label, value, sub) =>
+    `<div class="sim-verdict-item ${state}"><span class="lbl">${label}</span><span class="val">${value}</span><span class="sub">${sub}</span></div>`;
+  html += `<div class="sim-verdict">` +
+    verdictItem(played === 0 ? 'warn' : withinNoise ? 'ok' : 'bad',
+      'Eerlijk?',
+      played === 0 ? 'geen data' : withinNoise ? 'ja' : 'nee',
+      played === 0 ? 'geen enkel potje uitgespeeld'
+        : `startposities lopen ${nl(spread, 1)} procentpunt uiteen, foutmarge ±${nl(avgMoe, 1)}`) +
+    verdictItem(stuckCount === 0 ? 'ok' : 'bad',
+      'Vastgelopen',
+      stuckCount === 0 ? 'geen' : `${stuckCount}×`,
+      stuckCount === 0 ? `alle ${played} potjes speelden uit` : `afgekapt na ${SIM_MAX_TURNS} beurten`) +
+    verdictItem(coldest && coldest.share > 0 ? 'ok' : 'bad',
+      'Dode tegels',
+      coldest && coldest.share > 0 ? 'geen' : 'ja',
+      coldest
+        ? `stilste tegel: ${letterForSlot(coldest.slotIdx)} — ${ROOM_NAMES[coldest.tid] || ('Gang ' + coldest.tid)} met ${nl(coldest.share, 1)}% van het verkeer`
+        : '—') +
+    verdictItem('ok', 'Speelduur', `${Math.round(avg)} beurten`,
+      `mediaan ${median} · min ${min} · max ${max} (alle spelers samen)`) +
+    `</div>`;
+
   html += `<h3 class="sim-subhead">Eerlijkheid per startpositie</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>Winst% (±95%-marge)</th><th>Gem. beurten tot winst</th></tr></thead><tbody>${rows}</tbody></table>`;
-  html += `<p class="hint">Balans: ${verdict} (spreiding <b>${spread.toFixed(1)}</b> procentpunt, gem. foutmarge ±<b>${avgMoe.toFixed(1)}</b>).</p>`;
+  html += `<p class="hint">Balans: ${verdict} (spreiding <b>${nl(spread, 1)}</b> procentpunt, gem. foutmarge ±<b>${nl(avgMoe, 1)}</b>).</p>`;
 
   // Nu er wordt doorgespeeld tot de nummer 3 binnen is, ligt van elk potje de hele
   // klassering vast. Alleen naar winst kijken verbergt een startpositie die zelden wint
@@ -1383,9 +1413,9 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const rankRows = SIM_START_LABELS.map(lbl => {
     const counts = startRanks[lbl];
     const total = counts.reduce((a, b) => a + b, 0);
-    const cells = counts.map(c => `<td class="num">${total ? (c / total * 100).toFixed(1) : '0.0'}%</td>`).join('');
+    const cells = counts.map(c => `<td class="num">${total ? nl((c / total * 100), 1) : '0,0'}%</td>`).join('');
     const avgRank = total ? counts.reduce((s, c, i) => s + c * (i + 1), 0) / total : 0;
-    return `<tr><td>${lbl}</td>${cells}<td class="num">${avgRank.toFixed(2)}</td></tr>`;
+    return `<tr><td>${lbl}</td>${cells}<td class="num">${nl(avgRank, 2)}</td></tr>`;
   }).join('');
   html += `<h3 class="sim-subhead">Eindklassering per startpositie</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>1e</th><th>2e</th><th>3e</th><th>4e</th><th>Gem. plaats</th></tr></thead><tbody>${rankRows}</tbody></table>`;
@@ -1399,11 +1429,11 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<p class="hint">Hoe hoger het gemiddelde, hoe afgelegener dat opdrachtvakje ligt vanaf waar spelers 'm meestal moeten benaderen.</p>`;
 
   html += `<h3 class="sim-subhead">Speelduur</h3>`;
-  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${avg.toFixed(1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
+  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${nl(avg, 1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
   html += renderHistogram(gameLengths);
 
   html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
-  html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${avgGap.toFixed(1)}</b> opdracht(en) achter — <b>${nailBiterPct.toFixed(0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${blockedPct.toFixed(1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
+  html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${nl(avgGap, 1)}</b> opdracht(en) achter — <b>${nl(nailBiterPct, 0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${nl(blockedPct, 1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
 
   // ---------- energie ----------
   // Zolang er niets uitgegeven wordt, is dit een nulmeting: hoeveel komt er binnen, hoe snel
@@ -1422,13 +1452,13 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const affordRows = [];
   for (let lvl = ENERGY_MAX; lvl >= 1; lvl--){
     atLeast += extra.energyLevels[lvl];
-    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? (atLeast / energyTurns * 100).toFixed(1) : '0.0'}%</td></tr>`);
+    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? nl((atLeast / energyTurns * 100), 1) : '0,0'}%</td></tr>`);
   }
   const maxLevel = Math.max(...extra.energyLevels);
   const energyBars = Array.from(extra.energyLevels, (c, lvl) => {
     const h = maxLevel ? Math.round((c / maxLevel) * 100) : 0;
     const tick = (lvl % 2 === 0) ? `<span class="sim-hist-tick">${lvl}</span>` : '';
-    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? (c / energyTurns * 100).toFixed(1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
+    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? nl((c / energyTurns * 100), 1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
   }).join('');
 
   // Welke actie wint? Elk potje heeft precies één speler per strategie, willekeurig over de
@@ -1443,10 +1473,10 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const usesPerGame = s.games ? (s.uses / s.games) : 0;
     const cost = act.cost ? `${act.cost} energie` : '—';
     return `<tr><td>${act.name} <span class="sub">(${cost})</span></td>` +
-      `<td class="num">${winPct.toFixed(1)}% ± ${moe.toFixed(1)}</td>` +
-      `<td class="num">${top2Pct.toFixed(1)}%</td>` +
-      `<td class="num">${avgRank.toFixed(2)}</td>` +
-      `<td class="num">${usesPerGame.toFixed(1)}</td></tr>`;
+      `<td class="num">${nl(winPct, 1)}% ± ${nl(moe, 1)}</td>` +
+      `<td class="num">${nl(top2Pct, 1)}%</td>` +
+      `<td class="num">${nl(avgRank, 2)}</td>` +
+      `<td class="num">${nl(usesPerGame, 1)}</td></tr>`;
   }).join('');
   html += `<h3 class="sim-subhead">Welke energie-actie wint?</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Strategie</th><th>Winst% (±95%-marge)</th><th>Top 2</th><th>Gem. plaats</th><th>Keer ingezet</th></tr></thead><tbody>${stratRows}</tbody></table>`;
@@ -1457,19 +1487,19 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const act = ACTION_CARDS[id];
     const uses = extra.cardUses[id];
     const perGame = played ? (uses / played) : 0;
-    return `<tr><td>${act.name} <span class="sub">${act.hint}</span></td><td class="num">${perGame.toFixed(2)}</td></tr>`;
+    return `<tr><td>${act.name} <span class="sub">${act.hint}</span></td><td class="num">${nl(perGame, 2)}</td></tr>`;
   }).join('');
   const drawsPerGame = played ? (extra.cardDraws / played) : 0;
   const handFullPct = extra.cardDraws + extra.handFullOnBank
     ? (extra.handFullOnBank / (extra.cardDraws + extra.handFullOnBank) * 100) : 0;
   html += `<h3 class="sim-subhead">Beloningskaarten</h3>`;
-  html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${drawsPerGame.toFixed(1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${handFullPct.toFixed(1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
+  html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${nl(drawsPerGame, 1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${nl(handFullPct, 1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
   html += `<table class="sim-table"><thead><tr><th>Kaart</th><th>Keer gebruikt per potje</th></tr></thead><tbody>${cardRows}</tbody></table>`;
   html += `<p class="hint">Prioriteitspas heeft in deze simulatie geen mechanisch effect (het is pure informatie voor een mens aan tafel) en wordt daarom nooit ingezet — 0,00 hierboven is dus verwacht, niet een bug. Een getrokken Prioriteitspas bezet wel een handslot tot het potje afloopt.</p>`;
 
   html += `<h3 class="sim-subhead">Energie</h3>`;
-  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
-  html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
+  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${nl(energyPerTurn, 2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
+  html += `<p class="hint">Een speler heeft gemiddeld <b>${nl(energyAvg, 1)}</b> energie op zak, staat <b>${nl(energyAtCap, 1)}%</b> van zijn beurten op het plafond, en <b>${nl(energyWastePct, 1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
   html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
   html += `<div class="sim-hist">${energyBars}</div>`;
   html += `<table class="sim-table"><thead><tr><th>Kosten van een actie</th><th>Aandeel beurten waarin je 'm kunt betalen</th></tr></thead><tbody>${affordRows.join('')}</tbody></table>`;
@@ -1481,7 +1511,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += renderColdZones(graph, heatmap);
 
   simResultsEl.innerHTML = html;
-  simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${elapsedMs.toFixed(0)} ms</span>`;
+  simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${formatSimSeconds(elapsedMs)}</span>`;
 }
 
 // richttijd per brok werk vóór we de klok checken (ononderbroken doorrekenen, dan pas
@@ -1494,17 +1524,17 @@ const SIM_CHUNK_BUDGET_MS = 30;
 
 function formatSimSeconds(ms){
   const s = ms / 1000;
-  return s < 10 ? `${s.toFixed(1)}s` : `${Math.round(s)}s`;
+  return s < 10 ? `${nl(s, 1)} seconden` : `${Math.round(s)} seconden`;
 }
 
 function updateSimProgress(done, n, elapsedMs){
   if (!simProgressEl) return;
   const pct = n ? Math.min(100, (done / n) * 100) : 0;
-  simProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  simProgressFillEl.style.width = `${pct.toFixed(1)}%`; // CSS: hier moet de punt blijven staan
   const perGame = done ? elapsedMs / done : 0;
   const etaMs = perGame * (n - done);
   simProgressTextEl.innerHTML =
-    `<span><b>${done}</b> / ${n} potjes (${pct.toFixed(0)}%)</span>` +
+    `<span><b>${done}</b> / ${n} potjes (${nl(pct, 0)}%)</span>` +
     `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${done > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
 }
 

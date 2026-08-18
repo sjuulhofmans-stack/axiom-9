@@ -95,6 +95,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
 | iets aan het tabblad "Kaarten" (vitrine)     | `98-cards.js`, opmaak in `styles.css` onder "tabblad Kaarten" |
+| een getal in beeld brengen                   | `nl(x, digits)` in `10-rules.js` — Nederlandse komma. NIET voor CSS-waarden (`style.width`), daar moet de punt blijven |
 | het icoon of de kleur van een opdrachtkaart  | `98-cards.js` (`QUEST_CARD_ART`) |
 
 ## Spelregels die in de code zitten
@@ -185,10 +186,12 @@ Check minimaal:
 7. Onderaan de simulatie: tabel "koudste tegels" — geen enkele tegel mag op
    0,0% verkeer staan. Gebeurt dat toch, dan is er een dode lus ontstaan en
    klopt `deadTileCount` in `70-generator.js` niet meer.
-8. Tabblad "Kaarten" → 9 opdrachtkaarten + 18 actiekaarten, elk met een plaatje of een
+8. Simulatie-uitslag begint met vier conclusievakjes (Eerlijk? / Vastgelopen / Dode tegels /
+   Speelduur). Alle getallen in beeld gebruiken een Nederlandse komma.
+9. Tabblad "Kaarten" → 9 opdrachtkaarten + 18 actiekaarten, elk met een plaatje of een
    nagetekende kaart; klikken vergroot en Escape/klik sluit. Op 375px breed passen er
    twee kaarten naast elkaar en mag de pagina niet horizontaal schuiven.
-9. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
+10. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
    echt stilzetten (geen achtergrondlus die doorloopt).
@@ -212,6 +215,12 @@ Check minimaal:
   optie: dan breekt "Herprioritering" middenin het woord.
 - **`.sim-table th:not(:first-child)` is specifieker dan `.quest-table th`.** De
   opdrachtentabel had daardoor rechts uitgelijnde koppen boven links uitgelijnde cellen.
+- **`body` heeft `overflow-x:hidden`.** Een tabel die breder is dan het scherm wordt daardoor
+  niet scrollbaar maar simpelweg AFGEKAPT — op 375px waren de rechterkolommen van twee
+  simulatietabellen onbereikbaar. Vandaar `.sim-table{display:block; overflow-x:auto}` in de
+  880px-mediaquery: dan schuift de tabel binnen zijn eigen kader.
+- **De kamernaam op het bord hoort bovenaan zijn tegel.** Stond hij onderaan, dan viel hij pal
+  naast de positieletter van de tegel *eronder* en las je hem bij de verkeerde tegel.
 
 ## Nog te doen
 

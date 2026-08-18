@@ -218,6 +218,13 @@
   .sim-progress-text b{color:var(--amber); font-variant-numeric:tabular-nums;}
 
   .sim-table{width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:12px; margin:10px 0;}
+  /* Op een telefoon zijn de tabellen met 5-6 kolommen breder dan het scherm. Omdat `body`
+     horizontaal scrollen blokkeert werden die kolommen gewoon AFGEKAPT — de rechterkant was
+     onbereikbaar. Als `display:block` met eigen overflow schuift de tabel binnen zijn eigen
+     kader, zonder de pagina mee te trekken. */
+  @media (max-width: 880px){
+    .sim-table{display:block; overflow-x:auto; white-space:nowrap; scrollbar-gutter:auto;}
+  }
   .sim-table th, .sim-table td{padding:6px 8px; text-align:left; border-bottom:1px solid var(--line-dim);}
   .sim-table th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:.08em;}
   .sim-table td.num, .sim-table th:not(:first-child){text-align:right;}
@@ -228,6 +235,29 @@
   .sim-table.quest-table th{text-align:left;}
   /* op 375px is de tabel 2px breder dan zijn kader; laat hem daar liever scrollen dan uitsteken */
   #questRegister{overflow-x:auto;}
+
+  /* korte conclusie bovenaan de uitslag: de twaalf secties eronder zijn het bewijsmateriaal,
+     maar de vraag "is dit bord goed?" moet je zonder scrollen kunnen beantwoorden */
+  .sim-verdict{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;
+    margin:14px 0 6px;
+  }
+  .sim-verdict-item{
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--vc, var(--line));
+    border-radius:5px; padding:9px 11px; display:flex; flex-direction:column; gap:3px;
+  }
+  .sim-verdict-item .lbl{
+    font-family:var(--font-mono); font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .sim-verdict-item .val{
+    font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--vc, var(--text));
+    letter-spacing:.02em; line-height:1.15;
+  }
+  .sim-verdict-item .sub{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.35;}
+  .sim-verdict-item.ok{--vc:var(--start);}
+  .sim-verdict-item.warn{--vc:var(--amber);}
+  .sim-verdict-item.bad{--vc:var(--danger);}
 
   .sim-subhead{
     font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -1064,19 +1094,27 @@
   .letter-badge.inner{background:var(--start); color:#04150b;}
   #board.hide-letters .letter-badge{display:none;}
 
+  /* De naam stond onderaan zijn tegel en dus pal naast de positieletter van de tegel
+     erónder — "Motor 1" leek daardoor bij badge I te horen terwijl hij bij D hoort. Nu staat
+     hij bovenaan, op dezelfde regel als zijn eigen letterbadge, met genoeg linkermarge om
+     die badge (18px) vrij te laten. */
   .room-label{
     position:absolute; left:0; z-index:3;
-    top:calc(var(--cell) * 5 + 5px);
-    width:calc(var(--cell) * 8 + 7px); height:calc(var(--cell) * 3 + 2px);
-    display:flex; align-items:flex-end; justify-content:flex-start; padding-left:4px; padding-bottom:3px;
+    top:0;
+    width:calc(var(--cell) * 8 + 7px); height:20px;
+    display:flex; align-items:center; justify-content:flex-start; padding-left:20px;
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
     /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
        prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
-       "Kernreactor" verloor zo zijn laatste letters. Vaste kleur met een donkere schaduw
-       leest op allebei de ondergronden. */
-    color:#c9d6e2; opacity:.55; text-shadow:0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8);
+       "Kernreactor" verloor zo zijn laatste letters. Nu een vaste kleur op een eigen donker
+       strookje (zie de ::before hieronder), zodat de naam op elke ondergrond leest. */
+    color:#dbe6f0;
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
+    /* het strookje loopt precies om de tekst heen: `width:fit-content` op het label zelf kan
+       niet, want dan verspringt de linkermarge die de letterbadge vrijhoudt */
+    background:linear-gradient(90deg, rgba(8,12,17,.86) 0%, rgba(8,12,17,.86) calc(100% - 14px), rgba(8,12,17,0) 100%);
+    box-shadow:0 1px 3px rgba(0,0,0,.5);
   }
 
   #board.hide-walk .cell.walk{background:transparent !important; box-shadow:none !important;}
@@ -1201,7 +1239,8 @@
     #palette{grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:9px;}
     .tile-thumb{padding:8px;}
     .tile-thumb .id{font-size:11.5px;}
-    .room-tag{font-size:11px;}
+    /* 11px maakte "Serverruimte" net 3px te breed voor een kaartje van 88px */
+    .room-tag{font-size:10px;}
 
     footer{font-size:10.5px; padding:0 8px;}
   }
@@ -1278,7 +1317,7 @@
         </div>
         <div class="btn-row">
           <button id="btnShuffle" class="primary">Genereer indeling</button>
-          <button id="btnReset" class="ghost">Herstel origineel</button>
+          <button id="btnReset" class="ghost">Herstel alles</button>
         </div>
         <div id="genProgress" class="sim-progress" hidden>
           <div class="sim-progress-bar"><div class="sim-progress-fill" id="genProgressFill"></div></div>
@@ -1298,12 +1337,13 @@
         </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
+        <p class="hint">In het register onderaan: <b>🔒</b> = hoektegel, ligt vast op A/E/P/T · <b>★</b> = Hibernatie, de tegel met de vier startposities · de letter rechts is de positie op het bord.</p>
 
         <div class="legend" id="legend">
           <div class="legend-row" data-key="walk"><span class="swatch" style="background:var(--walk)"></span>Loopbaar vakje</div>
           <div class="legend-row" data-key="quest"><span class="swatch" style="background:var(--quest)"></span>Opdrachtvakje (2.x)</div>
           <div class="legend-row" data-key="start"><span class="swatch" style="background:var(--start)"></span>Startpositie (3.x)</div>
-          <div class="legend-row" data-key="empty"><span class="swatch" style="background:var(--slot-empty)"></span>Onbenutte sjabloonplek</div>
+          <div class="legend-row" data-key="empty"><span class="swatch" style="background:var(--slot-empty)"></span>Leeg vakje — hier kun je niet lopen</div>
           <div class="legend-row" data-key="seamopen"><span class="swatch" style="background:var(--amber); box-shadow:0 0 6px var(--amber);"></span>Naad open — tegels sluiten aan</div>
           <div class="legend-row" data-key="seambroken"><span class="swatch" style="background:var(--danger); box-shadow:0 0 6px var(--danger);"></span>Naad geblokkeerd — doorgang eindigt in een muur</div>
           <div class="legend-row" data-key="letters"><span class="swatch" style="background:var(--amber);"></span>Positieletters (A–T)</div>
@@ -1418,6 +1458,7 @@
             <select id="walkSoloBots"></select>
           </div>
         </div>
+        <p class="hint" id="walkSoloHint">Jij bestuurt één speler, de rest speelt zichzelf. <b>Volgorde van een beurt:</b> 1. energie-actie kiezen en meteen inzetten — 2. dobbelen (2 loopstenen + de energiesteen) — 3. stappen zetten, waarbij je vóór de eerste stap of tussen stappen door hooguit <b>één</b> actiekaart mag spelen of afleggen. Een actiekaart krijg je door een opdracht te voltooien; je houdt er hoogstens twee op hand.</p>
         <div id="walkSoloSetupPlayers" class="walk-solo-setup"></div>
         <div class="walk-controls" id="walkSoloStartRow" hidden>
           <div class="btn-row">
@@ -1474,7 +1515,7 @@
               <span class="walk-card-vault-thumbs" id="walkCardVaultThumbs"></span>
               <span class="walk-card-vault-text">
                 <b id="walkCardVaultCount">Actiekaarten</b>
-                <span class="sub" id="walkCardVaultHint">klik om te bekijken</span>
+                <span class="sub" id="walkCardVaultHint">klik om te bekijken →</span>
               </span>
             </button>
 
@@ -1564,7 +1605,7 @@
             <select id="labelSelect"></select>
           </div>
           <div class="btn-row">
-            <button id="editorRevert" class="small ghost">Wijzigingen terugdraaien</button>
+            <button id="editorRevert" class="small ghost">Herstel deze tegel</button>
           </div>
           <p class="hint">Een zijde telt als doorgang zodra beide deurvakjes gevuld zijn. Wijzig je dat, dan passen de regels en de generator zich automatisch aan.</p>
           <div class="field editor-checklist-field">
@@ -1739,6 +1780,14 @@ const ROOM_NAMES = {
 
 // naam per opdrachtvakje (2.1-2.9) — puur thematisch, geen invloed op de regels;
 // hernoemen doe je hier net als bij ROOM_NAMES
+// Nederlandse decimaalweergave. De tool is verder volledig Nederlandstalig, maar alle cijfers
+// kwamen rechtstreeks uit toFixed() en dus met een punt ("24.6%", "98.6 beurten"). Gebruik deze
+// helper overal waar een getal in beeld komt — NIET voor CSS-waarden (style.width e.d.), want
+// daar moet de punt juist blijven staan.
+function nl(x, digits = 1){
+  return Number(x).toFixed(digits).replace('.', ',');
+}
+
 const QUEST_NAMES = {
   '2.1': 'Stroomstoring',
   '2.2': 'Vrachtinspectie',
@@ -2112,7 +2161,12 @@ function renderBoard(){
       `<span class="code-box" style="padding:5px 9px;">Sectie ${i+1}: ${g.slice().sort((a,b)=>a-b).join(', ')}</span>`
     ).join('') + `</div>`;
   }
-  html += `<p class="hint">Open naden: <b style="color:var(--amber)">${conn.openCount}</b> / ${totalSeams} &nbsp;·&nbsp; Doodlopende naden (deur tegen een muur): <b style="color:var(--danger)">${conn.brokenCount}</b></p>`;
+  // De regel meldde alleen een getal, in rood, ook als dat getal 0 was — naast een groene
+  // "✓ Eén aaneengesloten schip" las dat als twee tegenstrijdige oordelen over hetzelfde bord.
+  const brokenNote = conn.brokenCount === 0
+    ? `<b style="color:var(--start)">geen</b> — elke doorgang komt uit op een andere doorgang`
+    : `<b style="color:var(--danger)">${conn.brokenCount}</b> — daar komt een deur uit op een muur`;
+  html += `<p class="hint">Open naden: <b style="color:var(--amber)">${conn.openCount}</b> / ${totalSeams} &nbsp;·&nbsp; Doodlopende naden: ${brokenNote}</p>`;
   connStatusEl.innerHTML = html;
 
   // ---- bereikbaarheid op vakjesniveau ----
@@ -3014,11 +3068,11 @@ function hideGenProgress(){
 function updateGenProgress(found, target, elapsedMs){
   if (!genProgressEl) return;
   const pct = target ? Math.min(100, (found / target) * 100) : 0;
-  genProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  genProgressFillEl.style.width = `${pct.toFixed(1)}%`; // CSS: hier moet de punt blijven staan
   const perCandidate = found ? elapsedMs / found : 0;
   const etaMs = perCandidate * (target - found);
   genProgressTextEl.innerHTML =
-    `<span><b>${found}</b> / ${target} kandidaten (${pct.toFixed(0)}%)</span>` +
+    `<span><b>${found}</b> / ${target} kandidaten (${nl(pct, 0)}%)</span>` +
     `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${found > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
 }
 
@@ -3052,7 +3106,7 @@ async function applyGeneratedLayout(seed){
   const deadNote = dead === 0
     ? ` Geen dode tegels — elke tegel ligt op een route tussen opdrachten.`
     : ` <span style="color:var(--danger)">${dead} dode tegel(s)</span> — daar komt vrijwel nooit een speler.`;
-  const qualityNote = ` Hoogstens <b>${isolation}</b> gang(en) tussen twee kamers, opdrachten minstens <b>${spacing.minDist}</b> vakjes uit elkaar, eerlijkheid startposities ±<b>${balance.toFixed(1)}</b> vakjes, verste vakje <b>${coverage.maxDist}</b> stappen van een opdracht.` + deadNote;
+  const qualityNote = ` Hoogstens <b>${isolation}</b> gang(en) tussen twee kamers, opdrachten minstens <b>${spacing.minDist}</b> vakjes uit elkaar, eerlijkheid startposities ±<b>${nl(balance, 1)}</b> vakjes, verste vakje <b>${coverage.maxDist}</b> stappen van een opdracht.` + deadNote;
   if (conn.groups.length === 1 && conn.brokenCount === 0){
     swapHint.innerHTML = `Indeling gegenereerd met seed <b>${seed}</b> — strak aaneengesloten, geen doodlopende doorgangen, alle 20 tegels bereikbaar.` + qualityNote;
   } else {
@@ -4808,7 +4862,7 @@ function computeQuestDistances(graph){
 // de 5 tegels met het minste verkeer (genormaliseerd per vakje, zodat grote en kleine tegels
 // eerlijk vergeleken worden) — dit zijn de "lussen waar geen enkele speler komt" uit de heatmap,
 // nu met naam, positie en hoe ver ze van een opdracht liggen.
-function renderColdZones(graph, heatmap){
+function coldZoneRows(graph, heatmap){
   const { H, W } = graph;
   const questDist = computeQuestDistances(graph);
   const visitsPerSlot = new Array(20).fill(0);
@@ -4837,9 +4891,14 @@ function renderColdZones(graph, heatmap){
     });
   }
   rows.sort((a, b) => a.avgPerCell - b.avgPerCell);
+  return rows;
+}
+
+function renderColdZones(graph, heatmap){
+  const rows = coldZoneRows(graph, heatmap);
   const tableRows = rows.slice(0, 5).map(r => {
     const name = ROOM_NAMES[r.tid] || ('Gang ' + r.tid);
-    return `<tr><td>${letterForSlot(r.slotIdx)} — ${name}</td><td class="num">${r.share.toFixed(1)}%</td><td class="num">${r.questDist}</td></tr>`;
+    return `<tr><td>${letterForSlot(r.slotIdx)} — ${name}</td><td class="num">${nl(r.share, 1)}%</td><td class="num">${r.questDist}</td></tr>`;
   }).join('');
   return `<table class="sim-table"><thead><tr><th>Tegel</th><th>Aandeel verkeer</th><th>Verste vakje tot opdracht</th></tr></thead><tbody>${tableRows}</tbody></table>`;
 }
@@ -4894,16 +4953,16 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const pct = played ? (wins / played * 100) : 0;
     const moe = simMarginOfError(wins, played);
     const avgTurns = wins ? (startTurnsSum[lbl] / wins) : null;
-    return `<tr><td>${lbl}</td><td class="num">${pct.toFixed(1)}% ± ${moe.toFixed(1)}</td><td class="num">${avgTurns !== null ? avgTurns.toFixed(1) : '—'}</td></tr>`;
+    return `<tr><td>${lbl}</td><td class="num">${nl(pct, 1)}% ± ${nl(moe, 1)}</td><td class="num">${avgTurns !== null ? nl(avgTurns, 1) : '—'}</td></tr>`;
   }).join('');
   const seatRows = seatWins.map((w, i) => {
     const pct = played ? (w / played * 100) : 0;
-    return `<tr><td>${i + 1}e aan zet</td><td class="num">${pct.toFixed(1)}%</td></tr>`;
+    return `<tr><td>${i + 1}e aan zet</td><td class="num">${nl(pct, 1)}%</td></tr>`;
   }).join('');
   const questRows = SIM_QUEST_LABELS.map(lbl => {
     const qs = questStats[lbl];
     const avg = qs.count ? (qs.turns / qs.count) : null;
-    return `<tr><td>${lbl} — ${QUEST_NAMES[lbl]}</td><td class="num">${avg !== null ? avg.toFixed(1) : '—'}</td><td class="num">${qs.count}</td></tr>`;
+    return `<tr><td>${lbl} — ${QUEST_NAMES[lbl]}</td><td class="num">${avg !== null ? nl(avg, 1) : '—'}</td><td class="num">${qs.count}</td></tr>`;
   }).join('');
 
   const sorted = gameLengths.slice().sort((a, b) => a - b);
@@ -4921,9 +4980,34 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   if (stuckCount) html += ` — <span style="color:var(--danger)">${stuckCount} vastgelopen</span> (afgekapt na ${SIM_MAX_TURNS} beurten, niet meegeteld in de percentages)`;
   html += `.</p>`;
 
+  // De twaalf secties hieronder zijn het bewijsmateriaal; deze vier vakjes beantwoorden de
+  // vraag waar je de simulatie eigenlijk voor draait — is dit bord goed genoeg om te spelen?
+  const coldest = coldZoneRows(graph, heatmap)[0];
+  const verdictItem = (state, label, value, sub) =>
+    `<div class="sim-verdict-item ${state}"><span class="lbl">${label}</span><span class="val">${value}</span><span class="sub">${sub}</span></div>`;
+  html += `<div class="sim-verdict">` +
+    verdictItem(played === 0 ? 'warn' : withinNoise ? 'ok' : 'bad',
+      'Eerlijk?',
+      played === 0 ? 'geen data' : withinNoise ? 'ja' : 'nee',
+      played === 0 ? 'geen enkel potje uitgespeeld'
+        : `startposities lopen ${nl(spread, 1)} procentpunt uiteen, foutmarge ±${nl(avgMoe, 1)}`) +
+    verdictItem(stuckCount === 0 ? 'ok' : 'bad',
+      'Vastgelopen',
+      stuckCount === 0 ? 'geen' : `${stuckCount}×`,
+      stuckCount === 0 ? `alle ${played} potjes speelden uit` : `afgekapt na ${SIM_MAX_TURNS} beurten`) +
+    verdictItem(coldest && coldest.share > 0 ? 'ok' : 'bad',
+      'Dode tegels',
+      coldest && coldest.share > 0 ? 'geen' : 'ja',
+      coldest
+        ? `stilste tegel: ${letterForSlot(coldest.slotIdx)} — ${ROOM_NAMES[coldest.tid] || ('Gang ' + coldest.tid)} met ${nl(coldest.share, 1)}% van het verkeer`
+        : '—') +
+    verdictItem('ok', 'Speelduur', `${Math.round(avg)} beurten`,
+      `mediaan ${median} · min ${min} · max ${max} (alle spelers samen)`) +
+    `</div>`;
+
   html += `<h3 class="sim-subhead">Eerlijkheid per startpositie</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>Winst% (±95%-marge)</th><th>Gem. beurten tot winst</th></tr></thead><tbody>${rows}</tbody></table>`;
-  html += `<p class="hint">Balans: ${verdict} (spreiding <b>${spread.toFixed(1)}</b> procentpunt, gem. foutmarge ±<b>${avgMoe.toFixed(1)}</b>).</p>`;
+  html += `<p class="hint">Balans: ${verdict} (spreiding <b>${nl(spread, 1)}</b> procentpunt, gem. foutmarge ±<b>${nl(avgMoe, 1)}</b>).</p>`;
 
   // Nu er wordt doorgespeeld tot de nummer 3 binnen is, ligt van elk potje de hele
   // klassering vast. Alleen naar winst kijken verbergt een startpositie die zelden wint
@@ -4931,9 +5015,9 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const rankRows = SIM_START_LABELS.map(lbl => {
     const counts = startRanks[lbl];
     const total = counts.reduce((a, b) => a + b, 0);
-    const cells = counts.map(c => `<td class="num">${total ? (c / total * 100).toFixed(1) : '0.0'}%</td>`).join('');
+    const cells = counts.map(c => `<td class="num">${total ? nl((c / total * 100), 1) : '0,0'}%</td>`).join('');
     const avgRank = total ? counts.reduce((s, c, i) => s + c * (i + 1), 0) / total : 0;
-    return `<tr><td>${lbl}</td>${cells}<td class="num">${avgRank.toFixed(2)}</td></tr>`;
+    return `<tr><td>${lbl}</td>${cells}<td class="num">${nl(avgRank, 2)}</td></tr>`;
   }).join('');
   html += `<h3 class="sim-subhead">Eindklassering per startpositie</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Startpositie</th><th>1e</th><th>2e</th><th>3e</th><th>4e</th><th>Gem. plaats</th></tr></thead><tbody>${rankRows}</tbody></table>`;
@@ -4947,11 +5031,11 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<p class="hint">Hoe hoger het gemiddelde, hoe afgelegener dat opdrachtvakje ligt vanaf waar spelers 'm meestal moeten benaderen.</p>`;
 
   html += `<h3 class="sim-subhead">Speelduur</h3>`;
-  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${avg.toFixed(1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
+  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${nl(avg, 1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
   html += renderHistogram(gameLengths);
 
   html += `<h3 class="sim-subhead">Spanning en blokkeren</h3>`;
-  html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${avgGap.toFixed(1)}</b> opdracht(en) achter — <b>${nailBiterPct.toFixed(0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${blockedPct.toFixed(1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
+  html += `<p class="hint">De nummer 2 stond bij winst gemiddeld <b>${nl(avgGap, 1)}</b> opdracht(en) achter — <b>${nl(nailBiterPct, 0)}%</b> van de potjes werd met precies 1 opdracht verschil beslist. In <b>${nl(blockedPct, 1)}%</b> van de beurten kwam een speler ergens in zijn zoektocht naar de beste route een bezet vakje tegen (niet per se de uiteindelijk gekozen route).</p>`;
 
   // ---------- energie ----------
   // Zolang er niets uitgegeven wordt, is dit een nulmeting: hoeveel komt er binnen, hoe snel
@@ -4970,13 +5054,13 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   const affordRows = [];
   for (let lvl = ENERGY_MAX; lvl >= 1; lvl--){
     atLeast += extra.energyLevels[lvl];
-    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? (atLeast / energyTurns * 100).toFixed(1) : '0.0'}%</td></tr>`);
+    affordRows.unshift(`<tr><td>${lvl} energie</td><td class="num">${energyTurns ? nl((atLeast / energyTurns * 100), 1) : '0,0'}%</td></tr>`);
   }
   const maxLevel = Math.max(...extra.energyLevels);
   const energyBars = Array.from(extra.energyLevels, (c, lvl) => {
     const h = maxLevel ? Math.round((c / maxLevel) * 100) : 0;
     const tick = (lvl % 2 === 0) ? `<span class="sim-hist-tick">${lvl}</span>` : '';
-    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? (c / energyTurns * 100).toFixed(1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
+    return `<div class="sim-hist-bar-wrap" title="${lvl} energie: ${energyTurns ? nl((c / energyTurns * 100), 1) : 0}% van de beurten"><div class="sim-hist-bar energy" style="height:${h}%"></div>${tick}</div>`;
   }).join('');
 
   // Welke actie wint? Elk potje heeft precies één speler per strategie, willekeurig over de
@@ -4991,10 +5075,10 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const usesPerGame = s.games ? (s.uses / s.games) : 0;
     const cost = act.cost ? `${act.cost} energie` : '—';
     return `<tr><td>${act.name} <span class="sub">(${cost})</span></td>` +
-      `<td class="num">${winPct.toFixed(1)}% ± ${moe.toFixed(1)}</td>` +
-      `<td class="num">${top2Pct.toFixed(1)}%</td>` +
-      `<td class="num">${avgRank.toFixed(2)}</td>` +
-      `<td class="num">${usesPerGame.toFixed(1)}</td></tr>`;
+      `<td class="num">${nl(winPct, 1)}% ± ${nl(moe, 1)}</td>` +
+      `<td class="num">${nl(top2Pct, 1)}%</td>` +
+      `<td class="num">${nl(avgRank, 2)}</td>` +
+      `<td class="num">${nl(usesPerGame, 1)}</td></tr>`;
   }).join('');
   html += `<h3 class="sim-subhead">Welke energie-actie wint?</h3>`;
   html += `<table class="sim-table"><thead><tr><th>Strategie</th><th>Winst% (±95%-marge)</th><th>Top 2</th><th>Gem. plaats</th><th>Keer ingezet</th></tr></thead><tbody>${stratRows}</tbody></table>`;
@@ -5005,19 +5089,19 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
     const act = ACTION_CARDS[id];
     const uses = extra.cardUses[id];
     const perGame = played ? (uses / played) : 0;
-    return `<tr><td>${act.name} <span class="sub">${act.hint}</span></td><td class="num">${perGame.toFixed(2)}</td></tr>`;
+    return `<tr><td>${act.name} <span class="sub">${act.hint}</span></td><td class="num">${nl(perGame, 2)}</td></tr>`;
   }).join('');
   const drawsPerGame = played ? (extra.cardDraws / played) : 0;
   const handFullPct = extra.cardDraws + extra.handFullOnBank
     ? (extra.handFullOnBank / (extra.cardDraws + extra.handFullOnBank) * 100) : 0;
   html += `<h3 class="sim-subhead">Beloningskaarten</h3>`;
-  html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${drawsPerGame.toFixed(1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${handFullPct.toFixed(1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
+  html += `<p class="hint">Wie een opdracht bereikt trekt een kaart van een gedeelde stapel van 20 (2 van elk type), tenzij zijn hand al vol is (max 2). Gemiddeld <b>${nl(drawsPerGame, 1)}</b> kaarten getrokken per potje (alle 4 spelers samen); <b>${nl(handFullPct, 1)}%</b> van de trekkans ging verloren aan een volle hand.</p>`;
   html += `<table class="sim-table"><thead><tr><th>Kaart</th><th>Keer gebruikt per potje</th></tr></thead><tbody>${cardRows}</tbody></table>`;
   html += `<p class="hint">Prioriteitspas heeft in deze simulatie geen mechanisch effect (het is pure informatie voor een mens aan tafel) en wordt daarom nooit ingezet — 0,00 hierboven is dus verwacht, niet een bug. Een getrokken Prioriteitspas bezet wel een handslot tot het potje afloopt.</p>`;
 
   html += `<h3 class="sim-subhead">Energie</h3>`;
-  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${energyPerTurn.toFixed(2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
-  html += `<p class="hint">Een speler heeft gemiddeld <b>${energyAvg.toFixed(1)}</b> energie op zak, staat <b>${energyAtCap.toFixed(1)}%</b> van zijn beurten op het plafond, en <b>${energyWastePct.toFixed(1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
+  html += `<p class="hint">De energiesteen (<b>${ENERGY_DIE_FACES.map(f => f || '–').join(' ')}</b>) rolt elke beurt mee, gemiddeld <b>${nl(energyPerTurn, 2)}</b> per beurt, met een plafond van <b>${ENERGY_MAX}</b>. Onderstaande cijfers zijn over alle vier de strategieën samen — de spaarder die nooit uitgeeft trekt het gemiddelde en het plafondverlies omhoog.</p>`;
+  html += `<p class="hint">Een speler heeft gemiddeld <b>${nl(energyAvg, 1)}</b> energie op zak, staat <b>${nl(energyAtCap, 1)}%</b> van zijn beurten op het plafond, en <b>${nl(energyWastePct, 1)}%</b> van alle gerolde energie gaat daardoor verloren.</p>`;
   html += `<p class="hint" style="margin-top:10px;">Verdeling van de energievoorraad over alle beurten (0 links, ${ENERGY_MAX} rechts):</p>`;
   html += `<div class="sim-hist">${energyBars}</div>`;
   html += `<table class="sim-table"><thead><tr><th>Kosten van een actie</th><th>Aandeel beurten waarin je 'm kunt betalen</th></tr></thead><tbody>${affordRows.join('')}</tbody></table>`;
@@ -5029,7 +5113,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += renderColdZones(graph, heatmap);
 
   simResultsEl.innerHTML = html;
-  simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${elapsedMs.toFixed(0)} ms</span>`;
+  simStatusEl.innerHTML = `<span class="ok">✓ Klaar in ${formatSimSeconds(elapsedMs)}</span>`;
 }
 
 // richttijd per brok werk vóór we de klok checken (ononderbroken doorrekenen, dan pas
@@ -5042,17 +5126,17 @@ const SIM_CHUNK_BUDGET_MS = 30;
 
 function formatSimSeconds(ms){
   const s = ms / 1000;
-  return s < 10 ? `${s.toFixed(1)}s` : `${Math.round(s)}s`;
+  return s < 10 ? `${nl(s, 1)} seconden` : `${Math.round(s)} seconden`;
 }
 
 function updateSimProgress(done, n, elapsedMs){
   if (!simProgressEl) return;
   const pct = n ? Math.min(100, (done / n) * 100) : 0;
-  simProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  simProgressFillEl.style.width = `${pct.toFixed(1)}%`; // CSS: hier moet de punt blijven staan
   const perGame = done ? elapsedMs / done : 0;
   const etaMs = perGame * (n - done);
   simProgressTextEl.innerHTML =
-    `<span><b>${done}</b> / ${n} potjes (${pct.toFixed(0)}%)</span>` +
+    `<span><b>${done}</b> / ${n} potjes (${nl(pct, 0)}%)</span>` +
     `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${done > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
 }
 
@@ -6020,6 +6104,7 @@ const walkModeAutoBtn = document.getElementById('walkModeAuto');
 const walkModeSoloBtn = document.getElementById('walkModeSolo');
 const walkAutoControlsEl = document.getElementById('walkAutoControls');
 const walkSoloControlsEl = document.getElementById('walkSoloControls');
+const walkSoloHintEl = document.getElementById('walkSoloHint');
 const walkAutoHintEl = document.getElementById('walkAutoHint');
 const walkSoloPlayersSel = document.getElementById('walkSoloPlayers');
 const walkSoloBotsSel = document.getElementById('walkSoloBots');
@@ -6202,6 +6287,7 @@ function setWalkMode(mode){
   // echt uit de layout haalt.
   if (walkDirPadEl) walkDirPadEl.hidden = isAuto;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
+  if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
   if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
   if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
@@ -6413,8 +6499,8 @@ function soloRefreshCardVault(){
   walkCardVaultCountEl.textContent = cards.length === 1 ? '1 actiekaart' : `${cards.length} actiekaarten`;
   const playable = cards.filter(id => !soloCardBlockReason(id)).length;
   walkCardVaultHintEl.textContent = playable
-    ? `${playable} speelbaar — klik om te bekijken`
-    : 'klik om te bekijken';
+    ? `${playable} speelbaar — klik om te bekijken →`
+    : 'geen speelbaar op dit moment — klik om te bekijken →';
   if (cardOverlayEl && !cardOverlayEl.hidden) soloRenderCardGrid();
 }
 

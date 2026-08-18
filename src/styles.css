@@ -211,6 +211,13 @@
   .sim-progress-text b{color:var(--amber); font-variant-numeric:tabular-nums;}
 
   .sim-table{width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:12px; margin:10px 0;}
+  /* Op een telefoon zijn de tabellen met 5-6 kolommen breder dan het scherm. Omdat `body`
+     horizontaal scrollen blokkeert werden die kolommen gewoon AFGEKAPT — de rechterkant was
+     onbereikbaar. Als `display:block` met eigen overflow schuift de tabel binnen zijn eigen
+     kader, zonder de pagina mee te trekken. */
+  @media (max-width: 880px){
+    .sim-table{display:block; overflow-x:auto; white-space:nowrap; scrollbar-gutter:auto;}
+  }
   .sim-table th, .sim-table td{padding:6px 8px; text-align:left; border-bottom:1px solid var(--line-dim);}
   .sim-table th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:.08em;}
   .sim-table td.num, .sim-table th:not(:first-child){text-align:right;}
@@ -221,6 +228,29 @@
   .sim-table.quest-table th{text-align:left;}
   /* op 375px is de tabel 2px breder dan zijn kader; laat hem daar liever scrollen dan uitsteken */
   #questRegister{overflow-x:auto;}
+
+  /* korte conclusie bovenaan de uitslag: de twaalf secties eronder zijn het bewijsmateriaal,
+     maar de vraag "is dit bord goed?" moet je zonder scrollen kunnen beantwoorden */
+  .sim-verdict{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;
+    margin:14px 0 6px;
+  }
+  .sim-verdict-item{
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--vc, var(--line));
+    border-radius:5px; padding:9px 11px; display:flex; flex-direction:column; gap:3px;
+  }
+  .sim-verdict-item .lbl{
+    font-family:var(--font-mono); font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .sim-verdict-item .val{
+    font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--vc, var(--text));
+    letter-spacing:.02em; line-height:1.15;
+  }
+  .sim-verdict-item .sub{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.35;}
+  .sim-verdict-item.ok{--vc:var(--start);}
+  .sim-verdict-item.warn{--vc:var(--amber);}
+  .sim-verdict-item.bad{--vc:var(--danger);}
 
   .sim-subhead{
     font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
@@ -1057,19 +1087,27 @@
   .letter-badge.inner{background:var(--start); color:#04150b;}
   #board.hide-letters .letter-badge{display:none;}
 
+  /* De naam stond onderaan zijn tegel en dus pal naast de positieletter van de tegel
+     erónder — "Motor 1" leek daardoor bij badge I te horen terwijl hij bij D hoort. Nu staat
+     hij bovenaan, op dezelfde regel als zijn eigen letterbadge, met genoeg linkermarge om
+     die badge (18px) vrij te laten. */
   .room-label{
     position:absolute; left:0; z-index:3;
-    top:calc(var(--cell) * 5 + 5px);
-    width:calc(var(--cell) * 8 + 7px); height:calc(var(--cell) * 3 + 2px);
-    display:flex; align-items:flex-end; justify-content:flex-start; padding-left:4px; padding-bottom:3px;
+    top:0;
+    width:calc(var(--cell) * 8 + 7px); height:20px;
+    display:flex; align-items:center; justify-content:flex-start; padding-left:20px;
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
     /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
        prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
-       "Kernreactor" verloor zo zijn laatste letters. Vaste kleur met een donkere schaduw
-       leest op allebei de ondergronden. */
-    color:#c9d6e2; opacity:.55; text-shadow:0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8);
+       "Kernreactor" verloor zo zijn laatste letters. Nu een vaste kleur op een eigen donker
+       strookje (zie de ::before hieronder), zodat de naam op elke ondergrond leest. */
+    color:#dbe6f0;
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
+    /* het strookje loopt precies om de tekst heen: `width:fit-content` op het label zelf kan
+       niet, want dan verspringt de linkermarge die de letterbadge vrijhoudt */
+    background:linear-gradient(90deg, rgba(8,12,17,.86) 0%, rgba(8,12,17,.86) calc(100% - 14px), rgba(8,12,17,0) 100%);
+    box-shadow:0 1px 3px rgba(0,0,0,.5);
   }
 
   #board.hide-walk .cell.walk{background:transparent !important; box-shadow:none !important;}
@@ -1194,7 +1232,8 @@
     #palette{grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:9px;}
     .tile-thumb{padding:8px;}
     .tile-thumb .id{font-size:11.5px;}
-    .room-tag{font-size:11px;}
+    /* 11px maakte "Serverruimte" net 3px te breed voor een kaartje van 88px */
+    .room-tag{font-size:10px;}
 
     footer{font-size:10.5px; padding:0 8px;}
   }

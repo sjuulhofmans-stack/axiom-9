@@ -22,11 +22,11 @@ function hideGenProgress(){
 function updateGenProgress(found, target, elapsedMs){
   if (!genProgressEl) return;
   const pct = target ? Math.min(100, (found / target) * 100) : 0;
-  genProgressFillEl.style.width = `${pct.toFixed(1)}%`;
+  genProgressFillEl.style.width = `${pct.toFixed(1)}%`; // CSS: hier moet de punt blijven staan
   const perCandidate = found ? elapsedMs / found : 0;
   const etaMs = perCandidate * (target - found);
   genProgressTextEl.innerHTML =
-    `<span><b>${found}</b> / ${target} kandidaten (${pct.toFixed(0)}%)</span>` +
+    `<span><b>${found}</b> / ${target} kandidaten (${nl(pct, 0)}%)</span>` +
     `<span>verstreken ${formatSimSeconds(elapsedMs)} · nog ongeveer ${found > 0 ? formatSimSeconds(etaMs) : '…'}</span>`;
 }
 
@@ -60,7 +60,7 @@ async function applyGeneratedLayout(seed){
   const deadNote = dead === 0
     ? ` Geen dode tegels — elke tegel ligt op een route tussen opdrachten.`
     : ` <span style="color:var(--danger)">${dead} dode tegel(s)</span> — daar komt vrijwel nooit een speler.`;
-  const qualityNote = ` Hoogstens <b>${isolation}</b> gang(en) tussen twee kamers, opdrachten minstens <b>${spacing.minDist}</b> vakjes uit elkaar, eerlijkheid startposities ±<b>${balance.toFixed(1)}</b> vakjes, verste vakje <b>${coverage.maxDist}</b> stappen van een opdracht.` + deadNote;
+  const qualityNote = ` Hoogstens <b>${isolation}</b> gang(en) tussen twee kamers, opdrachten minstens <b>${spacing.minDist}</b> vakjes uit elkaar, eerlijkheid startposities ±<b>${nl(balance, 1)}</b> vakjes, verste vakje <b>${coverage.maxDist}</b> stappen van een opdracht.` + deadNote;
   if (conn.groups.length === 1 && conn.brokenCount === 0){
     swapHint.innerHTML = `Indeling gegenereerd met seed <b>${seed}</b> — strak aaneengesloten, geen doodlopende doorgangen, alle 20 tegels bereikbaar.` + qualityNote;
   } else {

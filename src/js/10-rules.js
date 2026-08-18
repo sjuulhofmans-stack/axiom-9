@@ -122,6 +122,14 @@ const ROOM_NAMES = {
 
 // naam per opdrachtvakje (2.1-2.9) — puur thematisch, geen invloed op de regels;
 // hernoemen doe je hier net als bij ROOM_NAMES
+// Nederlandse decimaalweergave. De tool is verder volledig Nederlandstalig, maar alle cijfers
+// kwamen rechtstreeks uit toFixed() en dus met een punt ("24.6%", "98.6 beurten"). Gebruik deze
+// helper overal waar een getal in beeld komt — NIET voor CSS-waarden (style.width e.d.), want
+// daar moet de punt juist blijven staan.
+function nl(x, digits = 1){
+  return Number(x).toFixed(digits).replace('.', ',');
+}
+
 const QUEST_NAMES = {
   '2.1': 'Stroomstoring',
   '2.2': 'Vrachtinspectie',

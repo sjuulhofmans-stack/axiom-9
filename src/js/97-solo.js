@@ -18,6 +18,7 @@ const walkModeAutoBtn = document.getElementById('walkModeAuto');
 const walkModeSoloBtn = document.getElementById('walkModeSolo');
 const walkAutoControlsEl = document.getElementById('walkAutoControls');
 const walkSoloControlsEl = document.getElementById('walkSoloControls');
+const walkSoloHintEl = document.getElementById('walkSoloHint');
 const walkAutoHintEl = document.getElementById('walkAutoHint');
 const walkSoloPlayersSel = document.getElementById('walkSoloPlayers');
 const walkSoloBotsSel = document.getElementById('walkSoloBots');
@@ -200,6 +201,7 @@ function setWalkMode(mode){
   // echt uit de layout haalt.
   if (walkDirPadEl) walkDirPadEl.hidden = isAuto;
   if (walkAutoHintEl) walkAutoHintEl.hidden = !isAuto;
+  if (walkSoloHintEl) walkSoloHintEl.hidden = isAuto;
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
   if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
   if (btnWalkSoloSkip) btnWalkSoloSkip.hidden = true;
@@ -411,8 +413,8 @@ function soloRefreshCardVault(){
   walkCardVaultCountEl.textContent = cards.length === 1 ? '1 actiekaart' : `${cards.length} actiekaarten`;
   const playable = cards.filter(id => !soloCardBlockReason(id)).length;
   walkCardVaultHintEl.textContent = playable
-    ? `${playable} speelbaar — klik om te bekijken`
-    : 'klik om te bekijken';
+    ? `${playable} speelbaar — klik om te bekijken →`
+    : 'geen speelbaar op dit moment — klik om te bekijken →';
   if (cardOverlayEl && !cardOverlayEl.hidden) soloRenderCardGrid();
 }
 

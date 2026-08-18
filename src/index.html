@@ -65,7 +65,7 @@
         </div>
         <div class="btn-row">
           <button id="btnShuffle" class="primary">Genereer indeling</button>
-          <button id="btnReset" class="ghost">Herstel origineel</button>
+          <button id="btnReset" class="ghost">Herstel alles</button>
         </div>
         <div id="genProgress" class="sim-progress" hidden>
           <div class="sim-progress-bar"><div class="sim-progress-fill" id="genProgressFill"></div></div>
@@ -85,12 +85,13 @@
         </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
+        <p class="hint">In het register onderaan: <b>🔒</b> = hoektegel, ligt vast op A/E/P/T · <b>★</b> = Hibernatie, de tegel met de vier startposities · de letter rechts is de positie op het bord.</p>
 
         <div class="legend" id="legend">
           <div class="legend-row" data-key="walk"><span class="swatch" style="background:var(--walk)"></span>Loopbaar vakje</div>
           <div class="legend-row" data-key="quest"><span class="swatch" style="background:var(--quest)"></span>Opdrachtvakje (2.x)</div>
           <div class="legend-row" data-key="start"><span class="swatch" style="background:var(--start)"></span>Startpositie (3.x)</div>
-          <div class="legend-row" data-key="empty"><span class="swatch" style="background:var(--slot-empty)"></span>Onbenutte sjabloonplek</div>
+          <div class="legend-row" data-key="empty"><span class="swatch" style="background:var(--slot-empty)"></span>Leeg vakje — hier kun je niet lopen</div>
           <div class="legend-row" data-key="seamopen"><span class="swatch" style="background:var(--amber); box-shadow:0 0 6px var(--amber);"></span>Naad open — tegels sluiten aan</div>
           <div class="legend-row" data-key="seambroken"><span class="swatch" style="background:var(--danger); box-shadow:0 0 6px var(--danger);"></span>Naad geblokkeerd — doorgang eindigt in een muur</div>
           <div class="legend-row" data-key="letters"><span class="swatch" style="background:var(--amber);"></span>Positieletters (A–T)</div>
@@ -205,6 +206,7 @@
             <select id="walkSoloBots"></select>
           </div>
         </div>
+        <p class="hint" id="walkSoloHint">Jij bestuurt één speler, de rest speelt zichzelf. <b>Volgorde van een beurt:</b> 1. energie-actie kiezen en meteen inzetten — 2. dobbelen (2 loopstenen + de energiesteen) — 3. stappen zetten, waarbij je vóór de eerste stap of tussen stappen door hooguit <b>één</b> actiekaart mag spelen of afleggen. Een actiekaart krijg je door een opdracht te voltooien; je houdt er hoogstens twee op hand.</p>
         <div id="walkSoloSetupPlayers" class="walk-solo-setup"></div>
         <div class="walk-controls" id="walkSoloStartRow" hidden>
           <div class="btn-row">
@@ -261,7 +263,7 @@
               <span class="walk-card-vault-thumbs" id="walkCardVaultThumbs"></span>
               <span class="walk-card-vault-text">
                 <b id="walkCardVaultCount">Actiekaarten</b>
-                <span class="sub" id="walkCardVaultHint">klik om te bekijken</span>
+                <span class="sub" id="walkCardVaultHint">klik om te bekijken →</span>
               </span>
             </button>
 
@@ -351,7 +353,7 @@
             <select id="labelSelect"></select>
           </div>
           <div class="btn-row">
-            <button id="editorRevert" class="small ghost">Wijzigingen terugdraaien</button>
+            <button id="editorRevert" class="small ghost">Herstel deze tegel</button>
           </div>
           <p class="hint">Een zijde telt als doorgang zodra beide deurvakjes gevuld zijn. Wijzig je dat, dan passen de regels en de generator zich automatisch aan.</p>
           <div class="field editor-checklist-field">
