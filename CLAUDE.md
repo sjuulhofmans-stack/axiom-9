@@ -30,6 +30,11 @@ src/
   index.html          HTML-skelet met placeholders {{CSS}} {{JS}} {{LOGO}}
   styles.css          alle opmaak (~16 KB)
   assets/logo.b64     logo als base64 — hier zelden iets aan doen
+  assets/cards/*.webp de 10 fysieke actiekaarten (Canva-ontwerp), 520px breed.
+                      De bestandsnaam MOET het kaart-id uit ACTION_CARDS zijn
+                      (boots.webp, condenser.webp, ...); build.py bakt ze in als
+                      ACTION_CARD_IMAGES via src/js/05-card-art.js. Nieuwe kaart
+                      = plaatje erbij zetten en opnieuw bouwen, verder niets.
   data/tiles.json     de 20 tegels + de vorm van een tegel (pattern)
   js/
     00-data.js        laadt tiles.json, bouwt tileLookup, globale state (layout, selectedSlot)
@@ -74,6 +79,8 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
 | iets aan "stap voor stap" automatisch (pion, tempo, bots) | `96-walk.js` |
 | iets aan de solo-modus / actiekaarten        | `97-solo.js` (kaartdefinities zelf staan in `95-simulate.js`, `ACTION_CARDS`/`ENERGY_ACTIONS`) |
+| wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
+| het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
 
 ## Spelregels die in de code zitten
 

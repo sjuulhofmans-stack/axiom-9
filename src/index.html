@@ -250,6 +250,16 @@
               </div>
             </div>
 
+            <!-- kaartkluis: staat direct onder de dobbelstenen en is alleen zichtbaar zodra je
+                 daadwerkelijk een actiekaart in handen hebt. Klikken opent het kaartvenster. -->
+            <button type="button" class="walk-card-vault" id="walkCardVault" hidden>
+              <span class="walk-card-vault-thumbs" id="walkCardVaultThumbs"></span>
+              <span class="walk-card-vault-text">
+                <b id="walkCardVaultCount">Actiekaarten</b>
+                <span class="sub" id="walkCardVaultHint">klik om te bekijken</span>
+              </span>
+            </button>
+
             <div class="walk-info-panel">
               <div class="walk-meta" id="walkMeta"></div>
 
@@ -268,6 +278,24 @@
   </div>
 
   <footer>AXIOM-9 · MILITAIR BEVOORRADINGSSCHIP · JAAR 2150 — alles draait lokaal in dit bestand, niets wordt verzonden</footer>
+
+  <!-- kaartvenster: toont de actiekaarten die je op dit moment in handen hebt, op ware
+       kaartverhouding. Eén kaart tegelijk selecteerbaar; onderin gecentreerd de keuze. -->
+  <div id="cardOverlay" class="card-overlay" hidden>
+    <div class="card-panel" role="dialog" aria-modal="true" aria-labelledby="cardPanelTitle">
+      <div class="card-panel-head">
+        <h2 id="cardPanelTitle">Jouw actiekaarten</h2>
+        <button id="cardPanelClose" class="small ghost" aria-label="Venster sluiten">Sluiten ✕</button>
+      </div>
+      <p class="hint" id="cardPanelHint"></p>
+      <div class="card-grid" id="cardGrid"></div>
+      <div class="card-panel-actions">
+        <button id="btnCardPlay" class="primary" disabled>Speel deze kaart</button>
+        <button id="btnCardDiscard" class="ghost" disabled>Afleggen</button>
+        <button id="btnCardCancel" class="ghost">Sluiten</button>
+      </div>
+    </div>
+  </div>
 
   <div id="editorOverlay" class="editor-overlay" hidden>
     <div class="editor-panel">

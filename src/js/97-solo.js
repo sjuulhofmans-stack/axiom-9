@@ -29,6 +29,17 @@ const walkSoloActionsEl = document.getElementById('walkSoloActions');
 const btnWalkSoloRoll = document.getElementById('btnWalkSoloRoll');
 const btnWalkSoloSkip = document.getElementById('btnWalkSoloSkip');
 const walkDirPadEl = document.getElementById('walkDirPad');
+const walkCardVaultEl = document.getElementById('walkCardVault');
+const walkCardVaultThumbsEl = document.getElementById('walkCardVaultThumbs');
+const walkCardVaultCountEl = document.getElementById('walkCardVaultCount');
+const walkCardVaultHintEl = document.getElementById('walkCardVaultHint');
+const cardOverlayEl = document.getElementById('cardOverlay');
+const cardGridEl = document.getElementById('cardGrid');
+const cardPanelHintEl = document.getElementById('cardPanelHint');
+const cardPanelClose = document.getElementById('cardPanelClose');
+const btnCardPlay = document.getElementById('btnCardPlay');
+const btnCardDiscard = document.getElementById('btnCardDiscard');
+const btnCardCancel = document.getElementById('btnCardCancel');
 const walkStepDoneEl = document.getElementById('walkStepDone');
 const walkStepLeftEl = document.getElementById('walkStepLeft');
 
@@ -135,7 +146,7 @@ let soloTargetKey = null;
 // 'rolling' | 'moving' | 'boots-direction' | 'jump-target' | 'game-over'
 // Beurtvolgorde: 'choose-action' = energie-actie kiezen (of overslaan) — vóór het dobbelen, direct
 // ingezet. Dan 'rolling' = dobbelen. Dan 'moving' = stappen zetten; kaarten spelen/afleggen kan op
-// elk moment tijdens 'moving' (zie soloRenderMoveCardRow), vóór of tussen de stappen door, hooguit
+// elk moment tijdens 'moving' (via de kaartkluis, zie soloRefreshCardVault), vóór of tussen de stappen door, hooguit
 // 1 kaart per beurt — er is dus geen aparte fase vóór de worp om een kaart te spelen.
 let soloPhase = 'idle';
 let soloRunId = 0;
@@ -265,7 +276,7 @@ function renderEnergySoloButton(id, disabled, reason){
 }
 // De 'choose-action'-fase toont ALLEEN de energie-acties — die moet je immers vóór het dobbelen
 // inzetten. Kaarten spelen/afleggen (inclusief Zwaartekracht-laarzen en Stuwlading) kan pas ná
-// het dobbelen, vóór of tijdens het stappen zetten (zie soloRenderMoveCardRow hieronder).
+// het dobbelen, vóór of tijdens het stappen zetten (via het kaartvenster, zie hieronder).
 function soloRenderActionPanel(){
   if (!walkSoloActionsEl) return;
   const p = solo();
@@ -283,17 +294,6 @@ if (walkSoloActionsEl){
   });
 }
 
-// Een kaart-knop met een los "Afleggen"-knopje eronder — gedeeld door de pre-roll-fase (Boots/
-// Stuwlading) en de tijdens-het-lopen-kaartenrij. Afleggen is ALTIJD mogelijk voor elke kaart in
-// de hand (het kaart-slot is het enige dat telt, niet of de kaart nu "nuttig" is), dus de
-// afleg-knop krijgt bewust nooit een van de per-kaart disabled-redenen die de speel-knop wel kan
-// hebben.
-function soloCardWithDiscard(id, disabled, reason){
-  const titleOverride = reason ? `${ACTION_CARDS[id].name} — ${reason}` : null;
-  const playBtn = renderActionCardFace(id, { size: 'lg', interactive: true, disabled, titleOverride });
-  const discardBtn = `<button type="button" class="small ghost" data-discard="${id}" title="${ACTION_CARDS[id].name} afleggen, zonder 'm te spelen">Afleggen</button>`;
-  return `<div class="action-card-wrap">${playBtn}${discardBtn}</div>`;
-}
 
 function soloUnconditionalSwap(){
   const p = solo();
@@ -306,7 +306,7 @@ function soloUnconditionalSwap(){
 // Beurtvolgorde: energie (vóór het dobbelen, direct ingezet) → dobbelen → kaart spelen/afleggen
 // (vóór of tijdens het stappen zetten), hooguit 1 kaart per beurt. Er is dus geen apart moment
 // vóór de worp om een kaart te spelen — ook Zwaartekracht-laarzen en Stuwlading niet, die komen
-// hieronder gewoon voor in de altijd-zichtbare kaartenrij tijdens het lopen (soloRenderMoveCardRow).
+// hieronder gewoon voor in het kaartvenster tijdens het lopen (soloRefreshCardVault).
 // Routeert een gespeelde/afgelegde kaart naar de vervolgstap: er is op dit punt altijd al
 // gedobbeld (kaarten spelen kan pas ná de worp), dus de bewegingsfase wordt herberekend — bv. na
 // Duwstoot verschuift een blokkade, na Herkalibratie verandert het doel, na Stuwlading is er
@@ -329,44 +329,127 @@ function soloDiscardCard(id){
 // (vóór of tijdens het stappen zetten), dus ook Boots/Stuwlading/Condensator horen pas ná de
 // worp aan de beurt. Voor Condensator is dat zelfs de bedoeling: je ziet je energiesteen al
 // liggen en beslist dán pas of verdubbelen de moeite waard is.
-const SOLO_MOVE_ROW_EXCLUDE = ['blind'];
-function soloRenderMoveCardRow(){
-  if (!walkSoloActionsEl) return;
-  if (soloCardActionUsed()){ walkSoloActionsEl.innerHTML = ''; return; }
+// Waarom kan deze kaart nu niet gespeeld worden? Geeft de reden terug, of null als hij wel mag.
+// Eén bron voor zowel de kluis (hoeveel is er speelbaar) als het venster (waarom niet).
+function soloCardBlockReason(id){
   const p = solo();
-  const noOpponents = soloPlayers.length === 1;
-  const ids = p.cards.filter(id => !SOLO_MOVE_ROW_EXCLUDE.includes(id));
-  if (!ids.length){ walkSoloActionsEl.innerHTML = ''; return; }
-  const cards = ids.map(id => {
-    let disabled = false, reason = null;
-    if (noOpponents && WALK_SOLO_NO_OPPONENT_CARDS.includes(id)){ disabled = true; reason = 'geen tegenstanders in dit potje'; }
-    else if (id === 'shove' && !soloShoveTargets().length){ disabled = true; reason = 'geen tegenstander naast je'; }
-    else if (id === 'scan' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
-    else if (id === 'short' && !soloOthers().length){ disabled = true; reason = 'geen tegenstanders meer over'; }
-    else if (id === 'ration' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
-    else if (id === 'recal' && soloTargetSwapped){ disabled = true; reason = 'je doel is deze beurt al gewisseld'; }
-    // Stuwlading (kaart) en Stuwstoot (energie) zijn allebei een gratis 3e loopsteen — samen
-    // zouden ze een 4e opleveren, dus sluiten ze elkaar uit ook al zitten ze op losse sloten
-    // (zelfde regel als in 95-simulate.js/96-walk.js)
-    else if (id === 'boostcell' && soloUsedEnergyId === 'boost'){ disabled = true; reason = 'je hebt deze beurt al Stuwstoot ingezet'; }
-    else if (id === 'condenser' && soloEnergyRoll === 0){ disabled = true; reason = 'je energiesteen gooide 0 — niets te verdubbelen'; }
-    else if (id === 'condenser' && p.energy >= ENERGY_MAX){ disabled = true; reason = 'je energie zit al vol'; }
-    // "Gooi je worp opnieuw" kan alleen zolang je nog geen stap hebt gezet
-    else if (id === 'reroll' && soloMove && soloMove.stepsLeft !== soloMove.roll){ disabled = true; reason = 'je bent al begonnen met lopen'; }
-    return soloCardWithDiscard(id, disabled, reason);
-  }).join('');
-  walkSoloActionsEl.innerHTML = `<div class="action-card-row">${cards}</div>`;
+  if (!p) return 'geen actieve speler';
+  if (soloPhase !== 'moving') return 'kan pas nadat je hebt gedobbeld';
+  if (soloCardActionUsed()) return 'je hebt deze beurt al een kaart gebruikt';
+  // Blinde Vlek is puur reactief: die krijg je vanzelf aangeboden op het moment dat je zet
+  // daadwerkelijk op een tegenstander stukloopt (zie soloOfferBlindSpot)
+  if (id === 'blind') return 'wordt vanzelf aangeboden zodra je route geblokkeerd raakt';
+  if (soloPlayers.length === 1 && WALK_SOLO_NO_OPPONENT_CARDS.includes(id)) return 'geen tegenstanders in dit potje';
+  if (id === 'shove' && !soloShoveTargets().length) return 'geen tegenstander naast je';
+  if ((id === 'scan' || id === 'short') && !soloOthers().length) return 'geen tegenstanders meer over';
+  if (id === 'ration' && p.energy >= ENERGY_MAX) return 'je energie zit al vol';
+  if (id === 'recal' && soloTargetSwapped) return 'je doel is deze beurt al gewisseld';
+  // Stuwlading (kaart) en Stuwstoot (energie) zijn allebei een gratis 3e loopsteen — samen
+  // zouden ze een 4e opleveren, dus sluiten ze elkaar uit ook al zitten ze op losse sloten
+  // (zelfde regel als in 95-simulate.js/96-walk.js)
+  if (id === 'boostcell' && soloUsedEnergyId === 'boost') return 'je hebt deze beurt al Stuwstoot ingezet';
+  if (id === 'condenser' && soloEnergyRoll === 0) return 'je energiesteen gooide 0 — niets te verdubbelen';
+  if (id === 'condenser' && p.energy >= ENERGY_MAX) return 'je energie zit al vol';
+  // "Gooi je worp opnieuw" kan alleen zolang je nog geen stap hebt gezet
+  if (id === 'reroll' && soloMove && soloMove.stepsLeft !== soloMove.roll) return 'je bent al begonnen met lopen';
+  return null;
 }
-if (walkSoloActionsEl){
-  walkSoloActionsEl.addEventListener('click', (e) => {
-    if (soloPhase !== 'moving') return;
-    const discardBtn = e.target.closest('button[data-discard]');
-    if (discardBtn){ soloDiscardCard(discardBtn.dataset.discard); return; }
-    const btn = e.target.closest('button.action-card');
-    if (!btn || btn.disabled || btn.classList.contains('is-disabled')) return;
-    if (btn.dataset.card) soloPlayCard(btn.dataset.card);
+// afleggen mag met ELKE kaart in de hand (het kaart-slot is het enige dat telt, niet of de
+// kaart nu nuttig is) — maar wel pas ná de worp, net als spelen
+function soloCanDiscardNow(){ return soloPhase === 'moving' && !soloCardActionUsed(); }
+
+// ---------- de kaartkluis onder de dobbelstenen ----------
+function soloRefreshCardVault(){
+  // de kaarten wonen nu in het venster; deze strook is voor energie-acties en keuzepanelen
+  if (walkSoloActionsEl && (soloPhase === 'moving' || soloPhase === 'rolling')) walkSoloActionsEl.innerHTML = '';
+  if (!walkCardVaultEl) return;
+  const p = solo();
+  const cards = p && !p.rank ? p.cards : [];
+  if (!cards.length || soloPhase === 'idle' || soloPhase === 'game-over'){
+    walkCardVaultEl.hidden = true;
+    if (cardOverlayEl && !cardOverlayEl.hidden) soloCloseCardPanel();
+    return;
+  }
+  walkCardVaultEl.hidden = false;
+  walkCardVaultThumbsEl.innerHTML = cards
+    .map(id => `<img src="${ACTION_CARD_IMAGES[id]}" alt="${ACTION_CARDS[id].name}">`).join('');
+  walkCardVaultCountEl.textContent = cards.length === 1 ? '1 actiekaart' : `${cards.length} actiekaarten`;
+  const playable = cards.filter(id => !soloCardBlockReason(id)).length;
+  walkCardVaultHintEl.textContent = playable
+    ? `${playable} speelbaar — klik om te bekijken`
+    : 'klik om te bekijken';
+  if (cardOverlayEl && !cardOverlayEl.hidden) soloRenderCardGrid();
+}
+
+// ---------- het kaartvenster ----------
+let soloSelectedCard = null;
+
+function soloOpenCardPanel(){
+  const p = solo();
+  if (!p || !p.cards.length || !cardOverlayEl) return;
+  soloSelectedCard = null;
+  cardOverlayEl.hidden = false;
+  soloRenderCardGrid();
+}
+function soloCloseCardPanel(){
+  if (!cardOverlayEl) return;
+  cardOverlayEl.hidden = true;
+  soloSelectedCard = null;
+}
+function soloRenderCardGrid(){
+  const p = solo();
+  if (!p || !p.cards.length){ soloCloseCardPanel(); return; }
+  if (soloSelectedCard && !p.cards.includes(soloSelectedCard)) soloSelectedCard = null;
+
+  cardGridEl.innerHTML = p.cards.map(id => {
+    const reason = soloCardBlockReason(id);
+    const cls = `card-pick action-card--${ACTION_CARD_TINTS[id]}`
+      + (soloSelectedCard === id ? ' is-selected' : '')
+      + (reason ? ' is-locked' : '');
+    return `<button type="button" class="${cls}" data-pick="${id}" title="${ACTION_CARDS[id].name} — ${ACTION_CARDS[id].hint}">
+      <img src="${ACTION_CARD_IMAGES[id]}" alt="${ACTION_CARDS[id].name}">
+      ${reason ? `<span class="card-pick-reason">${reason}</span>` : ''}
+    </button>`;
+  }).join('');
+
+  const blocked = soloSelectedCard ? soloCardBlockReason(soloSelectedCard) : 'niets geselecteerd';
+  btnCardPlay.disabled = !!blocked;
+  btnCardDiscard.disabled = !soloSelectedCard || !soloCanDiscardNow();
+  cardPanelHintEl.textContent =
+    soloPhase !== 'moving' ? 'Je kunt pas een kaart spelen of afleggen nadat je hebt gedobbeld.'
+    : soloCardActionUsed() ? 'Je hebt deze beurt al een kaart gebruikt.'
+    : 'Kies één kaart. Per beurt mag je er hooguit één spelen of afleggen.';
+}
+if (cardGridEl){
+  cardGridEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-pick]');
+    if (!btn) return;
+    // ook een niet-speelbare kaart mag je selecteren — afleggen kan namelijk altijd
+    soloSelectedCard = soloSelectedCard === btn.dataset.pick ? null : btn.dataset.pick;
+    soloRenderCardGrid();
   });
 }
+if (btnCardPlay) btnCardPlay.addEventListener('click', () => {
+  const id = soloSelectedCard;
+  if (!id || soloCardBlockReason(id)) return;
+  soloCloseCardPanel();          // eerst sluiten: sommige kaarten openen zelf een keuzepaneel
+  soloPlayCard(id);
+});
+if (btnCardDiscard) btnCardDiscard.addEventListener('click', () => {
+  const id = soloSelectedCard;
+  if (!id || !soloCanDiscardNow()) return;
+  soloCloseCardPanel();
+  soloDiscardCard(id);
+});
+if (btnCardCancel) btnCardCancel.addEventListener('click', soloCloseCardPanel);
+if (cardPanelClose) cardPanelClose.addEventListener('click', soloCloseCardPanel);
+if (walkCardVaultEl) walkCardVaultEl.addEventListener('click', soloOpenCardPanel);
+if (cardOverlayEl) cardOverlayEl.addEventListener('click', (e) => {
+  if (e.target === cardOverlayEl) soloCloseCardPanel();   // klik naast het venster sluit het
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && cardOverlayEl && !cardOverlayEl.hidden) soloCloseCardPanel();
+});
 
 // ---------- doelwit kiezen: Kortsluiting, Duwstoot, Prioriteitspas ----------
 // wie er nu naast je staat (voor Duwstoot — die kan alleen een AANGRENZENDE tegenstander duwen)
@@ -450,7 +533,7 @@ function soloResolveTargetCard(cardId, targetIdx){
   }
 }
 
-// Wordt alleen aangeroepen tijdens het lopen (ná de worp), vanuit soloRenderMoveCardRow.
+// Wordt alleen aangeroepen tijdens het lopen (ná de worp), vanuit het kaartvenster.
 function soloPlayCard(id){
   if (id === 'boots'){ soloEnterBootsDirection(); return; }
   if (id === 'short' || id === 'shove' || id === 'scan'){ soloEnterTargetPicker(id); return; }
@@ -688,6 +771,7 @@ function soloProceedToRoll(){
   btnWalkSoloRoll.hidden = false;
   btnWalkSoloRoll.textContent = soloPendingBoost ? '🎲 Gooi 3 dobbelstenen' : '🎲 Gooi de dobbelstenen';
   soloPhase = 'rolling';
+  soloRefreshCardVault();
   renderWalkScore(soloPlayers, soloActiveIdx);
   renderSoloMeta();
 }
@@ -745,7 +829,7 @@ function soloAdvanceMovePhase(){
   renderSoloMeta(soloMove.stepsLeft);
   // altijd-zichtbare kaartenrij (spelen/afleggen) opnieuw tekenen — dekt alle aanroepers van
   // deze functie in één keer (dobbelen, elke losse stap, ná een doelwit-kiezer/Condensator/enz.)
-  soloRenderMoveCardRow();
+  soloRefreshCardVault();
 }
 // Blinde Vlek is puur reactief: alleen aan te bieden op het moment dat je zet daadwerkelijk
 // door een tegenstander geblokkeerd wordt (net als bij de bots), dus dit is geen kaart in het
@@ -778,7 +862,7 @@ if (walkSoloActionsEl){
       soloMarkClickable(soloGraph, legal.map(l => l.key));
       soloRenderDirPad(legal);
       renderSoloMeta(soloMove.stepsLeft);
-      soloRenderMoveCardRow();  // cardActionUsed is nu true (blind gespeeld), dus dit maakt 'm leeg
+      soloRefreshCardVault();   // cardActionUsed is nu true (blind gespeeld), dus niets meer speelbaar
     } else {
       walkSoloActionsEl.innerHTML = '';
       walkLog(`Doodlopend — geen vervolgstap meer mogelijk.`, null, solo());
@@ -857,6 +941,7 @@ function soloFinishTurn(banked){
       if (drawn){
         p.cards.push(drawn);
         walkLog(`Je trekt een beloningskaart: <b>${ACTION_CARDS[drawn].name}</b> — ${ACTION_CARDS[drawn].hint}.`, null, p);
+        soloRefreshCardVault();   // nieuwe kaart meteen in de kluis tonen
       }
     } else {
       walkLog(`Je zou een kaart trekken, maar je hand is al vol.`, null, p);
@@ -914,6 +999,7 @@ function soloBeginHumanTurn(pIdx){
   btnWalkSoloSkip.textContent = 'Geen actie, gewoon dobbelen';
   soloPhase = 'choose-action';
   soloRenderActionPanel();
+  soloRefreshCardVault();
 }
 
 // ---------- bot-beurt: meteen afgehandeld, geen animatie ----------
@@ -1091,6 +1177,7 @@ function soloFinishRound(){
 }
 function soloEndGame(stuck){
   soloPhase = 'game-over';
+  soloRefreshCardVault();
   walkClearClass('walk-target');
   walkSoloActionsEl.innerHTML = '';
   btnWalkSoloRoll.hidden = true;
@@ -1120,6 +1207,7 @@ function soloEndGame(stuck){
 function stopSoloGame(){
   soloRunId++;
   soloPhase = 'idle';
+  soloRefreshCardVault();
   soloGraph = null; soloPlayers = []; soloMove = null; soloActiveIdx = -1;
   soloRoundFinishers = []; soloFinished = 0; soloRoundPos = 0;
   soloClearClickable();

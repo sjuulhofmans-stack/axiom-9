@@ -12,6 +12,7 @@ Waarom een build-stap?
   src/assets/logo.b64 en wordt het alleen bij het bouwen ingevoegd.
 """
 
+import base64
 import json
 import pathlib
 import re
@@ -24,6 +25,7 @@ DIST = ROOT / "dist"
 # Volgorde is belangrijk: 00 eerst (data), daarna regels, dan UI.
 JS_ORDER = [
     "00-data.js",
+    "05-card-art.js",
     "10-rules.js",
     "20-connectivity.js",
     "30-random.js",
@@ -61,15 +63,30 @@ def build() -> pathlib.Path:
     if missing:
         sys.exit(f"FOUT: tegels ontbreken in tiles.json: {', '.join(missing)}")
 
+    # --- kaartafbeeldingen als data-URI's ---
+    # Eén .webp per kaart-id in src/assets/cards/; de ids moeten overeenkomen met de sleutels
+    # van ACTION_CARDS in 95-simulate.js, want daarop zoekt de tool de plaatjes op.
+    cards_dir = SRC / "assets" / "cards"
+    card_images = {}
+    for path in sorted(cards_dir.glob("*.webp")):
+        card_images[path.stem] = (
+            "data:image/webp;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+        )
+    if not card_images:
+        sys.exit(f"FOUT: geen kaartafbeeldingen gevonden in {cards_dir}")
+
     js_parts = []
     for name in JS_ORDER:
         chunk = read(SRC / "js" / name)
         js_parts.append(f"// ===== {name} =====\n{chunk}")
     js = "\n\n".join(js_parts)
     js = js.replace("{{TILES}}", json.dumps(tiles, separators=(",", ":")))
+    js = js.replace("{{CARD_IMAGES}}", json.dumps(card_images, separators=(",", ":")))
 
     if "{{TILES}}" in js:
         sys.exit("FOUT: {{TILES}} placeholder niet vervangen")
+    if "{{CARD_IMAGES}}" in js:
+        sys.exit("FOUT: {{CARD_IMAGES}} placeholder niet vervangen")
 
     html = template.replace("{{CSS}}", css)
     html = html.replace("{{JS}}", js)
