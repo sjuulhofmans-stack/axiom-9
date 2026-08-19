@@ -334,12 +334,15 @@ function renderWalkScore(players, activeIdx){
       `<span class="walk-player-top">` +
         `<span class="walk-player-dot"></span>` +
         `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
+        stratBadge +
         `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
         `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
       `</span>` +
+      // De strategiebadge staat op de BOVENregel, bij de speler zelf. Onderaan naast de
+      // doeltekst nam hij 108px ("Herprioritering") en dan werd juist die doeltekst afgekapt
+      // — terwijl die vertelt waar een tegenstander heen gaat, en de bovenregel ruimte over had.
       `<span class="walk-player-bottom">` +
         `<span class="walk-player-goal">${goal}</span>` +
-        stratBadge +
         walkCardBadges(p) +
       `</span>` +
     `</div>`;
@@ -727,11 +730,17 @@ async function runWalkSimulation(){
         }
       }
       if (usedBoots){
+        // Zelfde twee-regelopbouw als renderWalkDice: los opgebouwd wrapte dit blok op een
+        // telefoon naar 124px terwijl het normaal 82px is, en dan schoof het bord weer.
         walkDiceEl.innerHTML =
-          `<span class="walk-die boost" title="Zwaartekracht-laarzen">🥾</span>` +
-          `<span class="walk-die-sum">${move.path.length - 1} stappen rechtdoor</span>` +
-          `<span class="walk-die energy">${energyRoll === 0 ? '–' : energyRoll}</span>` +
-          `<span class="walk-die-sum energy">+${energyRoll} energie</span>`;
+          `<span class="walk-dice-row">` +
+            `<span class="walk-die boost" title="Zwaartekracht-laarzen">B</span>` +
+            `<span class="walk-die-sum">${move.path.length - 1} stappen rechtdoor</span>` +
+          `</span>` +
+          `<span class="walk-dice-row">` +
+            energyDieHtml(energyRoll, false) +
+            `<span class="walk-die-sum energy">+${energyRoll} energie</span>` +
+          `</span>`;
       } else {
         d1 = simRollD6(rand); d2 = simRollD6(rand);
         if (!cardActionUsed && player.cards.includes('boostcell')){
