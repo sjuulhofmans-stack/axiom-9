@@ -850,8 +850,13 @@
      bovendien de rijen recht: zonder dat liepen de bijschriften van 31 tot 64px uiteen en
      stonden de kaarten in een rij op ongelijke hoogte. */
   .card-show-cap{
-    display:flex; flex-direction:column; justify-content:center; gap:3px; min-width:0;
-    margin-top:auto; min-height:78px; padding:9px 11px; position:relative; flex:none;
+    display:flex; flex-direction:column; justify-content:flex-start; gap:3px; min-width:0;
+    /* Vaste hoogte. Zonder dit bepaalt elke kaart zijn eigen knophoogte en dat liep van 74
+       tot 103px uiteen — meteen zichtbaar in het raster. De waarde is de hoogste natuurlijke
+       knop, gemeten over elke schermbreedte van 300 tot 1600px in stappen van 20px: 87px
+       t/m 640px en 103px daarboven (daar is de kolom smal terwijl het lettertype al groot
+       is). Meet opnieuw als je een kaartnaam of hint langer maakt. */
+    margin-top:auto; min-height:104px; padding:9px 11px; position:relative; flex:none;
     background:var(--hull); border:1px solid var(--line); border-radius:6px;
     transition:border-color .13s, background .13s;
   }
@@ -873,12 +878,16 @@
   .card-show:active{transform:scale(.98);}
   .card-show:active .card-show-cap{border-color:var(--card-tint); background:var(--panel-2);}
   .card-show-cap b{
-    font-family:var(--font-display); font-size:14px; font-weight:700; color:#eef3f8;
+    /* De kolombreedte volgt clamp(140px, 20vw, 192px); de titel schaalt met dezelfde vw mee,
+       anders staat er tussen 641px en 900px een titel van 14px in een kolom van 150px en
+       breken tien namen middenin een woord af. Gemeten met de terugvalfont (Arial Narrow) —
+       de tool laadt geen webfonts, dus Barlow Condensed telt hier niet mee. */
+    font-family:var(--font-display); font-size:clamp(11px, 1.45vw, 14px); font-weight:700; color:#eef3f8;
     text-transform:uppercase; letter-spacing:.02em; line-height:1.15;
     /* Op 375px is een kolom 147px breed; "Stroomonderbreking" stak er 35px buiten. `anywhere`
        loste dat op maar brak "STROOMSTORI NG" af — met `hyphens:auto` (het document staat op
        lang="nl") komt er tenminste een afbreekstreepje te staan waar dat nodig is. */
-    overflow-wrap:break-word; hyphens:auto;
+    overflow-wrap:break-word; -webkit-hyphens:auto; hyphens:auto;
   }
   .card-show-cap span{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.4; padding-right:16px;}
 
@@ -1310,9 +1319,9 @@
 
     /* smallere kolom: kleinere titel en minder ruimte voor het pijltje, zodat de kaartnamen
        op één of twee hele woorden passen in plaats van middenin af te breken */
-    .card-show-cap{padding:9px; min-height:74px;}
+    .card-show-cap{padding:9px; min-height:88px;}
     .card-show-cap::after{right:8px; bottom:10px;}
-    .card-show-cap b{font-size:12px; letter-spacing:0;}
+    .card-show-cap b{letter-spacing:0;}
     .card-show-cap span{font-size:9px; padding-right:14px;}
 
     footer{font-size:10.5px; padding:0 8px;}

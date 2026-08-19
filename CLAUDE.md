@@ -95,6 +95,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
 | iets aan het tabblad "Kaarten" (vitrine)     | `98-cards.js`, opmaak in `styles.css` onder "tabblad Kaarten" |
+| een kaartnaam of hint langer maken           | meet daarna opnieuw: `.card-show-cap` heeft een `min-height` die op de langste tekst is gemeten (zie de opmerking erbij in `styles.css`) |
 | een sectie toevoegen aan de simulatie-uitslag | `95-simulate.js`: `simSectionOpen('Titel')` — die sluit de vorige sectie vanzelf, en `simSectionCloseAll()` sluit de laatste |
 | een getal in beeld brengen                   | `nl(x, digits)` in `10-rules.js` — Nederlandse komma. NIET voor CSS-waarden (`style.width`), daar moet de punt blijven |
 | het icoon of de kleur van een opdrachtkaart  | `98-cards.js` (`QUEST_CARD_ART`) |
@@ -227,6 +228,10 @@ Check minimaal:
 - **Het bord past niet op een telefoon.** 40 vakjes breed betekent cellen van ~7px. Passend
   maken blijft de standaard (je wilt het geheel zien), maar `.board-zoom` schakelt naar 20px
   en dan schuift het bord binnen `.board-outer`. De knop staat alleen onder 640px.
+- **De tool laadt geen webfonts.** Er is geen `@font-face` en geen Google-Fonts-link, dus
+  'Barlow Condensed' en 'Space Mono' vallen altijd terug op Arial Narrow en de systeem-
+  monospace. Reken bij tekstbreedtes dus met de terugval, niet met de genoemde fonts — dat
+  scheelt zo'n 15% en dat is precies het verschil tussen "past net" en "breekt af".
 - **Emoji-glyphs als knoplabel.** ⏸ en ▶ vallen op systemen zonder emoji-font terug op een
   leeg blokje. Gebruik gewoon het woord.
 - **De kamernaam op het bord hoort bovenaan zijn tegel.** Stond hij onderaan, dan viel hij pal
