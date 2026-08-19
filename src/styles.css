@@ -490,8 +490,11 @@
      verborgen zijn (bv. 'moving', of het kiezen van een doelwit) — en dat liet .walk-info-panel
      eronder alsnog 36px op en neer springen, exact het probleem dat deze hele sectie oplost. */
   .walk-hud .btn-row{flex-basis:100%; min-height:40px;}
-  .walk-dice{display:flex; align-items:center; gap:8px; min-height:38px;}
+  .walk-dice{display:flex; align-items:center; gap:8px; min-height:38px; flex-wrap:wrap; row-gap:6px;}
   .walk-die{
+    /* flex:none — zonder dit knijpt de rij de stenen samen zodra hij niet meer past in de
+       300px-zijkolom, en dan is een steen ineens 31px breed in plaats van 38 */
+    flex:none;
     width:38px; height:38px; border-radius:6px; display:flex; align-items:center; justify-content:center;
     font-family:var(--font-mono); font-size:19px; font-weight:700;
     background:linear-gradient(180deg,#f2f6fa,#c9d4de); color:#10161d;
@@ -506,12 +509,17 @@
   .walk-die-sum{
     font-family:var(--font-mono); font-size:12.5px; color:var(--amber); letter-spacing:.04em;
   }
-  /* energiesteen: zelfde vorm, andere kleur, zodat je 'm niet voor een loopsteen aanziet */
+  /* energiesteen: zelfde vorm, andere kleur én een bliksemschichtje naast het cijfer, zodat
+     je 'm niet voor een loopsteen aanziet */
   .walk-die.energy{
     background:linear-gradient(180deg,#3d6b52,#20402f); color:#c9ffdf;
     box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 0 0 1px rgba(155,255,198,.35);
-    margin-left:10px;
+    margin-left:10px; gap:2px;
   }
+  /* de viewBox is 14x24 (staand), dus dezelfde verhouding aanhouden — anders schaalt de
+     schicht naar de smalste kant en staat er een postzegeltje in een hoge steen */
+  .walk-die-bolt{width:9.5px; height:16px; flex:none; fill:currentColor;}
+  .walk-die-num{font-family:var(--font-mono); font-weight:700; font-size:17px; line-height:1;}
   .walk-die-sum.energy{color:var(--start);}
   /* derde loopsteen van de Stuwstoot: zelfde witte steen, amberen rand als "die is gekocht" */
   .walk-die.boost{box-shadow:0 2px 5px rgba(0,0,0,.45), 0 0 0 2px var(--amber);}

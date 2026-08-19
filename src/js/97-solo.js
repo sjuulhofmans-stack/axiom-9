@@ -825,8 +825,8 @@ function soloHandleJumpClick(key){
 function renderSoloDicePending(){
   const e = soloEnergyRoll;
   const energyHtml = e === null
-    ? `<span class="walk-die energy">?</span><span class="walk-die-sum energy">energie bij het gooien</span>`
-    : `<span class="walk-die energy">${e === 0 ? '–' : e}</span><span class="walk-die-sum energy">+${e} energie</span>`;
+    ? energyDieHtml(null, false) + `<span class="walk-die-sum energy">energie bij het gooien</span>`
+    : energyDieHtml(e, false) + `<span class="walk-die-sum energy">+${e} energie</span>`;
   walkDiceEl.innerHTML = `<span class="walk-die">?</span><span class="walk-die">?</span>` + energyHtml;
 }
 function soloRenderDirPad(legal){

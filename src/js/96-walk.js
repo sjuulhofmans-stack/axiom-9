@@ -224,6 +224,17 @@ function paintWalkPawns(graph, players, activeIdx){
 // ---------- HUD ----------
 // twee loopstenen plus de energiesteen; `e` is de energiekant (0 = niks). `boost` is de
 // derde loopsteen van de Stuwstoot, of null als die actie niet is ingezet.
+// De energiesteen toont naast het cijfer een bliksemschichtje. Alleen de kleur was te weinig
+// onderscheid met de loopstenen — zeker bij de "0"-kant, die eerder een streepje liet zien en
+// daardoor als "geen steen" las in plaats van "een steen die 0 opleverde". `value` is null
+// zolang er nog niet gegooid is.
+function energyDieHtml(value, rolling){
+  const txt = (value === null || value === undefined) ? '?' : value;
+  return `<span class="walk-die energy${rolling ? ' rolling' : ''}">` +
+    `<svg class="walk-die-bolt" viewBox="0 0 14 24" aria-hidden="true"><path d="M9.4 0.8 L1.6 13.4 h4.3 L4.6 23.2 L12.4 10.2 h-4.5 z"/></svg>` +
+    `<span class="walk-die-num">${txt}</span></span>`;
+}
+
 function renderWalkDice(a, b, e, rolling, boost){
   const cls = 'walk-die' + (rolling ? ' rolling' : '');
   const third = boost ? `<span class="${cls} boost" title="Stuwstoot">${boost}</span>` : '';
@@ -231,7 +242,7 @@ function renderWalkDice(a, b, e, rolling, boost){
   const energy = rolling ? '' : `<span class="walk-die-sum energy">+${e} energie</span>`;
   walkDiceEl.innerHTML =
     `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${third}${sum}` +
-    `<span class="${cls} energy">${e === 0 && !rolling ? '–' : e}</span>${energy}`;
+    energyDieHtml(e, rolling) + energy;
 }
 
 function renderWalkMeta({ player, turn, stepsLeft }){
