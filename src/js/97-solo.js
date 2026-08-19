@@ -1447,6 +1447,11 @@ function stopSoloGame(){
   soloRoundFinishers = []; soloFinished = 0; soloRoundPos = 0;
   soloClearClickable();
   soloHideDirPad();
+  // De spelersbalk bleef anders de stand van het vorige potje tonen (scores, energie,
+  // kaarten) terwijl de opzet-UI alweer open stond.
+  walkScoreOrder = null;
+  if (walkScoreEl) walkScoreEl.innerHTML = '';
+  if (walkScoreActiveEl) walkScoreActiveEl.innerHTML = '';
   if (walkSoloPanelEl) walkSoloPanelEl.hidden = true;
   if (walkSoloActionsEl) walkSoloActionsEl.innerHTML = '';
   if (btnWalkSoloRoll) btnWalkSoloRoll.hidden = true;
@@ -1491,6 +1496,7 @@ function startSoloGame(){
   }
 
   soloTurnOrder = simShuffle(soloPlayers.map(p => p.idx), soloRand);
+  walkScoreOrder = soloTurnOrder;   // balk in beurtvolgorde, zie renderWalkScore in 96-walk.js
   soloFinishTarget = simFinishTarget(soloPlayers.length);
   soloFinished = 0;
   soloRoundFinishers = [];

@@ -110,6 +110,7 @@ function renderWalkBoard(){
   if (!walkCellEls) walkCellEls = buildWalkBoard();
   // het bord wordt hier van nul opgebouwd; alleen aangeroepen buiten een lopend potje om
   clearWalkTarget();
+  walkScoreOrder = null;
   walkPaintedPawns = [];
   for (let R = 0; R < TILE_ROWS*TILE_H; R++){
     for (let C = 0; C < TILE_COLS*TILE_W; C++){
@@ -311,9 +312,16 @@ function walkIsIn(p){ return p.completed >= SIM_QUESTS_TO_WIN; }
 // aan zet is (#walkScoreActive, gebruikersverzoek) — beide krijgen dezelfde volledige lijst,
 // gefilterd via CSS op de `.active`-klasse (`#walkScore .walk-player.active{display:none}` en
 // omgekeerd voor `#walkScoreActive`), zodat er maar één render-pad nodig is
+// De balk staat in BEURTvolgorde, niet op spelersnummer: dan loopt het rijtje van boven naar
+// beneden mee met wie er aan de beurt is, in plaats van door elkaar te springen. Wordt per
+// potje gezet (beide modi loten de volgorde) en op null gezet zodra er geen potje loopt.
+let walkScoreOrder = null;
 function renderWalkScore(players, activeIdx){
   if (!walkScoreEl && !walkScoreActiveEl) return;
-  const html = players.map(p => {
+  const ordered = walkScoreOrder
+    ? walkScoreOrder.map(i => players[i]).filter(Boolean)
+    : players;
+  const html = ordered.map(p => {
     const targetLabel = p.deck[p.nextIdx];
     const goal = p.rank
       ? walkIsIn(p)
@@ -335,11 +343,11 @@ function renderWalkScore(players, activeIdx){
     // opschoof. Nu verandert er niets aan de indeling en licht alleen het actieve vak op.
     // Het "aan zet"-vlaggetje staat er altijd, alleen onzichtbaar bij wie niet aan zet is,
     // zodat ook dát geen breedte verschuift.
-    return `<div class="${cls}" style="--pc:${p.color}">` +
+    return `<div class="${cls}" style="--pc:${p.color}"${p.idx === activeIdx ? ' aria-current="true"' : ''}>` +
       `<span class="walk-player-top">` +
         `<span class="walk-player-dot"></span>` +
         `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-        `<span class="walk-player-turn">aan zet</span>` +
+        `<span class="walk-player-turn" aria-hidden="true">aan zet</span>` +
         `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
       `</span>` +
       `<span class="walk-player-goal">${goal}</span>` +
@@ -479,6 +487,7 @@ async function runWalkSimulation(){
   }));
   // beurtvolgorde geloot, net als in simulateOneGame()
   const turnOrder = simShuffle(players.map(p => p.idx), rand);
+  walkScoreOrder = turnOrder;
   const finishTarget = simFinishTarget(playerCount);
   const deck = buildActionDeck(rand);   // één gedeelde stapel voor dit potje
 

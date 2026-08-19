@@ -236,6 +236,10 @@ Check minimaal:
   'Barlow Condensed' en 'Space Mono' vallen altijd terug op Arial Narrow en de systeem-
   monospace. Reken bij tekstbreedtes dus met de terugval, niet met de genoemde fonts — dat
   scheelt zo'n 15% en dat is precies het verschil tussen "past net" en "breekt af".
+- **De spelersbalk staat in BEURTvolgorde, niet op spelersnummer** (`walkScoreOrder` in
+  `96-walk.js`, gezet door beide modi zodra de volgorde geloot is). Op nummer gesorteerd
+  sprong de markering door het rijtje heen; nu loopt hij netjes van boven naar beneden en
+  komt de balk overeen met de regel "Beurtvolgorde: …" in het log.
 - **Verberg nooit de speler die aan zet is uit de balk boven het bord.** Dat was ooit een
   bewuste keuze (alleen de ANDERE spelers tonen), maar dan valt er elke beurt een ander vak
   weg en schuiven de overige op — juist daardoor zag je niet meer wie aan de beurt was. Alle
