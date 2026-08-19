@@ -22,9 +22,12 @@ src/
   index.html          HTML-skelet met placeholders {{CSS}} {{JS}} {{LOGO}}
   styles.css          alle opmaak (~16 KB)
   assets/logo.b64     logo als base64 — hier zelden iets aan doen
+  assets/cards/*.webp foto's van de actiekaarten (Canva), build.py injecteert ze in 05-card-art.js
+  assets/quests/*.webp idem voor opdrachtkaarten, optioneel — leeg = eigen SVG-tekening
   data/tiles.json     de 20 tegels + de vorm van een tegel (pattern)
   js/
     00-data.js        laadt tiles.json, bouwt tileLookup, globale state (layout, selectedSlot)
+    05-card-art.js    kaartafbeeldingen (build.py-geinjecteerd) + QUEST_CARD_ART (SVG-iconen/tints)
     10-rules.js       plaatsingsregels, rotatie, kamer-/opdrachtnamen, welke tegel mag waar
     20-connectivity.js naden tussen tegels + bereikbaarheid op vakjesniveau
     30-random.js      seeded random (mulberry32) — zelfde seed = zelfde bord
@@ -34,9 +37,11 @@ src/
     70-generator.js   backtracking-solver die een geldige indeling zoekt
     80-controls.js    knoppen: seed, dobbelsteen, herstel, draaien, download, legenda
     90-editor.js      tegel-editor (vakjes aan/uit klikken)
-    95-simulate.js    spelsimulatie (2xD6, geen U-turn, bezette vakjes blokkeren)
-    96-walk.js        stap-voor-stap: 1 speler zichtbaar over het bord, eigen tabblad
-build.py              plakt alles tot dist/axiom9.html
+    95-simulate.js    spelsimulatie (2xD6 + energiesteen, kaarten, geen U-turn, bezette vakjes blokkeren)
+    96-walk.js        stap-voor-stap: automatische weergave (1-4 spelers), eigen tabblad
+    97-solo.js        stap-voor-stap: zelf spelen (mix van mens/bot, kaarten- en energie-UI)
+    98-cards.js        tabblad "Kaarten": overzicht van alle opdracht- en actiekaarten
+build.py              plakt alles tot dist/axiom9.html, injecteert tiles.json + kaartfoto's
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
 ```
 
@@ -58,7 +63,9 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een knop toevoegen                          | `index.html` + `80-controls.js` |
 | iets aan de tegel-editor                    | `90-editor.js`        |
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
-| iets aan "stap voor stap" (pion, tempo)     | `96-walk.js`          |
+| iets aan "stap voor stap" (pion, tempo)     | `96-walk.js` (automatisch) / `97-solo.js` (zelf spelen) |
+| energiesteen-acties of hun kosten/drempels balanceren | `95-simulate.js` (`ENERGY_DIE_FACES`, `ENERGY_ACTIONS`, `ENERGY_JUMP_RANGE`, `REORDER_BLIND_THRESHOLD`) |
+| actie-/opdrachtkaarten wijzigen             | `95-simulate.js` (`ACTION_CARDS`) voor spelregels · `98-cards.js` voor het tabblad · `05-card-art.js` voor plaatjes/iconen |
 
 ## Spelregels die in de code zitten
 
@@ -97,6 +104,25 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
   en vervalt de rest. Elke speler heeft een eigen geschud stapeltje opdrachten
   1–9 (labels `2.1`–`2.9`); wie als eerste 6 opdrachten voltooit wint. Draait
   altijd op de indeling die op dat moment in de tool staat.
+- **Energiesteen** (`95-simulate.js`, `ENERGY_DIE_FACES = [0,1,1,2,2,3]`): rolt elke beurt
+  mee naast de twee loopstenen, stapelt tot `ENERGY_MAX` (10). Drie acties, max 1 per beurt:
+  Stuwstoot (3 energie, +1 loopsteen), Herprioritering (2 energie, **blind** ruilen met je
+  volgende opdracht — je kent `dAlt` niet, alleen `dCur`), Noodtransport (10 energie, vrije
+  sprong tot `ENERGY_JUMP_RANGE` vakjes, negeert de geen-U-turn-regel). Simulatiebots spelen
+  Herprioritering via `blindReorderTarget()`: wissel alleen als je al verder dan
+  `REORDER_BLIND_THRESHOLD` van je huidige opdracht af staat.
+  **Balans-ijkpunt (getest, niet opnieuw doen):** in een volledige 4-speler-toernooisimulatie
+  (elke speler een vaste strategie, 5000 potjes) wint Herprioritering structureel minder dan
+  Stuwstoot/Noodtransport (~26% vs ~32–35%, bij een eerlijk toernooi zou dat ~25% per stuk
+  zijn met vier gelijke opties, of ~31–37% relatief tussen de drie echte acties na aftrek van
+  de "geeft nooit uit"-ijkpersoon). Cost verlagen (2→1) verandert vrijwel niets (26,4%→26,8%,
+  binnen de foutmarge) — bij cost 2 kun je de actie al 90%+ van je beurten betalen, dus cost is
+  niet de bottleneck. `REORDER_BLIND_THRESHOLD` verlagen naar 20 maakt het juist WORSE (21,3%
+  — vaker een blinde gok nemen betekent vaker een gok die tegenvalt); verhogen naar 40 ook
+  (17,9% — te zeldzaam om het gemiddelde nog te beïnvloeden). 31 zit dus al dicht bij het
+  optimum voor déze hefboom. Wil je Herprioritering echt sterker maken, dan moet dat via het
+  mechanisme zelf (bv. gedeeltelijke info, een andere drempelvorm) of via het afzwakken van
+  Noodtransport/Stuwstoot — niet via cost of threshold van Herprioritering alleen.
 
 ## Controleren of het nog werkt
 

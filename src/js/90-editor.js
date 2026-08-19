@@ -124,16 +124,6 @@ function tileChecklistItems(tid){
     ...(isRoom ? [{ label: '1 opdrachtvakje', ok: !has('quest') }] : []),
   ];
 }
-// controleert alle 20 tegels; gebruikt vlak vóór het downloaden om kapotte tegels te blokkeren
-function validateAllTilesForSave(){
-  const byTile = new Map();
-  for (let tid=1; tid<=20; tid++){
-    const issues = tileValidationIssues(tid);
-    if (issues.length) byTile.set(tid, issues);
-  }
-  return byTile;
-}
-
 // welke 2.x / 3.x labels zijn nog vrij (buiten deze tegel)
 function labelsInUse(exceptTile){
   const used = new Set();
@@ -266,6 +256,13 @@ function paintCell(key){
   } else {
     // opdrachtvakjes alleen op gewone vakjes, nooit op een deurvakje of het vakje erachter
     if (DOOR_KEYS.has(key) || DOOR_INWARD_VALUES.has(key)) return;
+    // het opdrachtlabel wordt over een AL LOOPBAAR vakje gelegd (of over een vakje dat al
+    // opdracht is, om het label te wisselen) — nooit op een lege/onbenutte sjabloonplek.
+    // Kon dat eerder wel: dan werd de tegelvorm ongemerkt uitgebreid met dat vakje, en zodra
+    // je het label daarna verplaatste, viel de oude plek altijd terug op "loopbaar" (1) in
+    // plaats van weer leeg — ook als hij dat origineel nooit was.
+    const cur = m.get(key);
+    if (cur !== 1 && !(typeof cur === 'string' && cur.startsWith('2.'))) return;
     const label = labelSelect.value;
     if (!label) return;
     // hetzelfde label mag maar één keer voorkomen op het HELE bord (niet alleen deze
@@ -314,62 +311,6 @@ document.getElementById('editorRevert').addEventListener('click', ()=>{
   updateCloseButtonLabel();
   applyTileEdits();
   drawEditorGrid();
-});
-
-// ---------- deze pagina opslaan, inclusief bewerkte tegels ----------
-document.getElementById('btnDownload').addEventListener('click', ()=>{
-  const problems = validateAllTilesForSave();
-  if (problems.size){
-    const lines = [];
-    for (const [tid, issues] of problems) for (const issue of issues) lines.push(`Tegel #${tid}: ${issue.message}`);
-    swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan geblokkeerd — repareer eerst in de tegel-editor:<br>${lines.map(p=>'• '+p).join('<br>')}</span>`;
-    if (editorTile !== null) drawEditorGrid();
-    return;
-  }
-  try{
-    // huidige tegeldata serialiseren
-    const fresh = { pattern: DATA.pattern, tiles: {} };
-    for (let tid=1; tid<=20; tid++){
-      fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
-        const [dr,dc] = k.split('_').map(Number);
-        return [dr,dc,v];
-      }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-    }
-    let html = '<!DOCTYPE html>\n' + (()=>{
-      // gegenereerde DOM (bord, register, editor) tijdelijk leegmaken: die wordt bij het
-      // openen toch opnieuw opgebouwd, en scheelt honderden KB's in het bestand
-      const board = boardEl.innerHTML, palR = paletteRoomsEl.innerHTML, palC = paletteCorrEl.innerHTML, ed = editorGrid.innerHTML;
-      const wasHidden = editorOverlay.hidden;
-      boardEl.innerHTML = ''; paletteRoomsEl.innerHTML = ''; paletteCorrEl.innerHTML = ''; editorGrid.innerHTML = '';
-      editorOverlay.hidden = true;
-      const out = document.documentElement.outerHTML;
-      boardEl.innerHTML = board; paletteRoomsEl.innerHTML = palR; paletteCorrEl.innerHTML = palC; editorGrid.innerHTML = ed;
-      editorOverlay.hidden = wasHidden;
-      return out;
-    })();
-    // de DATA-regel vervangen door de actuele versie
-    const marker = 'const DATA = ';
-    const start = html.indexOf(marker);
-    const end = html.indexOf(';\n', start);
-    if (start === -1 || end === -1) throw new Error('DATA-blok niet gevonden');
-    html = html.slice(0, start) + marker + JSON.stringify(fresh) + html.slice(end);
-    // eventuele runtime-toestand opschonen zodat het bestand fris opent
-    const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'axiom9_map_generator.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 1000);
-    const btn = document.getElementById('btnDownload');
-    const old = btn.textContent;
-    btn.textContent = 'Opgeslagen ✓';
-    setTimeout(()=>btn.textContent = old, 1500);
-  }catch(err){
-    swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan mislukt: ${err.message}</span>`;
-  }
 });
 
 // ---------- klikbare legenda: markeringen aan/uit ----------

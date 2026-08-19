@@ -13,7 +13,7 @@ function renderPalette(){
     card.className = 'tile-thumb' + (selectedSlot===slotIdx || highlightTile===tid ? ' active' : '');
     const badge = isCornerTile(tid) ? ' 🔒' : (tid===START_TILE ? ' ★' : '');
     const roomName = ROOM_NAMES[tid];
-    card.innerHTML = `<div class="id"><span>#${tid}${badge}</span><b>${letterForSlot(slotIdx)}</b></div>` +
+    card.innerHTML = `<div class="id"><span class="id-num">#${tid}${badge}</span><b>${letterForSlot(slotIdx)}</b></div>` +
       `<div class="room-tag ${roomName ? 'room' : 'corridor'}">${roomName || ('Gang ' + tid)}</div>`;
     const editBtn = document.createElement('button');
     editBtn.className = 'edit-btn';
@@ -27,7 +27,10 @@ function renderPalette(){
       editBtn.addEventListener('pointerdown', (e)=> e.stopPropagation());
     }
     editBtn.textContent = '✎';
-    card.appendChild(editBtn);
+    editBtn.setAttribute('aria-label', editBtn.title);
+    // In de kopregel meelopen in plaats van er absoluut overheen liggen: als absolute knop
+    // bedekte hij de positieletter volledig en liep de kamernaam eronder door.
+    card.querySelector('.id').appendChild(editBtn);
     const g = document.createElement('div');
     g.className = 'thumb-grid';
     for (let dr=0; dr<TILE_H; dr++){

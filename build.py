@@ -12,6 +12,7 @@ Waarom een build-stap?
   src/assets/logo.b64 en wordt het alleen bij het bouwen ingevoegd.
 """
 
+import base64
 import json
 import pathlib
 import re
@@ -24,6 +25,7 @@ DIST = ROOT / "dist"
 # Volgorde is belangrijk: 00 eerst (data), daarna regels, dan UI.
 JS_ORDER = [
     "00-data.js",
+    "05-card-art.js",
     "10-rules.js",
     "20-connectivity.js",
     "30-random.js",
@@ -35,7 +37,24 @@ JS_ORDER = [
     "90-editor.js",
     "95-simulate.js",
     "96-walk.js",
+    "97-solo.js",
+    "98-cards.js",
 ]
+
+# Kaartafbeeldingen: elke .webp in deze mappen wordt base64-geinjecteerd, met de
+# bestandsnaam-zonder-extensie als sleutel. src/assets/quests/ mag leeg zijn (dan tekent
+# de code de opdrachtkaart zelf na, zie renderQuestCardFace in 98-cards.js).
+CARD_ART_DIR = SRC / "assets" / "cards"
+QUEST_ART_DIR = SRC / "assets" / "quests"
+
+
+def read_card_images(directory: pathlib.Path) -> dict:
+    images = {}
+    if directory.exists():
+        for path in sorted(directory.glob("*.webp")):
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+            images[path.stem] = f"data:image/webp;base64,{data}"
+    return images
 
 
 def read(path: pathlib.Path) -> str:
@@ -66,9 +85,11 @@ def build() -> pathlib.Path:
         js_parts.append(f"// ===== {name} =====\n{chunk}")
     js = "\n\n".join(js_parts)
     js = js.replace("{{TILES}}", json.dumps(tiles, separators=(",", ":")))
+    js = js.replace("{{CARD_ART}}", json.dumps(read_card_images(CARD_ART_DIR), separators=(",", ":")))
+    js = js.replace("{{QUEST_ART}}", json.dumps(read_card_images(QUEST_ART_DIR), separators=(",", ":")))
 
-    if "{{TILES}}" in js:
-        sys.exit("FOUT: {{TILES}} placeholder niet vervangen")
+    for leftover in re.findall(r"\{\{[A-Z_]+\}\}", js):
+        sys.exit(f"FOUT: placeholder {leftover} niet vervangen")
 
     html = template.replace("{{CSS}}", css)
     html = html.replace("{{JS}}", js)
