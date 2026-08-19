@@ -270,10 +270,7 @@ function soloRefreshTarget(){
   const p = solo();
   const label = p.deck[p.nextIdx];
   soloTargetKey = soloGraph.questCells[label];
-  walkClearClass('walk-target');
-  const el = walkCellDiv(soloGraph, soloTargetKey);
-  el.style.setProperty('--pc', p.color);
-  el.classList.add('walk-target');
+  markWalkTarget(soloGraph, label, soloTargetKey, p.color);
 }
 
 // ---------- actiepaneel (begin van de beurt) ----------
@@ -1071,7 +1068,7 @@ function soloFinishTurn(banked){
   if (banked){
     p.completed++;
     p.doneCells.push(soloTargetKey);
-    walkClearClass('walk-target');
+    clearWalkTarget();
     walkCellDiv(soloGraph, soloTargetKey).classList.add('walk-done');
     const extra = (!soloUsedBoots && !soloUsedJump && stepsUsed < roll) ? ` (na ${stepsUsed} van ${roll} stappen — de rest vervalt)` : '';
     walkLog(`Beurt ${soloTurn}: <b>${rollText}</b>${walkEnergyNote(soloEnergyRoll, soloEnergyGain, p)}${turnNote} → <span class="hit">${targetLabel} ${QUEST_NAMES[targetLabel] || ''} voltooid${extra}</span> · ${p.completed}/${SIM_QUESTS_TO_WIN}`, 'hit', p);
@@ -1414,7 +1411,7 @@ function soloFinishRound(){
 function soloEndGame(stuck){
   soloPhase = 'game-over';
   soloRefreshCardVault();
-  walkClearClass('walk-target');
+  clearWalkTarget();
   walkSoloActionsEl.innerHTML = '';
   btnWalkSoloRoll.hidden = true;
   btnWalkSoloSkip.hidden = true;

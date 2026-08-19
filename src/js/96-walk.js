@@ -89,6 +89,7 @@ function walkPlayerCount(){
 // ---------- bord ----------
 function buildWalkBoard(){
   walkBoardEl.innerHTML = '';
+  walkRoomRingEl = null;      // hing onder het bord en is met de innerHTML meegewist
   const els = [];
   for (let R = 0; R < TILE_ROWS*TILE_H; R++){
     els.push([]);
@@ -107,6 +108,8 @@ function buildWalkBoard(){
 function renderWalkBoard(){
   if (!walkBoardEl) return;
   if (!walkCellEls) walkCellEls = buildWalkBoard();
+  // het bord wordt hier van nul opgebouwd; alleen aangeroepen buiten een lopend potje om
+  clearWalkTarget();
   walkPaintedPawns = [];
   for (let R = 0; R < TILE_ROWS*TILE_H; R++){
     for (let C = 0; C < TILE_COLS*TILE_W; C++){
@@ -130,6 +133,74 @@ function renderWalkBoard(){
 
 function walkCellDiv(graph, key){
   return walkCellEls[Math.floor(key / graph.W)][key % graph.W];
+}
+
+// ---------- doel aanwijzen ----------
+// Eén plek voor alle drie de aanwijzingen, zodat ze altijd dezelfde kleur dragen: het
+// opdrachtvakje zelf, een rand om de kamer waar het in ligt, en de kaart in het zijpaneel.
+// De kleur komt uit QUEST_CARD_ART (05-card-art.js) — dezelfde als op het tabblad Kaarten.
+function questTint(label){
+  const art = QUEST_CARD_ART[label];
+  return art ? art.tint : '#4fb8e0';
+}
+const walkQuestCardEl = document.getElementById('walkQuestCard');
+let walkRoomRingEl = null;
+
+function walkRoomRing(){
+  if (!walkRoomRingEl){
+    walkRoomRingEl = document.createElement('div');
+    walkRoomRingEl.className = 'walk-room-ring';
+    walkRoomRingEl.hidden = true;
+    walkBoardEl.appendChild(walkRoomRingEl);
+  }
+  return walkRoomRingEl;
+}
+
+// Zet de markering op het doel van wie aan zet is. `playerColor` blijft de rand van het
+// vakje zelf (wie er heen moet), de opdrachtkleur wordt de gloed en de kamerrand.
+function markWalkTarget(graph, label, key, playerColor){
+  walkClearClass('walk-target');
+  const tint = questTint(label);
+
+  const cell = walkCellDiv(graph, key);
+  cell.style.setProperty('--pc', playerColor);
+  cell.style.setProperty('--qtint', tint);
+  cell.classList.add('walk-target');
+
+  // rand om de hele tegel waar het opdrachtvakje in ligt
+  const ring = walkRoomRing();
+  const R = Math.floor(key / graph.W), C = key % graph.W;
+  ring.style.setProperty('--rr', Math.floor(R / TILE_H));
+  ring.style.setProperty('--rc', Math.floor(C / TILE_W));
+  ring.style.setProperty('--qtint', tint);
+  ring.hidden = false;
+
+  renderWalkQuestCard(label);
+}
+
+function clearWalkTarget(){
+  walkClearClass('walk-target');
+  if (walkRoomRingEl) walkRoomRingEl.hidden = true;
+  if (walkQuestCardEl) walkQuestCardEl.innerHTML = '';
+}
+
+// de actieve opdrachtkaart in het zijpaneel, in dezelfde opmaak als het tabblad Kaarten
+function renderWalkQuestCard(label){
+  if (!walkQuestCardEl) return;
+  if (!label){ walkQuestCardEl.innerHTML = ''; return; }
+  const tid = findLabelTile(label);
+  const slotIdx = tid !== null ? layout.indexOf(tid) : -1;
+  const waar = tid !== null && slotIdx !== -1
+    ? `${ROOM_NAMES[tid] || ('Gang ' + tid)} · positie ${letterForSlot(slotIdx)}`
+    : '—';
+  walkQuestCardEl.style.setProperty('--qtint', questTint(label));
+  walkQuestCardEl.innerHTML =
+    `<span class="walk-quest-card-face">${renderQuestCardFace(label)}</span>` +
+    `<span class="walk-quest-card-text">` +
+      `<span class="lbl">Nu op zoek naar</span>` +
+      `<b>${label} · ${QUEST_NAMES[label] || label}</b>` +
+      `<span class="sub">${waar}</span>` +
+    `</span>`;
 }
 function walkClearClass(cls){
   for (const el of walkBoardEl.querySelectorAll('.' + cls)) el.classList.remove(cls);
@@ -291,6 +362,7 @@ function syncWalkStartEnabled(){
 function stopWalkSimulation(){
   walkRunId++;
   setWalkRunning(false);
+  clearWalkTarget();      // anders blijft "Nu op zoek naar …" staan bij een stilgezet potje
 }
 
 function refreshWalkStartOptions(){
@@ -571,10 +643,8 @@ async function runWalkSimulation(){
       walkClearClass('walk-trail');
       walkClearClass('walk-done');
       for (const k of player.doneCells) walkCellDiv(graph, k).classList.add('walk-done');
-      walkClearClass('walk-target');
       const targetDiv = walkCellDiv(graph, targetKey);
-      targetDiv.style.setProperty('--pc', player.color);
-      targetDiv.classList.add('walk-target');
+      markWalkTarget(graph, targetLabel, targetKey, player.color);
       paintWalkPawns(graph, players, pIdx);
       renderWalkScore(players, pIdx);
       renderWalkMeta({ player, turn });
@@ -744,7 +814,7 @@ async function runWalkSimulation(){
           // in 95-simulate.js), zodat wie later in de beurtvolgorde zit deze ronde nog evenveel
           // kans krijgt om ook zijn 6e opdracht te halen, i.p.v. dat beurtvolgorde de plaats bepaalt
           player.finishTurn = turn;
-          walkClearClass('walk-target');
+          clearWalkTarget();
           walkLog(`${player.name} heeft alle ${SIM_QUESTS_TO_WIN} opdrachten voltooid (beurt ${turn}) en verlaat het bord — wacht op de rest van deze ronde.`, 'hit', player);
           roundFinishers.push(player);
           paintWalkPawns(graph, players, pIdx);
@@ -781,7 +851,7 @@ async function runWalkSimulation(){
   }
 
   if (aborted()) return;
-  walkClearClass('walk-target');
+  clearWalkTarget();
   walkClearClass('walk-trail');
   const winners = players.filter(p => p.rank === 1);
   if (gameOver && winners.length){

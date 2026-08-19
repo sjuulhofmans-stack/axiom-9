@@ -64,8 +64,7 @@ src/
                       tussen bots, met actiekaarten (Kortsluiting, Duwstoot,
                       Prioriteitspas, Zwaartekracht-laarzen, Koerscorrectie, ...)
     98-cards.js       tabblad "Kaarten": vitrine met alle 9 opdrachtkaarten en 18 actie-
-                      kaarten, klik om te vergroten. QUEST_CARD_ART (accentkleur + icoon
-                      per opdracht) staat hier ook.
+                      kaarten, klik om te vergroten.
 build.py              plakt alles tot dist/axiom9.html (JS_ORDER bepaalt de volgorde,
                       dus een nieuw js/-bestand moet je daar ook toevoegen)
 dist/axiom9.html      GEBOUWD — niet handmatig bewerken
@@ -98,7 +97,8 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | een kaartnaam of hint langer maken           | meet daarna opnieuw: `.card-show-cap` heeft een `min-height` die op de langste tekst is gemeten (zie de opmerking erbij in `styles.css`) |
 | een sectie toevoegen aan de simulatie-uitslag | `95-simulate.js`: `simSectionOpen('Titel')` — die sluit de vorige sectie vanzelf, en `simSectionCloseAll()` sluit de laatste |
 | een getal in beeld brengen                   | `nl(x, digits)` in `10-rules.js` — Nederlandse komma. NIET voor CSS-waarden (`style.width`), daar moet de punt blijven |
-| het icoon of de kleur van een opdrachtkaart  | `98-cards.js` (`QUEST_CARD_ART`) |
+| het icoon of de kleur van een opdrachtkaart  | `05-card-art.js` (`QUEST_CARD_ART`) — staat daar en niet in 98, omdat 96/97 hem ook gebruiken |
+| de doelmarkering in "stap voor stap"          | `96-walk.js` (`markWalkTarget` / `clearWalkTarget`): vakje, rand om de kamer en kaart in het zijpaneel in één keer |
 
 ## Spelregels die in de code zitten
 
@@ -196,7 +196,10 @@ Check minimaal:
    twee kaarten naast elkaar en mag de pagina niet horizontaal schuiven.
 10. Op 375px: de tabbalk blijft één regel (schuift horizontaal) en boven elk bord staat een
    knop "Vergroten" die de cellen op 20px zet.
-11. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
+11. In "Stap voor stap" licht de tegel met het doelvakje op in de kleur van de opdrachtkaart,
+   en staat diezelfde kaart uitgelicht bovenin het paneel rechts. Bij "Stoppen" verdwijnen
+   ze allebei.
+12. Tabblad "Stap voor stap" → "Simulatie starten" → de pion loopt zichtbaar,
    de dobbelstenen rollen, en het potje eindigt met "Gewonnen vanaf 3.x".
    Tempo moet je tijdens het lopen kunnen wijzigen; "Stoppen" moet de pion
    echt stilzetten (geen achtergrondlus die doorloopt).
