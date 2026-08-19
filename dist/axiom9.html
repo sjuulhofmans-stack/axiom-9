@@ -569,7 +569,9 @@
     /* 320px is de breedte waarbij de onderregel ("2.8 — Navigatiekaarten" + strategiebadge +
        twee kaartplekken) er nog helemaal op past; smaller en de doeltekst wordt afgekapt,
        en juist die vertelt waar een tegenstander heen gaat. */
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
+    /* 240px is de smalste kolom waarin alle drie de regels nog helemaal passen (gemeten:
+       doelregel 153px, onderregel 208px). Vier spelers passen daarmee naast elkaar. */
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
     gap:8px; align-items:stretch;
   }
   /* #walkScore (boven het bord) en #walkScoreActive (in het paneel rechts) krijgen allebei
@@ -577,25 +579,38 @@
      puur van CSS af: boven het bord alleen de ANDERE spelers, rechts alleen wie aan zet is
      (gebruikersverzoek). Bij 1 speler blijft #walkScore dus leeg (geen "andere" spelers) en
      collapt vanzelf via het lege-flexcontainer-gedrag hierboven. */
-  #walkScore .walk-player.active{display:none;}
+  /* Alle spelers blijven staan, in dezelfde volgorde. Eerder werd wie aan zet is hier
+     verborgen — dan viel er elke beurt een ander vak weg en schoven de overige op, en dat
+     maakte juist onduidelijk wie er aan de beurt was. */
   #walkScoreActive .walk-player:not(.active){display:none;}
   .walk-player{
     display:flex; flex-direction:column; align-items:stretch; gap:5px; flex:1 1 210px;
     font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
     background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
     border-radius:4px; padding:7px 10px;
-    /* vaste hoogte: bovenregel (~16px) + gat (5px) + onderregel met kaartbadge (26px) +
-       padding en rand. Zo verandert de hoogte niet meer zodra iemand een kaart krijgt, en
-       schuift het bord eronder niet meer omlaag. */
-    min-height:63px;
+    /* vaste hoogte: naamregel (16px) + doelregel (16px) + onderregel met kaartbadge (26px)
+       + twee gaten en de padding. Zo verandert de hoogte niet zodra iemand een kaart krijgt
+       en schuift het bord eronder niet omlaag. */
+    min-height:84px;
   }
   .walk-player-top, .walk-player-bottom{display:flex; align-items:center; gap:8px; min-width:0;}
   .walk-player-top{min-height:16px;}
   .walk-player-bottom{min-height:26px;}
-  .walk-player.active{
-    border-color:var(--pc); background:rgba(255,255,255,.04); color:var(--text);
-    box-shadow:0 0 0 1px var(--pc) inset;
+  /* "aan zet" staat er altijd — bij wie niet aan zet is alleen onzichtbaar, zodat het
+     verschijnen ervan geen enkele breedte verschuift */
+  .walk-player-turn{
+    flex:none; font-size:9px; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    color:var(--hull); background:var(--pc); border-radius:3px; padding:2px 6px;
+    visibility:hidden;
   }
+  .walk-player.active .walk-player-turn{visibility:visible;}
+  .walk-player.active{
+    border-color:var(--pc); color:var(--text);
+    background:linear-gradient(140deg, color-mix(in srgb, var(--pc) 18%, var(--hull)), var(--hull) 75%);
+    box-shadow:0 0 0 1px var(--pc) inset, 0 0 18px color-mix(in srgb, var(--pc) 35%, transparent);
+  }
+  /* wie niet aan zet is, staat gedempt op de achtergrond */
+  #walkScore .walk-player:not(.active):not(.done){opacity:.62;}
   .walk-player-dot{
     width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
     box-shadow:0 0 6px var(--pc);
@@ -5788,19 +5803,22 @@ function renderWalkScore(players, activeIdx){
     // en werd hij in een vak van 255px tot 0px samengeknepen — je zag dan nergens meer waar
     // een speler heen ging. Boven staat wie het is en hoe hij ervoor staat, onder waar hij
     // heen gaat en waarmee hij speelt.
+    // Drie vaste regels. Alle spelers staan altijd in dezelfde volgorde in de balk — wie aan
+    // zet is werd eerder verborgen, waardoor er elke beurt een ander vak wegviel en de rest
+    // opschoof. Nu verandert er niets aan de indeling en licht alleen het actieve vak op.
+    // Het "aan zet"-vlaggetje staat er altijd, alleen onzichtbaar bij wie niet aan zet is,
+    // zodat ook dát geen breedte verschuift.
     return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-top">` +
         `<span class="walk-player-dot"></span>` +
         `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-        stratBadge +
-        `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
+        `<span class="walk-player-turn">aan zet</span>` +
         `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
       `</span>` +
-      // De strategiebadge staat op de BOVENregel, bij de speler zelf. Onderaan naast de
-      // doeltekst nam hij 108px ("Herprioritering") en dan werd juist die doeltekst afgekapt
-      // — terwijl die vertelt waar een tegenstander heen gaat, en de bovenregel ruimte over had.
+      `<span class="walk-player-goal">${goal}</span>` +
       `<span class="walk-player-bottom">` +
-        `<span class="walk-player-goal">${goal}</span>` +
+        stratBadge +
+        `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
         walkCardBadges(p) +
       `</span>` +
     `</div>`;

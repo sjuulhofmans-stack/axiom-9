@@ -330,19 +330,22 @@ function renderWalkScore(players, activeIdx){
     // en werd hij in een vak van 255px tot 0px samengeknepen — je zag dan nergens meer waar
     // een speler heen ging. Boven staat wie het is en hoe hij ervoor staat, onder waar hij
     // heen gaat en waarmee hij speelt.
+    // Drie vaste regels. Alle spelers staan altijd in dezelfde volgorde in de balk — wie aan
+    // zet is werd eerder verborgen, waardoor er elke beurt een ander vak wegviel en de rest
+    // opschoof. Nu verandert er niets aan de indeling en licht alleen het actieve vak op.
+    // Het "aan zet"-vlaggetje staat er altijd, alleen onzichtbaar bij wie niet aan zet is,
+    // zodat ook dát geen breedte verschuift.
     return `<div class="${cls}" style="--pc:${p.color}">` +
       `<span class="walk-player-top">` +
         `<span class="walk-player-dot"></span>` +
         `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-        stratBadge +
-        `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
+        `<span class="walk-player-turn">aan zet</span>` +
         `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
       `</span>` +
-      // De strategiebadge staat op de BOVENregel, bij de speler zelf. Onderaan naast de
-      // doeltekst nam hij 108px ("Herprioritering") en dan werd juist die doeltekst afgekapt
-      // — terwijl die vertelt waar een tegenstander heen gaat, en de bovenregel ruimte over had.
+      `<span class="walk-player-goal">${goal}</span>` +
       `<span class="walk-player-bottom">` +
-        `<span class="walk-player-goal">${goal}</span>` +
+        stratBadge +
+        `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
         walkCardBadges(p) +
       `</span>` +
     `</div>`;
