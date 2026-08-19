@@ -202,11 +202,12 @@ Check minimaal:
 
 ## Valkuilen die al een keer misgingen
 
-- **Downloaden werkt niet in de artifact.** De artifact-viewer geeft pagina's geen
-  downloadrechten, dus `<a download>.click()` faalt daar geruisloos — geen fout, geen
-  bestand. `DOWNLOAD_BLOCKED` in `90-editor.js` detecteert dat via
-  `window.self !== window.top` en toont dan de tegeldata als tekst in plaats van een knop
-  die "Opgeslagen ✓" liegt.
+- **Er is bewust geen download-/deelknop meer.** De tool werd gedeeld als HTML-bestand, maar
+  dat gaat nu via de artifact-link. Bovendien gaf de artifact-viewer pagina's geen
+  downloadrechten: `<a download>.click()` faalde daar geruisloos — geen fout, geen bestand —
+  waardoor de knop "Opgeslagen ✓" meldde terwijl er niets gebeurd was. Bouw dit dus niet
+  terug. Gevolg: wijzigingen uit de tegel-editor blijven in de browsersessie. Wil je ze
+  bewaren, pas dan `src/data/tiles.json` aan en draai `python3 build.py`.
 - **`mix-blend-mode` op tekst boven het bord.** De kamernaam stond op `overlay` met wit op
   32%: leesbaar boven een leeg vakje, volledig weggeblend zodra hij een gevuld vakje kruiste
   ("Kernreactor" verloor zo zijn laatste letters). Vaste kleur met een donkere `text-shadow`

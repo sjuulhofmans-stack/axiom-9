@@ -1311,20 +1311,6 @@
     footer{font-size:10.5px; padding:0 8px;}
   }
 
-  /* terugvaloptie als downloaden niet mag (zie DOWNLOAD_BLOCKED in 90-editor.js) */
-  .data-dump{
-    width:100%; margin-top:6px; padding:8px; border-radius:5px; resize:vertical;
-    background:var(--hull); border:1px solid var(--line); color:var(--text);
-    font-family:var(--font-mono); font-size:10px; line-height:1.45; white-space:pre;
-  }
-
-  /* Op een telefoon wordt het bord tot 40 vakjes breed teruggerekend en houd je vakjes van
-     ~7px over: je ziet de vorm van de indeling wel, maar leest de opdracht- en startvakjes
-     nauwelijks. Passend maken blijft daarom de standaard (je wilt het geheel zien), maar met
-     deze knop schakel je naar een leesbare celgrootte en schuif je horizontaal. Op desktop is
-     de knop overbodig en dus verborgen. */
-  .board-tools{display:none; align-items:center; gap:10px; margin-bottom:8px;}
-  .board-zoom{white-space:nowrap; flex:none;}
   .scroll-hint{
     display:none; text-align:left; font-family:var(--font-mono); font-size:10.5px;
     color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0;

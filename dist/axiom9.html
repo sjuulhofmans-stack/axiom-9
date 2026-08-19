@@ -1318,20 +1318,6 @@
     footer{font-size:10.5px; padding:0 8px;}
   }
 
-  /* terugvaloptie als downloaden niet mag (zie DOWNLOAD_BLOCKED in 90-editor.js) */
-  .data-dump{
-    width:100%; margin-top:6px; padding:8px; border-radius:5px; resize:vertical;
-    background:var(--hull); border:1px solid var(--line); color:var(--text);
-    font-family:var(--font-mono); font-size:10px; line-height:1.45; white-space:pre;
-  }
-
-  /* Op een telefoon wordt het bord tot 40 vakjes breed teruggerekend en houd je vakjes van
-     ~7px over: je ziet de vorm van de indeling wel, maar leest de opdracht- en startvakjes
-     nauwelijks. Passend maken blijft daarom de standaard (je wilt het geheel zien), maar met
-     deze knop schakel je naar een leesbare celgrootte en schuif je horizontaal. Op desktop is
-     de knop overbodig en dus verborgen. */
-  .board-tools{display:none; align-items:center; gap:10px; margin-bottom:8px;}
-  .board-zoom{white-space:nowrap; flex:none;}
   .scroll-hint{
     display:none; text-align:left; font-family:var(--font-mono); font-size:10.5px;
     color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0;
@@ -1416,16 +1402,6 @@
         </div>
 
         <div id="layoutCode" hidden></div>
-
-        <div class="field">
-          <label>Delen</label>
-          <button id="btnDownload" class="small">⇩ Download deze pagina (met wijzigingen)</button>
-          <p class="hint" style="margin-top:6px;" id="downloadHint">Slaat één HTML-bestand op met alle tegeldata erin. Werkt overal, ook zonder internet.</p>
-          <div id="downloadFallback" hidden>
-            <p class="hint">Dit is de tegeldata van je huidige bord. Plak hem over <code>src/data/tiles.json</code> heen en draai <code>python3 build.py</code>.</p>
-            <textarea id="downloadJson" class="data-dump" readonly rows="6" spellcheck="false"></textarea>
-          </div>
-        </div>
 
         <p class="hint" id="swapHint">Sleep een tegel over een andere om ze te verwisselen.</p>
         <p class="hint">In het register onderaan: <b>🔒</b> = hoektegel, ligt vast op A/E/P/T · <b>★</b> = Hibernatie, de tegel met de vier startposities · de letter rechts is de positie op het bord.</p>
@@ -3419,16 +3395,6 @@ function tileChecklistItems(tid){
     ...(isRoom ? [{ label: '1 opdrachtvakje', ok: !has('quest') }] : []),
   ];
 }
-// controleert alle 20 tegels; gebruikt vlak vóór het downloaden om kapotte tegels te blokkeren
-function validateAllTilesForSave(){
-  const byTile = new Map();
-  for (let tid=1; tid<=20; tid++){
-    const issues = tileValidationIssues(tid);
-    if (issues.length) byTile.set(tid, issues);
-  }
-  return byTile;
-}
-
 // welke 2.x / 3.x labels zijn nog vrij (buiten deze tegel)
 function labelsInUse(exceptTile){
   const used = new Set();
@@ -3616,88 +3582,6 @@ document.getElementById('editorRevert').addEventListener('click', ()=>{
   updateCloseButtonLabel();
   applyTileEdits();
   drawEditorGrid();
-});
-
-// ---------- deze pagina opslaan, inclusief bewerkte tegels ----------
-// Een <a download>.click() faalt geruisloos zodra de pagina in een sandboxed iframe draait —
-// precies hoe hij als Artifact wordt getoond, want die viewer geeft pagina's geen
-// downloadrechten. Er komt geen fout en geen bestand, dus zonder deze controle meldde de knop
-// vrolijk "Opgeslagen ✓" terwijl er niets was opgeslagen. In dat geval tonen we de tegeldata
-// gewoon op de pagina: dat is het enige wat je in de editor verandert, en daarmee kun je in het
-// repo verder (tiles.json + `python3 build.py`).
-const DOWNLOAD_BLOCKED = (() => { try { return window.self !== window.top; } catch { return true; } })();
-if (DOWNLOAD_BLOCKED){
-  const btn = document.getElementById('btnDownload');
-  btn.textContent = '⧉ Toon de tegeldata';
-  document.getElementById('downloadHint').textContent =
-    'Downloaden kan niet in dit venster (de artifact-viewer blokkeert het). Open de tool als los HTML-bestand om hem op te slaan — hieronder staat wel de tegeldata om mee verder te werken.';
-}
-
-// serialiseert de huidige tegels naar hetzelfde formaat als src/data/tiles.json
-function currentTileData(){
-  const fresh = { pattern: DATA.pattern, tiles: {} };
-  for (let tid=1; tid<=20; tid++){
-    fresh.tiles[String(tid)] = [...tileLookup[tid]].map(([k,v]) => {
-      const [dr,dc] = k.split('_').map(Number);
-      return [dr,dc,v];
-    }).sort((a,b) => a[0]-b[0] || a[1]-b[1]);
-  }
-  return fresh;
-}
-
-document.getElementById('btnDownload').addEventListener('click', ()=>{
-  const problems = validateAllTilesForSave();
-  if (problems.size){
-    const lines = [];
-    for (const [tid, issues] of problems) for (const issue of issues) lines.push(`Tegel #${tid}: ${issue.message}`);
-    swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan geblokkeerd — repareer eerst in de tegel-editor:<br>${lines.map(p=>'• '+p).join('<br>')}</span>`;
-    if (editorTile !== null) drawEditorGrid();
-    return;
-  }
-  const fresh = currentTileData();
-  if (DOWNLOAD_BLOCKED){
-    const box = document.getElementById('downloadFallback');
-    document.getElementById('downloadJson').value = JSON.stringify(fresh, null, 1);
-    box.hidden = false;
-    document.getElementById('downloadJson').select();
-    return;
-  }
-  try{
-    let html = '<!DOCTYPE html>\n' + (()=>{
-      // gegenereerde DOM (bord, register, editor) tijdelijk leegmaken: die wordt bij het
-      // openen toch opnieuw opgebouwd, en scheelt honderden KB's in het bestand
-      const board = boardEl.innerHTML, palR = paletteRoomsEl.innerHTML, palC = paletteCorrEl.innerHTML, ed = editorGrid.innerHTML;
-      const wasHidden = editorOverlay.hidden;
-      boardEl.innerHTML = ''; paletteRoomsEl.innerHTML = ''; paletteCorrEl.innerHTML = ''; editorGrid.innerHTML = '';
-      editorOverlay.hidden = true;
-      const out = document.documentElement.outerHTML;
-      boardEl.innerHTML = board; paletteRoomsEl.innerHTML = palR; paletteCorrEl.innerHTML = palC; editorGrid.innerHTML = ed;
-      editorOverlay.hidden = wasHidden;
-      return out;
-    })();
-    // de DATA-regel vervangen door de actuele versie
-    const marker = 'const DATA = ';
-    const start = html.indexOf(marker);
-    const end = html.indexOf(';\n', start);
-    if (start === -1 || end === -1) throw new Error('DATA-blok niet gevonden');
-    html = html.slice(0, start) + marker + JSON.stringify(fresh) + html.slice(end);
-    // eventuele runtime-toestand opschonen zodat het bestand fris opent
-    const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'axiom9_map_generator.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 1000);
-    const btn = document.getElementById('btnDownload');
-    const label = btn.textContent;
-    btn.textContent = 'Opgeslagen ✓';
-    setTimeout(()=>btn.textContent = label, 1500);
-  }catch(err){
-    swapHint.innerHTML = `<span style="color:var(--danger)">Opslaan mislukt: ${err.message}</span>`;
-  }
 });
 
 // ---------- klikbare legenda: markeringen aan/uit ----------
