@@ -236,6 +236,12 @@ Check minimaal:
   'Barlow Condensed' en 'Space Mono' vallen altijd terug op Arial Narrow en de systeem-
   monospace. Reken bij tekstbreedtes dus met de terugval, niet met de genoemde fonts — dat
   scheelt zo'n 15% en dat is precies het verschil tussen "past net" en "breekt af".
+- **Een kaart die een keuzepaneel opent, moet het bord opruimen.** Zwaartekracht-laarzen
+  liet de groen omrande vakjes en het richtingskruis van de vorige fase gewoon staan; die
+  reageerden nergens meer op, want de fase was inmiddels 'boots-direction'. Dat las als "het
+  spel is vastgelopen". `soloClearClickable()` + `soloHideDirPad()` horen er dus bij, precies
+  zoals `soloEnterTargetPicker` het al deed. En verbruik de kaart bij het SPELEN, niet pas
+  bij het afronden van de keuze — anders staat hij ondertussen nog in je hand.
 - **De spelersbalk staat in BEURTvolgorde, niet op spelersnummer** (`walkScoreOrder` in
   `96-walk.js`, gezet door beide modi zodra de volgorde geloot is). Op nummer gesorteerd
   sprong de markering door het rijtje heen; nu loopt hij netjes van boven naar beneden en

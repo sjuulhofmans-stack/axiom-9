@@ -737,16 +737,35 @@ function soloEnterBootsDirection(){
   const options = gravityBootsOptions(soloGraph, solo().pos, 10, soloOccupied(), soloTargetKey);
   if (!options.length){
     walkLog(`<b>Zwaartekracht-laarzen</b>: in geen enkele richting is een stap mogelijk vanaf hier — de kaart blijft in je hand.`, null, solo());
+    soloAdvanceMovePhase();   // gewoon verder lopen: de kaart is niet gebruikt
     return;
   }
   soloBootsOptions = options;
   soloPhase = 'boots-direction';
+  // De vakjes die je vóór deze kaart nog kon aanklikken bleven groen omrand op het bord
+  // staan, en het richtingskruis bleef in beeld — allebei dood, want de fase is nu een
+  // andere. Dat las als "het spel is vastgelopen". Weg ermee, en het bord wijst nu alleen
+  // nog de richtingen aan die de laarzen je opleveren.
+  soloClearClickable();
   soloHideDirPad();
   btnWalkSoloSkip.hidden = true;
+  btnWalkSoloRoll.hidden = true;
+
+  // De kaart is bij het spelen verbruikt, niet pas bij het kiezen van een richting: anders
+  // bleef hij in je hand staan zolang je nog niet gekozen had, en kon je 'm ondertussen nog
+  // een keer openen.
+  const p = solo();
+  useActionCard(p, 'boots', soloDeck);
+  soloUsedCardId = 'boots';
+  soloRefreshCardVault();
+
   const names = ['Noord', 'Oost', 'Zuid', 'West'];
-  walkSoloActionsEl.innerHTML = `<div class="action-card-row">` + options.map(o =>
+  walkLog(`Je speelt <b>Zwaartekracht-laarzen</b> — kies hieronder in welke richting je rechtdoor loopt.`, null, p);
+  walkSoloActionsEl.innerHTML =
+    `<div class="walk-target-picker-hint">Kies je richting voor <b>Zwaartekracht-laarzen</b>:</div>` +
+    `<div class="action-card-row">` + options.map(o =>
     `<button type="button" class="action-card action-card--lg action-card--plain" data-boots-dir="${o.dir}" title="${names[o.dir]} — ${o.path.length - 1} stappen tot muur/rand/tegenstander">
-      <span class="action-card-name" style="margin-top:22px;">${names[o.dir]}</span>
+      <span class="action-card-name">${names[o.dir]}</span>
       <span class="action-card-hint">${o.path.length - 1} vakjes tot muur/rand${o.bankedAt !== -1 ? ' — raakt je doel!' : ''}</span>
     </button>`
   ).join('') + `</div>`;
@@ -763,13 +782,13 @@ function soloResolveBoots(dir){
   const opt = soloBootsOptions.find(o => o.dir === dir);
   if (!opt) return;
   const p = solo();
-  useActionCard(p, 'boots', soloDeck);
-  soloUsedCardId = 'boots';
+  // de kaart is al afgelegd in soloEnterBootsDirection, hier alleen nog de zet afhandelen
   soloUsedBoots = true;
   const banked = opt.bankedAt !== -1;
   const path = banked ? opt.path.slice(0, opt.bankedAt + 1) : opt.path;
 
-  walkLog(`Je speelt <b>Zwaartekracht-laarzen</b>: ${path.length - 1} stappen rechtdoor.`, null, p);
+  const namen = ['noord', 'oost', 'zuid', 'west'];
+  walkLog(`<b>Zwaartekracht-laarzen</b>: ${path.length - 1} stappen rechtdoor naar het ${namen[dir]}.`, null, p);
   for (let i = 1; i < path.length; i++){
     const leaving = walkCellDiv(soloGraph, p.pos);
     leaving.style.setProperty('--pc', p.color);
