@@ -5027,7 +5027,7 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
         ? `stilste tegel: ${letterForSlot(coldest.slotIdx)} — ${ROOM_NAMES[coldest.tid] || ('Gang ' + coldest.tid)} met ${nl(coldest.share, 1)}% van het verkeer`
         : '—') +
     verdictItem('ok', 'Speelduur', `${Math.round(avg)} beurten`,
-      `mediaan ${median} · min ${min} · max ${max} (alle spelers samen)`) +
+      `alle spelers samen — ${nl(avg / SIM_START_LABELS.length, 1)} beurten per speler · mediaan ${median} · min ${min} · max ${max}`) +
     `</div>`;
 
   html += `<div class="sim-expand-row"><button type="button" class="small ghost" id="btnSimExpand" aria-expanded="false">Alle details uitklappen</button></div>`;
@@ -5058,7 +5058,21 @@ function renderSimResults({ n, stuckCount, startWins, startTurnsSum, startRanks,
   html += `<p class="hint">Hoe hoger het gemiddelde, hoe afgelegener dat opdrachtvakje ligt vanaf waar spelers 'm meestal moeten benaderen.</p>`;
 
   html += simSectionOpen('Speelduur');
-  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is: gemiddeld <b>${nl(avg, 1)}</b> beurten, mediaan <b>${median}</b>, min <b>${min}</b>, max <b>${max}</b> (alle spelers samen, dus deel door 4 voor beurten per speler).</p>`;
+  // `gameLengths` telt de beurten van ALLE spelers bij elkaar op — dat is de lengte van het
+  // potje, niet wat één speler doet. De beurten gaan om de beurt rond, dus delen door het
+  // aantal spelers geeft precies hoeveel keer jij aan de beurt komt (hooguit één beurt
+  // verschil tussen de eerste en de laatste in de volgorde).
+  const spelers = SIM_START_LABELS.length;
+  // mediaan/min/max zijn hele beurten; alleen het gemiddelde heeft een decimaal nodig
+  const duurRij = (label, totaal) =>
+    `<tr><td>${label}</td><td class="num">${nl(totaal, Number.isInteger(totaal) ? 0 : 1)}</td><td class="num">${nl(totaal / spelers, 1)}</td></tr>`;
+  html += `<p class="hint">Van de eerste worp tot de nummer 3 binnen is. De linkerkolom is het hele potje, de rechter hoe vaak één speler aan de beurt komt (${spelers} spelers, om de beurt).</p>`;
+  html += `<table class="sim-table"><thead><tr><th>Speelduur</th><th>Beurten totaal</th><th>Per speler</th></tr></thead><tbody>` +
+    duurRij('Gemiddeld', avg) +
+    duurRij('Mediaan', median) +
+    duurRij('Kortste potje', min) +
+    duurRij('Langste potje', max) +
+    `</tbody></table>`;
   html += renderHistogram(gameLengths);
 
   html += simSectionOpen('Spanning en blokkeren');
