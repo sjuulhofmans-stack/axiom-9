@@ -71,6 +71,20 @@ function soloSyncBotOptions(){
   walkSoloBotsSel.value = Number.isFinite(prev) && prev <= maxBots ? String(prev) : String(maxBots);
 }
 
+// Zelf ingevulde namen, per spelersplek. Ze staan bewust NIET in het spelerobject: dat wordt
+// bij elke wijziging van het aantal spelers opnieuw opgebouwd, en dan zou je je naam telkens
+// kwijt zijn. Leeg = automatisch "Speler N".
+const soloCustomNames = {};
+// Een naam gaat via innerHTML het log, de spelersbalk en een enkele title= in. In plaats van
+// op tien plekken te ontsnappen, gooien we de tekens er hier meteen uit — voor een spelersnaam
+// mis je er niets aan en er kan zo niets stuk.
+function soloCleanName(raw){
+  return String(raw).replace(/[<>&"]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+}
+function soloSeatName(idx){
+  return soloCustomNames[idx] || `Speler ${idx + 1}`;
+}
+
 function soloRebuildSetup(){
   stopSoloGame();
   const total = Math.max(1, Math.min(WALK_MAX_PLAYERS, parseInt(walkSoloPlayersSel ? walkSoloPlayersSel.value : '1', 10) || 1));
@@ -84,7 +98,7 @@ function soloRebuildSetup(){
     soloSetupPlayers.push({
       idx: i,
       isHuman,
-      name: `Speler ${i + 1}`,
+      name: isHuman ? soloSeatName(i) : `Speler ${i + 1}`,
       color: WALK_PLAYER_COLORS[i],
       deck: simShuffle(SIM_QUEST_LABELS, soloSetupRand),
       nextIdx: 0, completed: 0, energy: 0, cards: [], rank: 0, doneCells: [], condenserPending: false,
@@ -110,14 +124,29 @@ function soloRenderSetupUI(){
     const opts = SIM_START_LABELS.map(l => `<option value="${l}"${l === p.startLabel ? ' selected' : ''}>${l}</option>`).join('');
     const firstQuest = p.deck[0];
     return `<div class="walk-solo-setup-player" style="--pc:${p.color}">` +
-      `<span class="walk-solo-setup-name">${p.name}</span>` +
-      `<select data-seat="${p.idx}">${opts}</select>` +
+      `<span class="walk-solo-setup-dot"></span>` +
+      `<input type="text" class="walk-solo-setup-input" data-name-seat="${p.idx}"` +
+        ` value="${soloCustomNames[p.idx] || ''}" maxlength="18" spellcheck="false"` +
+        ` placeholder="Speler ${p.idx + 1}" aria-label="Naam van speler ${p.idx + 1}">` +
+      `<select data-seat="${p.idx}" aria-label="Startpositie van speler ${p.idx + 1}">${opts}</select>` +
       `<span class="walk-solo-setup-preview">eerste opdracht: <b>${firstQuest} — ${QUEST_NAMES[firstQuest] || ''}</b></span>` +
     `</div>`;
   }).join('');
   if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = false;
 }
 if (walkSoloSetupEl){
+  // Bewust op 'input' en zónder de opzet opnieuw te tekenen: dat zou bij elke toetsaanslag
+  // de focus uit het veld halen.
+  walkSoloSetupEl.addEventListener('input', (e) => {
+    const veld = e.target.closest('input[data-name-seat]');
+    if (!veld) return;
+    const seat = parseInt(veld.dataset.nameSeat, 10);
+    const p = soloSetupPlayers[seat];
+    if (!p) return;
+    const schoon = soloCleanName(veld.value);
+    if (schoon) soloCustomNames[seat] = schoon; else delete soloCustomNames[seat];
+    p.name = soloSeatName(seat);
+  });
   walkSoloSetupEl.addEventListener('change', (e) => {
     const sel = e.target.closest('select[data-seat]');
     if (!sel) return;

@@ -90,6 +90,7 @@ aangeroepen (functiedeclaraties worden gehoist, `const`/`let` niet).
 | de spelsimulatie aanpassen                  | `95-simulate.js`      |
 | iets aan "stap voor stap" automatisch (pion, tempo, bots) | `96-walk.js` |
 | iets aan de solo-modus / actiekaarten        | `97-solo.js` (kaartdefinities zelf staan in `95-simulate.js`, `ACTION_CARDS`/`ENERGY_ACTIONS`) |
+| de naam die een menselijke speler invult      | `97-solo.js` (`soloCustomNames` / `soloSeatName` / `soloCleanName`) — leeg = "Speler N" |
 | de tekst op een energie-actie                | `95-simulate.js` (`ENERGY_ACTIONS`): `hint` staat OP de knop en moet kort blijven, `note` is de tooltip |
 | wanneer een kaart wel/niet speelbaar is      | `97-solo.js` (`soloCardBlockReason`) — één bron voor zowel de kaartkluis als het kaartvenster |
 | het kaartvenster (kluis onder de dobbelstenen + venster) | `97-solo.js` (`soloRefreshCardVault`, `soloRenderCardGrid`), opmaak in `styles.css` onder "kaartkluis + kaartvenster" |
@@ -236,6 +237,10 @@ Check minimaal:
   'Barlow Condensed' en 'Space Mono' vallen altijd terug op Arial Narrow en de systeem-
   monospace. Reken bij tekstbreedtes dus met de terugval, niet met de genoemde fonts — dat
   scheelt zo'n 15% en dat is precies het verschil tussen "past net" en "breekt af".
+- **Een spelersnaam gaat via `innerHTML` het log, de balk en een `title=` in.** In plaats van
+  op tien plekken te ontsnappen gooit `soloCleanName()` in `97-solo.js` `<`, `>`, `&` en `"`
+  er meteen uit en kapt af op 18 tekens. Voeg je ergens een nieuwe plek toe waar een naam
+  wordt getoond, dan hoef je daar dus niets voor te doen.
 - **Een kaart die een keuzepaneel opent, moet het bord opruimen.** Zwaartekracht-laarzen
   liet de groen omrande vakjes en het richtingskruis van de vorige fase gewoon staan; die
   reageerden nergens meer op, want de fase was inmiddels 'boots-direction'. Dat las als "het

@@ -371,9 +371,23 @@
     background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
     border-radius:5px; padding:8px 11px;
   }
-  .walk-solo-setup-name{
-    font-family:var(--font-mono); font-size:12px; color:var(--text); min-width:70px;
+  .walk-solo-setup-dot{
+    width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
+    box-shadow:0 0 6px var(--pc);
   }
+  /* Eigen naam invullen; leeg laten geeft "Speler N" (de placeholder laat dat ook zien).
+     `input[type=text]` en `select` hierboven zijn allebei op volle breedte gezet; die regels
+     zijn specifieker dan een losse klasse, vandaar het element ervoor. */
+  input[type=text].walk-solo-setup-input{
+    width:160px; flex:none; background:var(--hull); border:1px solid var(--line);
+    color:var(--text); font-family:var(--font-mono); font-size:12.5px;
+    padding:7px 9px; border-radius:4px;
+  }
+  input[type=text].walk-solo-setup-input:focus{
+    border-color:var(--pc); box-shadow:0 0 0 2px color-mix(in srgb, var(--pc) 22%, transparent);
+  }
+  .walk-solo-setup-input::placeholder{color:var(--text-dim);}
+  .walk-solo-setup-player select{width:auto; flex:none; font-size:12.5px; padding:7px 9px;}
   .walk-solo-setup-preview{
     font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
   }
@@ -6473,6 +6487,20 @@ function soloSyncBotOptions(){
   walkSoloBotsSel.value = Number.isFinite(prev) && prev <= maxBots ? String(prev) : String(maxBots);
 }
 
+// Zelf ingevulde namen, per spelersplek. Ze staan bewust NIET in het spelerobject: dat wordt
+// bij elke wijziging van het aantal spelers opnieuw opgebouwd, en dan zou je je naam telkens
+// kwijt zijn. Leeg = automatisch "Speler N".
+const soloCustomNames = {};
+// Een naam gaat via innerHTML het log, de spelersbalk en een enkele title= in. In plaats van
+// op tien plekken te ontsnappen, gooien we de tekens er hier meteen uit — voor een spelersnaam
+// mis je er niets aan en er kan zo niets stuk.
+function soloCleanName(raw){
+  return String(raw).replace(/[<>&"]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18);
+}
+function soloSeatName(idx){
+  return soloCustomNames[idx] || `Speler ${idx + 1}`;
+}
+
 function soloRebuildSetup(){
   stopSoloGame();
   const total = Math.max(1, Math.min(WALK_MAX_PLAYERS, parseInt(walkSoloPlayersSel ? walkSoloPlayersSel.value : '1', 10) || 1));
@@ -6486,7 +6514,7 @@ function soloRebuildSetup(){
     soloSetupPlayers.push({
       idx: i,
       isHuman,
-      name: `Speler ${i + 1}`,
+      name: isHuman ? soloSeatName(i) : `Speler ${i + 1}`,
       color: WALK_PLAYER_COLORS[i],
       deck: simShuffle(SIM_QUEST_LABELS, soloSetupRand),
       nextIdx: 0, completed: 0, energy: 0, cards: [], rank: 0, doneCells: [], condenserPending: false,
@@ -6512,14 +6540,29 @@ function soloRenderSetupUI(){
     const opts = SIM_START_LABELS.map(l => `<option value="${l}"${l === p.startLabel ? ' selected' : ''}>${l}</option>`).join('');
     const firstQuest = p.deck[0];
     return `<div class="walk-solo-setup-player" style="--pc:${p.color}">` +
-      `<span class="walk-solo-setup-name">${p.name}</span>` +
-      `<select data-seat="${p.idx}">${opts}</select>` +
+      `<span class="walk-solo-setup-dot"></span>` +
+      `<input type="text" class="walk-solo-setup-input" data-name-seat="${p.idx}"` +
+        ` value="${soloCustomNames[p.idx] || ''}" maxlength="18" spellcheck="false"` +
+        ` placeholder="Speler ${p.idx + 1}" aria-label="Naam van speler ${p.idx + 1}">` +
+      `<select data-seat="${p.idx}" aria-label="Startpositie van speler ${p.idx + 1}">${opts}</select>` +
       `<span class="walk-solo-setup-preview">eerste opdracht: <b>${firstQuest} — ${QUEST_NAMES[firstQuest] || ''}</b></span>` +
     `</div>`;
   }).join('');
   if (walkSoloStartRowEl) walkSoloStartRowEl.hidden = false;
 }
 if (walkSoloSetupEl){
+  // Bewust op 'input' en zónder de opzet opnieuw te tekenen: dat zou bij elke toetsaanslag
+  // de focus uit het veld halen.
+  walkSoloSetupEl.addEventListener('input', (e) => {
+    const veld = e.target.closest('input[data-name-seat]');
+    if (!veld) return;
+    const seat = parseInt(veld.dataset.nameSeat, 10);
+    const p = soloSetupPlayers[seat];
+    if (!p) return;
+    const schoon = soloCleanName(veld.value);
+    if (schoon) soloCustomNames[seat] = schoon; else delete soloCustomNames[seat];
+    p.name = soloSeatName(seat);
+  });
   walkSoloSetupEl.addEventListener('change', (e) => {
     const sel = e.target.closest('select[data-seat]');
     if (!sel) return;
