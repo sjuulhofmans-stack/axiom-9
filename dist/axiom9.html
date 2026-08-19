@@ -1172,15 +1172,18 @@
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
     /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
        prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
-       "Kernreactor" verloor zo zijn laatste letters. Nu een vaste kleur op een eigen donker
-       strookje (zie de ::before hieronder), zodat de naam op elke ondergrond leest. */
-    color:#dbe6f0;
+       "Kernreactor" verloor zo zijn laatste letters. De leesbaarheid komt nu uit een donkere
+       rand ROND de letters, niet uit een vlak eronder: een balkje achter de naam legde een
+       zwart blok over de tegels heen en dat hoort niet op het bord. */
+    color:#e8eff6;
+    text-shadow:
+      0 0 3px rgba(4,7,11,.95),
+      0 1px 2px rgba(4,7,11,.95),
+      1px 0 2px rgba(4,7,11,.9),
+      -1px 0 2px rgba(4,7,11,.9),
+      0 -1px 2px rgba(4,7,11,.9);
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
-    /* het strookje loopt precies om de tekst heen: `width:fit-content` op het label zelf kan
-       niet, want dan verspringt de linkermarge die de letterbadge vrijhoudt */
-    background:linear-gradient(90deg, rgba(8,12,17,.86) 0%, rgba(8,12,17,.86) calc(100% - 14px), rgba(8,12,17,0) 100%);
-    box-shadow:0 1px 3px rgba(0,0,0,.5);
   }
 
   #board.hide-walk .cell.walk{background:transparent !important; box-shadow:none !important;}

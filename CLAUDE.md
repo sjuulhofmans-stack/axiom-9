@@ -212,7 +212,8 @@ Check minimaal:
 - **`mix-blend-mode` op tekst boven het bord.** De kamernaam stond op `overlay` met wit op
   32%: leesbaar boven een leeg vakje, volledig weggeblend zodra hij een gevuld vakje kruiste
   ("Kernreactor" verloor zo zijn laatste letters). Vaste kleur met een donkere `text-shadow`
-  leest op allebei de ondergronden.
+  rondom leest op allebei de ondergronden — getest met alle vakjes gevuld. Geef het label
+  géén achtergrondvlak: dat leest wel, maar legt een zwart blok over de tegels heen.
 - **`overflow-wrap:anywhere` verandert de min-content-breedte.** Op `.room-tag` liet dat
   "Serverruimte" ineens afbreken terwijl het net paste. Gebruik het alleen waar een woord
   echt niet kan passen (kaartbijschriften), niet als algemene veiligheidsklep.
