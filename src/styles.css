@@ -466,17 +466,11 @@
      met opzet niet-krimpbaar, dus laat die desnoods naar een tweede regel wrappen i.p.v. ze af
      te kappen: bij een lange strategienaam ("Herprioritering") paste er anders geen "0/6" meer. */
   .walk-info-panel .walk-score{flex-direction:column;}
-  .walk-info-panel .walk-player{flex:none; width:100%; min-width:0; flex-wrap:wrap; row-gap:4px;}
-  /* Vrij laten wrappen gaf een wisselende rijhoogte (1, 2 of 3 regels, afhankelijk van hoe lang
-     de strategienaam toevallig is en of er kaartbadges bij staan) — en dat liet de dobbelknop
-     eronder toch nog een paar pixels op en neer springen bij elke beurt (gebruikersmelding: "de
-     knop met het dobbelen"). Een geforceerde flex-basis:100%-break op één specifiek kind bleek
-     averechts te werken (die neemt dan zelf de HELE regel in beslag i.p.v. alleen een nieuwe
-     regel te starten, met een extra 3e regel tot gevolg). Simpeler en robuuster: een vaste
-     `min-height` die het slechtste geval (2 kaartbadges + de langste strategienaam) al dekt —
-     kortere inhoud laat dan gewoon wat lege ruimte staan, maar de rijhoogte zelf verandert nooit
-     meer per beurt. 80px is gemeten met alle 4 strategienamen + 2 kaarten tegelijk. */
-  .walk-info-panel .walk-player{min-height:80px;}
+  /* In de smalle zijkolom staat elke speler onder elkaar. De rijhoogte ligt nu vast via
+     .walk-player zelf (twee regels), dus de wrap-hack met een aparte min-height van 80px is
+     niet meer nodig — die was er alleen omdat alles op één regel stond en onvoorspelbaar
+     wrapte, waardoor de dobbelknop eronder per beurt een paar pixels verschoof. */
+  .walk-info-panel .walk-player{flex:none; width:100%; min-width:0;}
 
   /* "het dobbelen" als eigen vast blokje (gebruikersverzoek): dezelfde box als voorheen,
      nu met de dobbel-/sla-actie-over-knop er meteen in — die kreeg met flex-basis:100% altijd
@@ -490,7 +484,12 @@
      verborgen zijn (bv. 'moving', of het kiezen van een doelwit) — en dat liet .walk-info-panel
      eronder alsnog 36px op en neer springen, exact het probleem dat deze hele sectie oplost. */
   .walk-hud .btn-row{flex-basis:100%; min-height:40px;}
-  .walk-dice{display:flex; align-items:center; gap:8px; min-height:38px; flex-wrap:wrap; row-gap:6px;}
+  /* Twee vaste regels: loopstenen boven, energiesteen eronder. De vaste min-height dekt
+     allebei de regels, zodat het blok niet van hoogte verandert als de Stuwstoot een derde
+     loopsteen toevoegt. */
+  .walk-dice{display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-height:82px;}
+  .walk-dice-row{display:flex; align-items:center; gap:8px; min-height:38px;}
+  .walk-dice-row .walk-die.energy{margin-left:0;}
   .walk-die{
     /* flex:none — zonder dit knijpt de rij de stenen samen zodra hij niet meer past in de
        300px-zijkolom, en dan is een steen ineens 31px breed in plaats van 38 */
@@ -555,6 +554,17 @@
     display:flex; gap:8px; flex-wrap:wrap;
   }
   .walk-score:empty{display:none;}
+  /* De balk boven het bord: gelijke vakken naast elkaar in plaats van vakken die met hun
+     inhoud meegroeien. Als flexrij werd elk vak even breed als zijn tekst en sprong de
+     hele rij bij elke beurt van breedte; en zodra er één hoger werd (kaartbadge) schoof
+     het bord eronder omlaag. */
+  #walkScore{
+    /* 320px is de breedte waarbij de onderregel ("2.8 — Navigatiekaarten" + strategiebadge +
+       twee kaartplekken) er nog helemaal op past; smaller en de doeltekst wordt afgekapt,
+       en juist die vertelt waar een tegenstander heen gaat. */
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
+    gap:8px; align-items:stretch;
+  }
   /* #walkScore (boven het bord) en #walkScoreActive (in het paneel rechts) krijgen allebei
      dezelfde volledige spelerslijst van renderWalkScore() — welke rijen zichtbaar zijn hangt
      puur van CSS af: boven het bord alleen de ANDERE spelers, rechts alleen wie aan zet is
@@ -563,11 +573,18 @@
   #walkScore .walk-player.active{display:none;}
   #walkScoreActive .walk-player:not(.active){display:none;}
   .walk-player{
-    display:flex; align-items:center; gap:8px; flex:1 1 210px;
+    display:flex; flex-direction:column; align-items:stretch; gap:5px; flex:1 1 210px;
     font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
     background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
     border-radius:4px; padding:7px 10px;
+    /* vaste hoogte: bovenregel (~16px) + gat (5px) + onderregel met kaartbadge (26px) +
+       padding en rand. Zo verandert de hoogte niet meer zodra iemand een kaart krijgt, en
+       schuift het bord eronder niet meer omlaag. */
+    min-height:63px;
   }
+  .walk-player-top, .walk-player-bottom{display:flex; align-items:center; gap:8px; min-width:0;}
+  .walk-player-top{min-height:16px;}
+  .walk-player-bottom{min-height:26px;}
   .walk-player.active{
     border-color:var(--pc); background:rgba(255,255,255,.04); color:var(--text);
     box-shadow:0 0 0 1px var(--pc) inset;
@@ -576,9 +593,10 @@
     width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
     box-shadow:0 0 6px var(--pc);
   }
-  .walk-player-name{color:var(--text); white-space:nowrap;}
+  .walk-player-name{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--text); white-space:nowrap;}
   .walk-player-name .sub{color:var(--text-dim);}
-  .walk-player-goal{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
+  .walk-player-goal{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
   .walk-player-goal .hit{color:var(--start);}
   .walk-player-goal .lost{color:var(--danger);}
   .walk-player-strat{
@@ -587,7 +605,9 @@
   }
   .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
   .walk-player-energy.full{color:var(--amber); font-weight:700;}
-  .walk-player-cards{flex:none; display:flex; gap:2px;}
+  /* min-width houdt de plek van twee badges vrij, zodat de doeltekst ernaast niet
+     verspringt op het moment dat iemand een kaart trekt of uitspeelt */
+  .walk-player-cards{flex:none; display:flex; gap:2px; min-width:54px; min-height:26px;}
   .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
 
   /* ---------- kaart-illustraties ---------- */

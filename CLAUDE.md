@@ -236,6 +236,12 @@ Check minimaal:
   'Barlow Condensed' en 'Space Mono' vallen altijd terug op Arial Narrow en de systeem-
   monospace. Reken bij tekstbreedtes dus met de terugval, niet met de genoemde fonts — dat
   scheelt zo'n 15% en dat is precies het verschil tussen "past net" en "breekt af".
+- **Alles wat per beurt verandert moet zijn ruimte vooraf reserveren.** De spelersbalk boven
+  het bord werd hoger zodra iemand een actiekaart kreeg (badge 26px tegenover een tekstregel
+  van 15px) en dan schoof het hele bord omlaag. `.walk-player-cards` staat er daarom altijd,
+  ook leeg, en `.walk-player` heeft een vaste `min-height`. Hetzelfde geldt voor het
+  dobbelblok: twee vaste regels (loopstenen boven, energiesteen onder) in plaats van één rij
+  die wrapt zodra de Stuwstoot een derde loopsteen toevoegt.
 - **Emoji-glyphs als knoplabel.** ⏸ en ▶ vallen op systemen zonder emoji-font terug op een
   leeg blokje. Gebruik gewoon het woord.
 - **De kamernaam op het bord hoort bovenaan zijn tegel.** Stond hij onderaan, dan viel hij pal

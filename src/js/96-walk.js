@@ -240,9 +240,14 @@ function renderWalkDice(a, b, e, rolling, boost){
   const third = boost ? `<span class="${cls} boost" title="Stuwstoot">${boost}</span>` : '';
   const sum = rolling ? '' : `<span class="walk-die-sum">= ${a + b + (boost || 0)} stappen</span>`;
   const energy = rolling ? '' : `<span class="walk-die-sum energy">+${e} energie</span>`;
+  // Twee vaste regels: loopstenen boven, energiesteen eronder. Als één rij die mocht wrappen
+  // sprong de energiesteen naar de tweede regel zodra de Stuwstoot een derde loopsteen
+  // toevoegde, en dat verschoof alles eronder.
   walkDiceEl.innerHTML =
-    `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${third}${sum}` +
-    energyDieHtml(e, rolling) + energy;
+    `<span class="walk-dice-row">` +
+      `<span class="${cls}">${a}</span><span class="${cls}">${b}</span>${third}${sum}` +
+    `</span>` +
+    `<span class="walk-dice-row">${energyDieHtml(e, rolling)}${energy}</span>`;
 }
 
 function renderWalkMeta({ player, turn, stepsLeft }){
@@ -283,8 +288,10 @@ function walkCardNote(id){
 }
 // de handkaarten van een speler als kleine kaart-badges (renderActionCardFace uit
 // 95-simulate.js, gedeeld met de solo-modus)
+// Het vakje staat er ALTIJD, ook zonder kaarten. Een badge is 26px hoog en de rest van de
+// regel maar ~15px, dus verscheen hij pas zodra iemand een kaart kreeg, dan werd de hele
+// spelersbalk hoger en schoof het bord eronder omlaag — elke beurt opnieuw.
 function walkCardBadges(player){
-  if (!player.cards.length) return '';
   return `<span class="walk-player-cards">` +
     player.cards.map(id => renderActionCardFace(id, { size: 'sm' })).join('') +
   `</span>`;
@@ -319,14 +326,22 @@ function renderWalkScore(players, activeIdx){
     const stratBadge = p.strategy
       ? `<span class="walk-player-strat" title="${ENERGY_ACTIONS[p.strategy].hint}">${ENERGY_ACTIONS[p.strategy].name}</span>`
       : (p.isHuman ? `<span class="walk-player-strat" title="jij kiest zelf een energie-actie of kaart">jij kiest</span>` : '');
+    // Twee regels in plaats van één: op één regel was de doeltekst het enige krimpbare deel
+    // en werd hij in een vak van 255px tot 0px samengeknepen — je zag dan nergens meer waar
+    // een speler heen ging. Boven staat wie het is en hoe hij ervoor staat, onder waar hij
+    // heen gaat en waarmee hij speelt.
     return `<div class="${cls}" style="--pc:${p.color}">` +
-      `<span class="walk-player-dot"></span>` +
-      `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
-      stratBadge +
-      walkCardBadges(p) +
-      `<span class="walk-player-goal">${goal}</span>` +
-      `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
-      `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
+      `<span class="walk-player-top">` +
+        `<span class="walk-player-dot"></span>` +
+        `<span class="walk-player-name">${p.name}<span class="sub"> · ${p.startLabel}</span></span>` +
+        `<span class="walk-player-energy${p.energy >= ENERGY_MAX ? ' full' : ''}" title="energie (max ${ENERGY_MAX})">⚡${p.energy}</span>` +
+        `<span class="walk-player-score">${p.completed}/${SIM_QUESTS_TO_WIN}</span>` +
+      `</span>` +
+      `<span class="walk-player-bottom">` +
+        `<span class="walk-player-goal">${goal}</span>` +
+        stratBadge +
+        walkCardBadges(p) +
+      `</span>` +
     `</div>`;
   }).join('');
   if (walkScoreEl) walkScoreEl.innerHTML = html;

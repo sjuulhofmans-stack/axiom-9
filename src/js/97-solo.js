@@ -827,7 +827,9 @@ function renderSoloDicePending(){
   const energyHtml = e === null
     ? energyDieHtml(null, false) + `<span class="walk-die-sum energy">energie bij het gooien</span>`
     : energyDieHtml(e, false) + `<span class="walk-die-sum energy">+${e} energie</span>`;
-  walkDiceEl.innerHTML = `<span class="walk-die">?</span><span class="walk-die">?</span>` + energyHtml;
+  walkDiceEl.innerHTML =
+    `<span class="walk-dice-row"><span class="walk-die">?</span><span class="walk-die">?</span></span>` +
+    `<span class="walk-dice-row">${energyHtml}</span>`;
 }
 function soloRenderDirPad(legal){
   if (!walkDirPadEl) return;
