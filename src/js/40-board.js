@@ -154,7 +154,12 @@ function renderBoard(){
       `<span class="code-box" style="padding:5px 9px;">Sectie ${i+1}: ${g.slice().sort((a,b)=>a-b).join(', ')}</span>`
     ).join('') + `</div>`;
   }
-  html += `<p class="hint">Open naden: <b style="color:var(--amber)">${conn.openCount}</b> / ${totalSeams} &nbsp;·&nbsp; Doodlopende naden (deur tegen een muur): <b style="color:var(--danger)">${conn.brokenCount}</b></p>`;
+  // De regel meldde alleen een getal, in rood, ook als dat getal 0 was — naast een groene
+  // "✓ Eén aaneengesloten schip" las dat als twee tegenstrijdige oordelen over hetzelfde bord.
+  const brokenNote = conn.brokenCount === 0
+    ? `<b style="color:var(--start)">geen</b> — elke doorgang komt uit op een andere doorgang`
+    : `<b style="color:var(--danger)">${conn.brokenCount}</b> — daar komt een deur uit op een muur`;
+  html += `<p class="hint">Open naden: <b style="color:var(--amber)">${conn.openCount}</b> / ${totalSeams} &nbsp;·&nbsp; Doodlopende naden: ${brokenNote}</p>`;
   connStatusEl.innerHTML = html;
 
   // ---- bereikbaarheid op vakjesniveau ----
@@ -220,3 +225,5 @@ function trySwap(slotA, slotB){
   swapHint.textContent = `Tegels ${letterForSlot(slotA)} en ${letterForSlot(slotB)} verwisseld.`;
   return true;
 }
+
+

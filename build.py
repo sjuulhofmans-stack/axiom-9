@@ -24,6 +24,7 @@ DIST = ROOT / "dist"
 # Volgorde is belangrijk: 00 eerst (data), daarna regels, dan UI.
 JS_ORDER = [
     "00-data.js",
+    "05-card-art.js",
     "10-rules.js",
     "20-connectivity.js",
     "30-random.js",
@@ -35,6 +36,8 @@ JS_ORDER = [
     "90-editor.js",
     "95-simulate.js",
     "96-walk.js",
+    "97-solo.js",
+    "98-cards.js",
 ]
 
 

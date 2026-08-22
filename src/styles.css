@@ -1,3 +1,4 @@
+<style>
 :root{
     --font-display: 'Barlow Condensed', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
@@ -21,6 +22,14 @@
     --slot-empty:#0e1319;
   }
   *{box-sizing:border-box;}
+  /* zonder dit reserveert de browser de verticale scrollbalk pas zodra de pagina daadwerkelijk
+     te lang wordt om te passen — en tijdens "Stap voor stap" wisselt de paginahoogte voortdurend
+     (actiepaneel dat verschijnt/verdwijnt, richtingskruis aan/uit, log dat groeit), waardoor de
+     balk er continu bij komt en weer weggaat. Elke keer dat dat gebeurt verschuift de hele pagina
+     ~15px naar links/rechts (gebruikersmelding: "het menu rechts schiet continu van links naar
+     rechts"), óók de vaste 300px-zijkolom met de navigator en de dobbelknop. `scrollbar-gutter:
+     stable` reserveert die ruimte altijd, scrollbalk of niet, dus die horizontale sprong is weg. */
+  html{scrollbar-gutter: stable;}
   html,body{margin:0;padding:0; overflow-x:hidden;}
   body{
     background:
@@ -57,6 +66,10 @@
 
   /* ---------- tabbladen ---------- */
   .tab-bar{display:flex; gap:4px; margin-bottom:22px; border-bottom:1px solid var(--line);}
+  /* Zonder nowrap brak "Stap voor stap" op een telefoon over drie regels en werd de hele balk
+     62px hoog met ongelijke knoppen. Passen ze niet, dan schuift de balk — het gebruikelijke
+     patroon voor tabbladen op mobiel — in plaats van de labels te verminken. */
+  .tab-btn{white-space:nowrap;}
   .tab-btn{
     font-family:var(--font-mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
     padding:11px 20px; background:transparent; border:1px solid transparent; border-bottom:none;
@@ -185,18 +198,91 @@
   .reach-status .sub{color:var(--text-dim); font-size:11.5px;}
 
   /* ---------- simulatie ---------- */
+  .sim-progress{margin:4px 0 10px; display:flex; flex-direction:column; gap:6px;}
+  .sim-progress[hidden]{display:none;}
+  .sim-progress-bar{
+    height:9px; border-radius:5px; background:var(--hull); border:1px solid var(--line-dim);
+    overflow:hidden;
+  }
+  .sim-progress-fill{
+    height:100%; width:0%; border-radius:5px 0 0 5px;
+    background:linear-gradient(90deg, var(--amber-dim), var(--amber));
+    transition:width .12s linear;
+  }
+  .sim-progress-text{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
+    display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
+  .sim-progress-text b{color:var(--amber); font-variant-numeric:tabular-nums;}
+
   .sim-table{width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:12px; margin:10px 0;}
+  /* Op een telefoon zijn de tabellen met 5-6 kolommen breder dan het scherm. Omdat `body`
+     horizontaal scrollen blokkeert werden die kolommen gewoon AFGEKAPT — de rechterkant was
+     onbereikbaar. Als `display:block` met eigen overflow schuift de tabel binnen zijn eigen
+     kader, zonder de pagina mee te trekken. */
+  @media (max-width: 880px){
+    .sim-table{display:block; overflow-x:auto; white-space:nowrap; scrollbar-gutter:auto;}
+  }
   .sim-table th, .sim-table td{padding:6px 8px; text-align:left; border-bottom:1px solid var(--line-dim);}
   .sim-table th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:.08em;}
   .sim-table td.num, .sim-table th:not(:first-child){text-align:right;}
   .sim-table td.num{font-variant-numeric:tabular-nums; color:var(--amber);}
-  .quest-table th{text-align:left;}
+  /* De opdrachtentabel heeft geen getalkolommen, dus alles links. Deze regel stond er al,
+     maar verloor het van `.sim-table th:not(:first-child)` hierboven (die is specifieker),
+     waardoor "Naam" en "Ligt in" rechts stonden en de waarden eronder links. */
+  .sim-table.quest-table th{text-align:left;}
+  /* op 375px is de tabel 2px breder dan zijn kader; laat hem daar liever scrollen dan uitsteken */
+  #questRegister{overflow-x:auto;}
+
+  /* korte conclusie bovenaan de uitslag: de twaalf secties eronder zijn het bewijsmateriaal,
+     maar de vraag "is dit bord goed?" moet je zonder scrollen kunnen beantwoorden */
+  .sim-verdict{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;
+    margin:14px 0 6px;
+  }
+  .sim-verdict-item{
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--vc, var(--line));
+    border-radius:5px; padding:9px 11px; display:flex; flex-direction:column; gap:3px;
+  }
+  .sim-verdict-item .lbl{
+    font-family:var(--font-mono); font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .sim-verdict-item .val{
+    font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--vc, var(--text));
+    letter-spacing:.02em; line-height:1.15;
+  }
+  .sim-verdict-item .sub{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.35;}
+  .sim-verdict-item.ok{--vc:var(--start);}
+  .sim-verdict-item.warn{--vc:var(--amber);}
+  .sim-verdict-item.bad{--vc:var(--danger);}
 
   .sim-subhead{
     font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
     color:var(--text-dim); margin:20px 0 4px; padding-top:16px; border-top:1px solid var(--line-dim);
   }
   .sim-subhead:first-of-type{margin-top:8px; padding-top:0; border-top:none;}
+
+  /* elke sectie van de uitslag is een <details>; standaard dicht, zodat je na het draaien de
+     conclusie ziet en niet 3900px aan tabellen */
+  .sim-expand-row{display:flex; justify-content:flex-end; margin:2px 0 4px;}
+  .sim-section{border-top:1px solid var(--line-dim);}
+  .sim-section > summary.sim-subhead{
+    cursor:pointer; list-style:none; display:flex; align-items:center; gap:9px;
+    margin:0; padding:13px 2px; border-top:none;
+    transition:color .12s;
+  }
+  .sim-section > summary::-webkit-details-marker{display:none;}
+  .sim-section > summary::before{
+    content:''; flex:none; width:0; height:0;
+    border-left:5px solid currentColor; border-top:4px solid transparent; border-bottom:4px solid transparent;
+    transition:transform .15s;
+  }
+  .sim-section[open] > summary::before{transform:rotate(90deg);}
+  .sim-section > summary:hover{color:var(--text);}
+  .sim-section-body{padding:0 0 16px;}
+  .sim-section-body > .sim-table:first-child,
+  .sim-section-body > p:first-child{margin-top:0;}
 
   .sim-hist{
     display:flex; align-items:flex-end; gap:2px; height:110px; margin:10px 0 22px;
@@ -207,6 +293,7 @@
     justify-content:flex-end; align-items:center; position:relative;
   }
   .sim-hist-bar{width:100%; background:var(--quest); border-radius:4px 4px 0 0; min-height:2px;}
+  .sim-hist-bar.energy{background:var(--start);}
   .sim-hist-tick{
     position:absolute; bottom:-16px; font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim);
   }
@@ -231,17 +318,197 @@
   .sim-heat-swatch.start{box-shadow:inset 0 0 0 1px var(--start);}
 
   /* ---------- stap voor stap ---------- */
+  .walk-mode-toggle{display:flex; gap:4px; margin-bottom:14px;}
+  .walk-mode-btn{
+    flex:1; font-family:var(--font-mono); font-size:11.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:9px 12px; background:var(--hull);
+    border:1px solid var(--line-dim); border-radius:5px; color:var(--text-dim);
+  }
+  .walk-mode-btn.active{
+    color:#eafcff; border-color:var(--quest); background:rgba(79,184,224,.1);
+    box-shadow:0 0 10px rgba(79,184,224,.18);
+  }
   .walk-controls{display:flex; gap:18px; align-items:flex-end; flex-wrap:wrap;}
+  .walk-controls[hidden]{display:none;}
   .walk-controls .field{margin:0; min-width:170px;}
   .walk-controls .btn-row{margin-bottom:1px;}
+
+  /* bord links, navigator + speler-/beurtinfo vast rechts ernaast — zodat een dobbelklik het
+     bord niet meer op en neer laat springen. `align-items:start` is de kern: elke kolom groeit
+     onafhankelijk van de ander, dus het bord (links) blijft op zijn plek ongeacht hoe hoog het
+     infopaneel (rechts) op dat moment is. */
+  .walk-play-layout{
+    display:grid; grid-template-columns: minmax(0,1fr) 300px; gap:20px; align-items:start;
+    margin-top:16px;
+  }
+  .walk-board-col{min-width:0;}
+  .walk-side-col{display:flex; flex-direction:column; gap:16px; min-width:0;}
+  @media (max-width: 880px){ .walk-play-layout{grid-template-columns:1fr;} }
   input[type=range]{width:100%; accent-color:var(--quest); cursor:pointer;}
 
+  /* jouw beurt in de solo-modus: kies hooguit één actie, of gooi meteen */
+  .walk-solo-panel{
+    display:flex; flex-direction:column; gap:10px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:12px;
+  }
+  .walk-solo-panel[hidden]{display:none;}
+
+  /* opzetscherm bij "zelf spelen" met meerdere spelers: per menselijke speler een
+     startpositie-keuze + voorproefje van de eerste opdracht, zodat je een weloverwogen
+     keuze kunt maken vóórdat het potje echt begint */
+  .walk-solo-setup{
+    display:flex; flex-direction:column; gap:8px; margin:14px 0 0;
+  }
+  .walk-solo-setup[hidden], .walk-solo-setup:empty{display:none;}
+  .walk-solo-setup-player{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
+    border-radius:5px; padding:8px 11px;
+  }
+  .walk-solo-setup-dot{
+    width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
+    box-shadow:0 0 6px var(--pc);
+  }
+  /* Eigen naam invullen; leeg laten geeft "Speler N" (de placeholder laat dat ook zien).
+     `input[type=text]` en `select` hierboven zijn allebei op volle breedte gezet; die regels
+     zijn specifieker dan een losse klasse, vandaar het element ervoor. */
+  input[type=text].walk-solo-setup-input{
+    width:160px; flex:none; background:var(--hull); border:1px solid var(--line);
+    color:var(--text); font-family:var(--font-mono); font-size:12.5px;
+    padding:7px 9px; border-radius:4px;
+  }
+  input[type=text].walk-solo-setup-input:focus{
+    border-color:var(--pc); box-shadow:0 0 0 2px color-mix(in srgb, var(--pc) 22%, transparent);
+  }
+  .walk-solo-setup-input::placeholder{color:var(--text-dim);}
+  .walk-solo-setup-player select{width:auto; flex:none; font-size:12.5px; padding:7px 9px;}
+  .walk-solo-setup-preview{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
+  }
+  .walk-solo-setup-preview b{color:var(--quest);}
+
+  /* doelwit kiezen voor Kortsluiting/Duwstoot/Prioriteitspas: dezelfde kaart-knoppenrij als
+     de richtingskeuze bij Zwaartekracht-laarzen, maar dan met tegenstanders als opties */
+  .walk-target-picker{display:flex; flex-direction:column; gap:8px; margin:10px 0 0;}
+  .walk-target-picker-hint{font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);}
+
+  /* richtingsknoppen tijdens het lopen in de solo-modus: hetzelfde als op een vakje
+     klikken, maar een stuk makkelijker te raken op een telefoon dan de kleine cellen
+     op het bord zelf. Kompas-kruis: N boven, W/O links/rechts, Z onder. Rechts ernaast
+     een stappenteller, zodat je niet terug hoeft te scrollen naar de worp bovenaan. */
+  .walk-dirpad-row{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:6px; padding:14px;
+  }
+  .walk-dirpad-row[hidden]{display:none;}
+  /* was 58×58px — expliciet gekozen als groot mobiel tapdoel toen dit de enige manier was om
+     te lopen, maar met celklik EN pijltjestoetsen erbij (zie hieronder) is dat niet meer nodig,
+     en oogde het "veel te groot" in de nu smalle 300px-zijkolom (gebruikersmelding). 40px blijft
+     nog altijd ruim boven de gangbare minimum-tapdoelgrootte. */
+  .walk-dirpad{
+    display:grid;
+    grid-template-areas: ". n ." "w . o" ". z .";
+    grid-template-columns: repeat(3, 40px);
+    grid-auto-rows: 40px;
+    gap:5px;
+  }
+  .walk-dir-btn{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px; font-size:14px; padding:0; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:7px; color:var(--start);
+  }
+  .walk-dir-btn span{
+    font-family:var(--font-mono); font-size:7.5px; letter-spacing:.06em; color:var(--text-dim);
+  }
+  .walk-dir-btn:hover:not(:disabled){border-color:var(--start); box-shadow:0 0 8px rgba(85,214,138,.3);}
+  .walk-dir-btn:disabled{opacity:.25; cursor:not-allowed;}
+  .walk-dir-n{grid-area:n;} .walk-dir-w{grid-area:w;} .walk-dir-o{grid-area:o;} .walk-dir-z{grid-area:z;}
+
+  .walk-step-counter{display:flex; gap:8px;}
+  .walk-step-box{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-width:40px; padding:5px 7px; background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:7px;
+  }
+  .walk-step-num{
+    font-family:var(--font-mono); font-weight:700; font-size:16px; color:var(--amber);
+    line-height:1.1; font-variant-numeric:tabular-nums;
+  }
+  .walk-step-lbl{
+    font-family:var(--font-mono); font-size:8px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .walk-solo-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .walk-solo-actions:empty{display:none;}
+  /* de "gewoon dobbelen"-optie is zelf ook een keuzekaart, maar zonder illustratie */
+  .action-card--plain{
+    justify-content:center; color:var(--text-dim); border-style:dashed;
+  }
+  .action-card--plain .action-card-name{font-size:11px; color:var(--text);}
+  button.action-card--plain:not(:disabled):hover{border-color:var(--text-dim); transform:none; box-shadow:none;}
+
+  /* aanklikbare vakjes tijdens jouw zet in de solo-modus */
+  .cell.walk-clickable{
+    cursor:pointer; box-shadow:0 0 0 2px var(--start), 0 0 8px rgba(85,214,138,.6) !important;
+    z-index:5; position:relative;
+  }
+  .cell.walk-clickable:hover{box-shadow:0 0 0 2px #fff, 0 0 10px rgba(85,214,138,.9) !important;}
+
+  /* de "grote tab" met alle info over de speler die aan zet is en welke stap dit is (dobbelstenen,
+     doel, standenlijst, actiepaneel, statusregel) — vast rechts naast het bord (zie
+     .walk-play-layout hierboven). `min-height` reserveert alvast ruimte voor de volste stand
+     (4 spelers + actiekaarten + statusregel), zodat het paneel niet zichtbaar in- en uitklapt
+     terwijl je een beurt speelt; `overflow-y:auto` vangt het zeldzame geval op dat de inhoud
+     daar toch overheen groeit, zonder de rest van de pagina mee te laten schuiven. */
+  .walk-info-panel{
+    display:flex; flex-direction:column; gap:12px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:14px;
+    min-height:440px; max-height:min(680px, calc(100vh - 220px)); overflow-y:auto;
+    scrollbar-gutter: stable;
+  }
+  @media (max-width: 880px){ .walk-info-panel{min-height:0; max-height:none;} }
+  /* Voordat er een potje loopt is alles hierbinnen leeg, en dan stond er alleen een omkaderd
+     blok van ~160px (de min-height van .walk-meta) zonder inhoud. Zodra er ook maar iets in
+     staat — een beurtregel, een stand, een statusmelding of het solo-actiepaneel — komt het
+     paneel vanzelf weer terug. */
+  .walk-info-panel:has(#walkMeta:empty):has(#walkScoreActive:empty):has(#walkStatus:empty):has(#walkSoloPanel[hidden]){
+    display:none;
+  }
+  /* in de smalle zijkolom staat elke speler onder elkaar i.p.v. naast elkaar; zonder expliciete
+     breedte hier valt `.walk-player` terug op zijn intrinsieke inhoudsbreedte (véél breder dan
+     de 300px kolom) omdat `flex:none` de 210px-minimumbreedte van de brede-rij-variant negeert.
+     Alleen `.walk-player-goal` mag krimpen (ellipsis) — de rest (badge/energie/kaarten/score) is
+     met opzet niet-krimpbaar, dus laat die desnoods naar een tweede regel wrappen i.p.v. ze af
+     te kappen: bij een lange strategienaam ("Herprioritering") paste er anders geen "0/6" meer. */
+  .walk-info-panel .walk-score{flex-direction:column;}
+  /* In de smalle zijkolom staat elke speler onder elkaar. De rijhoogte ligt nu vast via
+     .walk-player zelf (twee regels), dus de wrap-hack met een aparte min-height van 80px is
+     niet meer nodig — die was er alleen omdat alles op één regel stond en onvoorspelbaar
+     wrapte, waardoor de dobbelknop eronder per beurt een paar pixels verschoof. */
+  .walk-info-panel .walk-player{flex:none; width:100%; min-width:0;}
+
+  /* "het dobbelen" als eigen vast blokje (gebruikersverzoek): dezelfde box als voorheen,
+     nu met de dobbel-/sla-actie-over-knop er meteen in — die kreeg met flex-basis:100% altijd
+     een eigen volle regel onder de dobbelstenen, in plaats van te concurreren om ruimte met
+     de pauze-vlag ernaast. */
   .walk-hud{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
     background:var(--hull); border:1px solid var(--line-dim); border-radius:5px; padding:11px 13px;
   }
-  .walk-dice{display:flex; align-items:center; gap:8px; min-height:38px;}
+  /* min-height: zonder dit klapt de rij helemaal in tijdens fases waarin BEIDE knoppen
+     verborgen zijn (bv. 'moving', of het kiezen van een doelwit) — en dat liet .walk-info-panel
+     eronder alsnog 36px op en neer springen, exact het probleem dat deze hele sectie oplost. */
+  .walk-hud .btn-row{flex-basis:100%; min-height:40px;}
+  /* Twee vaste regels: loopstenen boven, energiesteen eronder. De vaste min-height dekt
+     allebei de regels, zodat het blok niet van hoogte verandert als de Stuwstoot een derde
+     loopsteen toevoegt. */
+  .walk-dice{display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-height:82px;}
+  .walk-dice-row{display:flex; align-items:center; gap:8px; min-height:38px;}
+  .walk-dice-row .walk-die.energy{margin-left:0;}
   .walk-die{
+    /* flex:none — zonder dit knijpt de rij de stenen samen zodra hij niet meer past in de
+       300px-zijkolom, en dan is een steen ineens 31px breed in plaats van 38 */
+    flex:none;
     width:38px; height:38px; border-radius:6px; display:flex; align-items:center; justify-content:center;
     font-family:var(--font-mono); font-size:19px; font-weight:700;
     background:linear-gradient(180deg,#f2f6fa,#c9d4de); color:#10161d;
@@ -256,12 +523,227 @@
   .walk-die-sum{
     font-family:var(--font-mono); font-size:12.5px; color:var(--amber); letter-spacing:.04em;
   }
+  /* energiesteen: zelfde vorm, andere kleur én een bliksemschichtje naast het cijfer, zodat
+     je 'm niet voor een loopsteen aanziet */
+  .walk-die.energy{
+    background:linear-gradient(180deg,#3d6b52,#20402f); color:#c9ffdf;
+    box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 0 0 1px rgba(155,255,198,.35);
+    margin-left:10px; gap:2px;
+  }
+  /* de viewBox is 14x24 (staand), dus dezelfde verhouding aanhouden — anders schaalt de
+     schicht naar de smalste kant en staat er een postzegeltje in een hoge steen */
+  .walk-die-bolt{width:9.5px; height:16px; flex:none; fill:currentColor;}
+  .walk-die-num{font-family:var(--font-mono); font-weight:700; font-size:17px; line-height:1;}
+  .walk-die-sum.energy{color:var(--start);}
+  /* derde loopsteen van de Stuwstoot: zelfde witte steen, amberen rand als "die is gekocht" */
+  .walk-die.boost{box-shadow:0 2px 5px rgba(0,0,0,.45), 0 0 0 2px var(--amber);}
   .walk-meta{
     font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
     display:flex; flex-direction:column; gap:3px; line-height:1.5;
   }
+  /* de derde regel ("Voltooid: X/6 · nog Y stap(pen)") is alleen tijdens het lopen langer (het
+     "· nog Y stap(pen)"-stuk komt erbij) — in de smalle 300px-kolom is dat precies genoeg om
+     die regel soms wél, soms niet te laten wrappen naar een extra regel. Dat verklaarde het
+     laatste stukje restdrift van de dobbelknop eronder (99px vs. 117px, gemeten). Vaste
+     min-height = altijd het 2-regel-geval alvast gereserveerd. */
+  .walk-info-panel .walk-meta{min-height:117px;}
   .walk-meta b{color:var(--text);}
   .walk-meta .goal{color:var(--quest);}
+  .walk-active-name{color:var(--pc) !important;}
+
+  .walk-paused-flag{
+    margin-left:auto; font-family:var(--font-mono); font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--amber);
+    border:1px solid var(--amber-dim); border-radius:3px; padding:5px 9px;
+    animation:walkPulse 1.6s ease-in-out infinite;
+  }
+  .walk-paused-flag[hidden]{display:none;}
+  /* tijdens een pauze horen de lopende CSS-animaties ook stil te staan, anders lijkt het
+     bord door te draaien terwijl er niets meer gebeurt */
+  #tabWalk.walk-is-paused .walk-die.rolling,
+  #tabWalk.walk-is-paused .cell.walk-target{animation-play-state:paused;}
+  #tabWalk.walk-is-paused .walk-paused-flag{animation-play-state:running;}
+
+  /* stand van alle spelers; --pc is per rij de spelerskleur */
+  .walk-score{
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .walk-score:empty{display:none;}
+  /* De balk boven het bord: gelijke vakken naast elkaar in plaats van vakken die met hun
+     inhoud meegroeien. Als flexrij werd elk vak even breed als zijn tekst en sprong de
+     hele rij bij elke beurt van breedte; en zodra er één hoger werd (kaartbadge) schoof
+     het bord eronder omlaag. */
+  #walkScore{
+    /* 320px is de breedte waarbij de onderregel ("2.8 — Navigatiekaarten" + strategiebadge +
+       twee kaartplekken) er nog helemaal op past; smaller en de doeltekst wordt afgekapt,
+       en juist die vertelt waar een tegenstander heen gaat. */
+    /* 240px is de smalste kolom waarin alle drie de regels nog helemaal passen (gemeten:
+       doelregel 153px, onderregel 208px). Vier spelers passen daarmee naast elkaar. */
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:8px; align-items:stretch;
+  }
+  /* #walkScore (boven het bord) en #walkScoreActive (in het paneel rechts) krijgen allebei
+     dezelfde volledige spelerslijst van renderWalkScore() — welke rijen zichtbaar zijn hangt
+     puur van CSS af: boven het bord alleen de ANDERE spelers, rechts alleen wie aan zet is
+     (gebruikersverzoek). Bij 1 speler blijft #walkScore dus leeg (geen "andere" spelers) en
+     collapt vanzelf via het lege-flexcontainer-gedrag hierboven. */
+  /* Alle spelers blijven staan, in dezelfde volgorde. Eerder werd wie aan zet is hier
+     verborgen — dan viel er elke beurt een ander vak weg en schoven de overige op, en dat
+     maakte juist onduidelijk wie er aan de beurt was. */
+  #walkScoreActive .walk-player:not(.active){display:none;}
+  .walk-player{
+    display:flex; flex-direction:column; align-items:stretch; gap:5px; flex:1 1 210px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+    background:var(--hull); border:1px solid var(--line-dim); border-left:3px solid var(--pc);
+    border-radius:4px; padding:7px 10px;
+    /* vaste hoogte: naamregel (16px) + doelregel (16px) + onderregel met kaartbadge (26px)
+       + twee gaten en de padding. Zo verandert de hoogte niet zodra iemand een kaart krijgt
+       en schuift het bord eronder niet omlaag. */
+    min-height:84px;
+  }
+  .walk-player-top, .walk-player-bottom{display:flex; align-items:center; gap:8px; min-width:0;}
+  .walk-player-top{min-height:16px;}
+  .walk-player-bottom{min-height:26px;}
+  /* "aan zet" staat er altijd — bij wie niet aan zet is alleen onzichtbaar, zodat het
+     verschijnen ervan geen enkele breedte verschuift */
+  .walk-player-turn{
+    flex:none; font-size:9px; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    color:var(--hull); background:var(--pc); border-radius:3px; padding:2px 6px;
+    visibility:hidden;
+  }
+  .walk-player.active .walk-player-turn{visibility:visible;}
+  .walk-player.active{
+    border-color:var(--pc); color:var(--text);
+    background:linear-gradient(140deg, color-mix(in srgb, var(--pc) 18%, var(--hull)), var(--hull) 75%);
+    box-shadow:0 0 0 1px var(--pc) inset, 0 0 18px color-mix(in srgb, var(--pc) 35%, transparent);
+  }
+  /* wie niet aan zet is, staat gedempt op de achtergrond */
+  #walkScore .walk-player:not(.active):not(.done){opacity:.62;}
+  .walk-player-dot{
+    width:10px; height:10px; border-radius:50%; background:var(--pc); flex:none;
+    box-shadow:0 0 6px var(--pc);
+  }
+  .walk-player-name{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--text); white-space:nowrap;}
+  .walk-player-name .sub{color:var(--text-dim);}
+  .walk-player-goal{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--quest);}
+  .walk-player-goal .hit{color:var(--start);}
+  .walk-player-goal .lost{color:var(--danger);}
+  .walk-player-strat{
+    flex:none; font-size:10px; letter-spacing:.04em; color:var(--text-dim);
+    border:1px solid var(--line-dim); border-radius:3px; padding:1px 5px; white-space:nowrap;
+  }
+  .walk-player-energy{color:var(--start); flex:none; font-variant-numeric:tabular-nums;}
+  .walk-player-energy.full{color:var(--amber); font-weight:700;}
+  /* min-width houdt de plek van twee badges vrij, zodat de doeltekst ernaast niet
+     verspringt op het moment dat iemand een kaart trekt of uitspeelt */
+  .walk-player-cards{flex:none; display:flex; gap:2px; min-width:54px; min-height:26px;}
+  .walk-player-score{color:var(--amber); font-weight:700; flex:none;}
+
+  /* ---------- kaart-illustraties ---------- */
+  /* tint-kleur per kaarttype: amber=beweging, groen=energie, blauw=nut, rood=verstoring,
+     gedimd=puur informatief (Prioriteitspas) */
+  .action-card--amber{ --card-tint: var(--amber); --card-glow: rgba(255,181,69,.35); }
+  .action-card--start{ --card-tint: var(--start); --card-glow: rgba(85,214,138,.35); }
+  .action-card--quest{ --card-tint: var(--quest); --card-glow: rgba(79,184,224,.35); }
+  .action-card--danger{ --card-tint: var(--danger); --card-glow: rgba(255,93,93,.35); }
+  .action-card--dim{ --card-tint: var(--text-dim); --card-glow: rgba(111,128,146,.25); }
+
+  .action-card{
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    background:linear-gradient(165deg, var(--panel-2) 0%, var(--hull) 78%);
+    border:1px solid var(--line); color:var(--card-tint);
+    clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    font-family:var(--font-display); text-align:center; cursor:default;
+  }
+  button.action-card{ font: inherit; }
+  .action-card::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    box-shadow: inset 0 0 14px var(--card-glow);
+    clip-path: inherit;
+  }
+  .action-card-cost{
+    position:absolute; top:5px; right:8px; font-family:var(--font-mono); font-size:9.5px;
+    letter-spacing:.04em; color:var(--card-tint); opacity:.85;
+  }
+  .action-card-icon{flex:none;}
+  .action-card-name{
+    font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--text);
+    line-height:1.2;
+    /* zonder dit steken lange namen (HERPRIORITERING, NOODTRANSPORT) links en rechts
+       buiten het 108px brede kaartje — een woord breekt van zichzelf nergens af */
+    max-width:100%; overflow-wrap:anywhere;
+  }
+  .action-card-hint{
+    font-family:var(--font-mono); color:var(--text-dim); line-height:1.35;
+  }
+
+  .action-card--sm{
+    width:26px; height:26px; padding:2px; justify-content:center;
+  }
+  .action-card--sm .action-card-icon{width:15px; height:15px;}
+  .action-card--sm .action-card-name, .action-card--sm .action-card-cost{display:none;}
+
+  .action-card--lg{
+    width:108px; padding:10px 8px 9px; gap:4px;
+    transition:transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .action-card--lg .action-card-icon{width:44px; height:44px; margin-top:4px;}
+  .action-card--lg .action-card-name{font-size:11.5px;}
+  .action-card--lg .action-card-hint{font-size:9.5px;}
+  button.action-card--lg:not(.is-disabled):not(:disabled){cursor:pointer;}
+  button.action-card--lg:not(.is-disabled):not(:disabled):hover{
+    transform:translateY(-2px);
+    border-color:var(--card-tint);
+    box-shadow:0 6px 16px rgba(0,0,0,.4), 0 0 0 1px var(--card-tint);
+  }
+  .action-card--lg.is-disabled, .action-card--lg:disabled{opacity:.38; filter:grayscale(.4);}
+
+  .action-card-row{display:flex; gap:8px; flex-wrap:wrap;}
+  /* De drie energie-acties uit de solo-modus: volle-breedte-rijen in plaats van kaartjes.
+     Als 108px-kaartjes pasten ze niet met z'n drieën in de 300px-zijkolom (de derde viel op
+     een tweede rij) en smaller gemaakt brak "Herprioritering" middenin het woord af. */
+  .energy-pick-list{display:flex; flex-direction:column; gap:6px;}
+  .energy-pick{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:8px 10px; border-radius:5px; cursor:pointer;
+    background:linear-gradient(150deg, var(--panel-2), var(--hull));
+    border:1px solid var(--line); font-family:var(--font-display);
+    transition:border-color .12s, transform .1s, box-shadow .12s;
+  }
+  .energy-pick-cost{
+    flex:none; width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-mono); font-size:12px; font-weight:700;
+    color:var(--start); border:1px solid var(--start); background:rgba(85,214,138,.09);
+  }
+  .energy-pick-text{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .energy-pick-text b{
+    font-size:13px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--text);
+    line-height:1.15;
+  }
+  .energy-pick-text span{
+    font-family:var(--font-mono); font-size:9.5px; line-height:1.35; color:var(--text-dim);
+  }
+  .energy-pick:not(.is-disabled):hover{
+    border-color:var(--start); transform:translateY(-1px);
+    box-shadow:0 4px 12px rgba(0,0,0,.4), 0 0 0 1px var(--start);
+  }
+  .energy-pick.is-disabled{opacity:.45; cursor:not-allowed;}
+  .energy-pick.is-disabled .energy-pick-cost{color:var(--text-dim); border-color:var(--line); background:none;}
+  .energy-pick-none{margin:8px 0 0;}
+
+  /* speler die binnen is: van het bord af, dus gedempt weergeven */
+  .walk-player.done{border-left-color:var(--start); opacity:.62;}
+  .walk-meta .hit{color:var(--start);}
+  .walk-meta .lost{color:var(--danger);}
+  .walk-standings-row{display:flex; flex-wrap:wrap; gap:4px 0; margin-top:2px;}
+  .walk-standing{
+    display:inline-flex; align-items:center; gap:5px; margin-left:10px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+  }
+  .walk-standing:first-child{margin-left:0;}
 
   #walkBoard{
     --cell: 19px;
@@ -269,11 +751,14 @@
     grid-template-columns: repeat(40, var(--cell));
     grid-template-rows: repeat(32, var(--cell));
     gap:1px; margin:0 auto; width:max-content;
+    position:relative;              /* anker voor de rand om de doelkamer */
   }
   #walkBoard .cell{cursor:default;}
+  /* --pc wordt per cel inline gezet op de kleur van de speler die er loopt/staat; de
+     8-cijferige hex-suffix is de doorzichtigheid, zodat het bord eronder zichtbaar blijft. */
   .cell.walk-trail{
-    background:rgba(255,181,69,.42) !important;
-    box-shadow:inset 0 0 0 1px rgba(255,181,69,.7) !important;
+    background:color-mix(in srgb, var(--pc, var(--amber)) 42%, transparent) !important;
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--pc, var(--amber)) 70%, transparent) !important;
     z-index:2; position:relative;
   }
   /* voltooide opdracht: een "opgebruikt" opdrachtvakje. Bewust NIET groen — dat is de kleur
@@ -283,18 +768,70 @@
     box-shadow:inset 0 0 0 2px var(--quest) !important;
     z-index:3; position:relative;
   }
+  /* Het doelvakje draagt de kleur van de OPDRACHTKAART (--qtint, gezet vanuit markWalkTarget
+     in 96-walk.js) en niet meer het vaste opdrachtblauw; de rand eromheen blijft de kleur van
+     de speler die er heen moet. Zo hoort het vakje zichtbaar bij de kaart in het zijpaneel. */
   .cell.walk-target{
-    background:var(--quest) !important;
-    box-shadow:0 0 0 2px #fff, 0 0 11px var(--quest-glow) !important;
+    background:var(--qtint, var(--quest)) !important;
+    box-shadow:0 0 0 2px var(--pc, #fff), 0 0 12px var(--qtint, var(--quest-glow)) !important;
     z-index:4; position:relative;
     animation:walkPulse 1.3s ease-in-out infinite;
   }
   @keyframes walkPulse{0%,100%{opacity:1;} 50%{opacity:.55;}}
+
+  /* Rand om de hele tegel waar het doelvakje in ligt. Eén los blokje boven het raster in
+     plaats van randen op 28 losse cellen: het bord heeft 1px tussenruimte, dus randen op de
+     cellen zelf zouden een streepjeslijn opleveren. Positie in tegels: een tegel is 8 cellen
+     plus 8 tussenruimtes breed, dus x = kolom * (8*cell + 8). */
+  .walk-room-ring{
+    position:absolute; pointer-events:none; z-index:5; box-sizing:border-box;
+    left:calc(var(--rc) * (var(--cell) * 8 + 8px));
+    top:calc(var(--rr) * (var(--cell) * 8 + 8px));
+    width:calc(var(--cell) * 8 + 7px);
+    height:calc(var(--cell) * 8 + 7px);
+    border:2px solid var(--qtint, var(--quest));
+    border-radius:4px;
+    box-shadow:0 0 14px color-mix(in srgb, var(--qtint, var(--quest)) 60%, transparent),
+               inset 0 0 18px color-mix(in srgb, var(--qtint, var(--quest)) 20%, transparent);
+    animation:walkRoomPulse 1.9s ease-in-out infinite;
+  }
+  .walk-room-ring[hidden]{display:none;}
+  @keyframes walkRoomPulse{0%,100%{opacity:1;} 50%{opacity:.5;}}
+  #tabWalk.walk-is-paused .walk-room-ring{animation-play-state:paused;}
+
+  /* de opdrachtkaart die nu het doel is, bovenin het zijpaneel */
+  .walk-quest-card{
+    display:flex; align-items:center; gap:11px;
+    padding:9px 11px; border-radius:6px;
+    background:linear-gradient(140deg, color-mix(in srgb, var(--qtint) 15%, var(--hull)), var(--hull) 70%);
+    border:1px solid var(--qtint);
+    box-shadow:0 0 16px color-mix(in srgb, var(--qtint) 22%, transparent);
+  }
+  .walk-quest-card:empty{display:none;}
+  .walk-quest-card-face{flex:none; width:78px; display:block; container-type:inline-size;}
+  .walk-quest-card-face img{
+    width:100%; aspect-ratio:63/88; object-fit:cover; border-radius:5px; display:block;
+  }
+  .walk-quest-card-text{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .walk-quest-card-text .lbl{
+    font-family:var(--font-mono); font-size:8.5px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .walk-quest-card-text b{
+    font-family:var(--font-display); font-size:15px; font-weight:700; text-transform:uppercase;
+    color:#eef3f8; line-height:1.1; overflow-wrap:break-word;
+  }
+  .walk-quest-card-text .sub{font-family:var(--font-mono); font-size:9.5px; color:var(--qtint); line-height:1.35;}
   .cell.walk-pawn{
-    background:#ff4fd8 !important;
-    box-shadow:0 0 0 2px #fff, 0 0 12px rgba(255,79,216,.95) !important;
+    background:var(--pawn, #ff4fd8) !important;
+    box-shadow:0 0 0 1px rgba(0,0,0,.55), 0 0 9px var(--pawn, #ff4fd8) !important;
     border-radius:50% !important;
     z-index:6; position:relative;
+  }
+  /* wie aan zet is krijgt een witte ring, zodat je 'm tussen vier pionnen terugvindt */
+  .cell.walk-pawn.walk-pawn-active{
+    box-shadow:0 0 0 2px #fff, 0 0 12px var(--pawn, #ff4fd8) !important;
+    z-index:7;
   }
 
   .walk-legend{
@@ -303,9 +840,18 @@
   }
   .walk-key{display:flex; align-items:center; gap:6px;}
   .walk-swatch{width:11px; height:11px; border-radius:2px; display:inline-block;}
-  .walk-swatch.pawn{background:#ff4fd8; border-radius:50%;}
+  .walk-swatch.pawn{border-radius:50%; margin-right:-3px;}
+  .walk-swatch.pawn.p1{background:#ff4fd8;}
+  .walk-swatch.pawn.p2{background:#ffd23d;}
+  .walk-swatch.pawn.p3{background:#7c5cff;}
+  .walk-swatch.pawn.p4{background:#ff7a45; margin-right:3px;}
   .walk-swatch.target{background:var(--quest);}
-  .walk-swatch.trail{background:rgba(255,181,69,.42); box-shadow:inset 0 0 0 1px rgba(255,181,69,.7);}
+  /* het spoor krijgt de kleur van wie aan zet is, dus toont de legenda alle vier de kleuren */
+  .walk-swatch.trail{
+    width:26px;
+    background:linear-gradient(90deg,#ff4fd86b 0 25%,#ffd23d6b 25% 50%,#7c5cff6b 50% 75%,#ff7a456b 75% 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);
+  }
   .walk-swatch.done{background:#1d4a5e; box-shadow:inset 0 0 0 2px var(--quest);}
   .walk-swatch.start{background:var(--start);}
 
@@ -318,8 +864,298 @@
   .walk-log div{border-bottom:1px solid rgba(255,255,255,.04); padding:2px 0;}
   .walk-log b{color:var(--amber);}
   .walk-log .hit{color:var(--start);}
+  .walk-log .energy{color:var(--start); opacity:.8;}
+  .walk-log .action{color:var(--amber); font-weight:700;}
+  /* route van een Noodtransport: zelfde spoor, maar gestippeld zodat je ziet dat het geen
+     gewone zet was */
+  .cell.walk-trail.walk-jump{
+    box-shadow:inset 0 0 0 1px #fff, 0 0 5px var(--pc, var(--amber)) !important;
+  }
+  .walk-log-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--pc); display:inline-block;
+    margin-right:7px; vertical-align:middle; flex:none;
+  }
 
   /* ---------- tegel-editor ---------- */
+  /* ---------- kaartkluis + kaartvenster (solo-modus) ---------- */
+  /* het klikbare vlak onder de dobbelstenen; alleen zichtbaar als je kaarten hebt */
+  .walk-card-vault{
+    display:flex; align-items:center; gap:11px; width:100%; text-align:left;
+    background:var(--hull); border:1px solid var(--line-dim); border-radius:5px;
+    padding:9px 12px; cursor:pointer;
+    transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  .walk-card-vault[hidden]{display:none;}
+  .walk-card-vault:hover{
+    border-color:var(--quest); background:rgba(79,184,224,.07);
+    box-shadow:0 0 12px rgba(79,184,224,.18);
+  }
+  .walk-card-vault-thumbs{display:flex; flex:none;}
+  /* de kaartjes overlappen elkaar als een waaier in je hand */
+  .walk-card-vault-thumbs img{
+    width:26px; height:36px; object-fit:cover; border-radius:3px;
+    border:1px solid var(--line); margin-left:-9px; background:var(--hull);
+    box-shadow:0 1px 4px rgba(0,0,0,.5);
+  }
+  .walk-card-vault-thumbs img:first-child{margin-left:0;}
+  .walk-card-vault-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .walk-card-vault-text b{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text); letter-spacing:.04em;
+  }
+  .walk-card-vault-text .sub{font-family:var(--font-mono); font-size:10px; color:var(--text-dim);}
+
+  /* ---------- tabblad "Kaarten": de vitrine ---------- */
+  .cards-shelf{
+    display:grid; gap:16px; padding:4px 0 2px;
+    /* clamp i.p.v. een vaste ondergrens: op een telefoon (375px) zakt de minimumbreedte naar
+       140px zodat er twee kaarten naast elkaar passen in plaats van één hele lange kolom,
+       op een groot scherm blijft hij op 192px staan */
+    grid-template-columns:repeat(auto-fill, minmax(clamp(140px, 20vw, 192px), 1fr));
+    /* elke rij even hoog, ook tussen rijen onderling: anders bepaalt het langste bijschrift
+       de hoogte van zijn eigen rij en staat het raster scheef */
+    grid-auto-rows:1fr;
+  }
+  .cards-subhead{
+    font-family:var(--font-mono); font-size:10.5px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--card-tint, var(--text-dim)); margin:22px 0 10px;
+    display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line-dim); padding-bottom:7px;
+  }
+  .cards-subhead:first-child{margin-top:6px;}
+  .cards-subhead span{font-size:9.5px; letter-spacing:.1em; color:var(--text-dim); text-transform:none;}
+  .card-show{
+    padding:0; background:none; border:none; cursor:pointer; text-align:left;
+    display:flex; flex-direction:column; gap:8px;
+    height:100%;                         /* alle kaarten in een rij even hoog */
+    transition:transform .13s;
+  }
+  /* De kaart binnenin rekent al zijn maten in cqw uit; de container moet daarom de
+     OMHULLING zijn en niet de kaart zelf, anders verwijst de padding van de kaart naar
+     een breedte die ze zelf beïnvloedt en klopt er niets meer van. */
+  .card-show-face{display:block; border-radius:10px; container-type:inline-size;}
+  .card-show-face img{
+    width:100%; aspect-ratio:63/88; object-fit:cover; border-radius:10px; display:block;
+    box-shadow:0 4px 14px rgba(0,0,0,.55);
+    transition:box-shadow .13s;
+  }
+  .card-show:hover{transform:translateY(-4px);}
+  .card-show:hover .card-show-face img,
+  .card-show:hover .card-show-face > .card-drawn,
+  .card-show:hover .card-show-face > .quest-card{
+    box-shadow:0 0 0 2px var(--card-tint), 0 0 26px var(--card-glow, transparent), 0 10px 22px rgba(0,0,0,.5);
+  }
+  /* Het bijschrift is omrand en ziet er daarmee uit als de knop die het ook is — op een
+     telefoon was anders niet te zien dat je erop kunt tikken. De vaste minimumhoogte houdt
+     bovendien de rijen recht: zonder dat liepen de bijschriften van 31 tot 64px uiteen en
+     stonden de kaarten in een rij op ongelijke hoogte. */
+  .card-show-cap{
+    display:flex; flex-direction:column; justify-content:flex-start; gap:3px; min-width:0;
+    /* Vaste hoogte. Zonder dit bepaalt elke kaart zijn eigen knophoogte en dat liep van 74
+       tot 103px uiteen — meteen zichtbaar in het raster. De waarde is de hoogste natuurlijke
+       knop, gemeten over elke schermbreedte van 300 tot 1600px in stappen van 20px: 87px
+       t/m 640px en 103px daarboven (daar is de kolom smal terwijl het lettertype al groot
+       is). Meet opnieuw als je een kaartnaam of hint langer maakt. */
+    margin-top:auto; min-height:104px; padding:9px 11px; position:relative; flex:none;
+    background:var(--hull); border:1px solid var(--line); border-radius:6px;
+    transition:border-color .13s, background .13s;
+  }
+  /* Pijltje als extra zetje dat zegt "hier kun je op tikken". Het staat rechtsONDER en niet
+     verticaal gecentreerd: dan hoeft alleen de korte onderregel er ruimte voor te maken en
+     mag de titel de volle breedte gebruiken — precies wat hij op een telefoon nodig heeft. */
+  .card-show-cap::after{
+    content:''; position:absolute; right:10px; bottom:11px;
+    width:0; height:0; border-left:5px solid var(--text-dim);
+    border-top:4px solid transparent; border-bottom:4px solid transparent;
+    transition:border-left-color .13s;
+  }
+  .card-show:hover .card-show-cap,
+  .card-show:focus-visible .card-show-cap{
+    border-color:var(--card-tint); background:var(--panel-2);
+  }
+  .card-show:hover .card-show-cap::after{border-left-color:var(--card-tint);}
+  /* een touchscreen kent geen hover, dus geef de tik zelf een reactie */
+  .card-show:active{transform:scale(.98);}
+  .card-show:active .card-show-cap{border-color:var(--card-tint); background:var(--panel-2);}
+  .card-show-cap b{
+    /* De kolombreedte volgt clamp(140px, 20vw, 192px); de titel schaalt met dezelfde vw mee,
+       anders staat er tussen 641px en 900px een titel van 14px in een kolom van 150px en
+       breken tien namen middenin een woord af. Gemeten met de terugvalfont (Arial Narrow) —
+       de tool laadt geen webfonts, dus Barlow Condensed telt hier niet mee. */
+    font-family:var(--font-display); font-size:clamp(11px, 1.45vw, 14px); font-weight:700; color:#eef3f8;
+    text-transform:uppercase; letter-spacing:.02em; line-height:1.15;
+    /* Op 375px is een kolom 147px breed; "Stroomonderbreking" stak er 35px buiten. `anywhere`
+       loste dat op maar brak "STROOMSTORI NG" af — met `hyphens:auto` (het document staat op
+       lang="nl") komt er tenminste een afbreekstreepje te staan waar dat nodig is. */
+    overflow-wrap:break-word; -webkit-hyphens:auto; hyphens:auto;
+  }
+  .card-show-cap span{font-family:var(--font-mono); font-size:9.5px; color:var(--text-dim); line-height:1.4; padding-right:16px;}
+
+  /* Nagetekende opdrachtkaart — zelfde opbouw als het Canva-ontwerp: badge met het nummer
+     linksboven, titel rechts, groot icoon in het midden, kamer onderaan. De accentkleur komt
+     per opdracht mee als --q-tint (zie QUEST_CARD_ART in 98-cards.js). */
+  .quest-card{
+    position:relative; display:flex; flex-direction:column;
+    width:100%; aspect-ratio:63/88; border-radius:10px; padding:6.8cqw 6.2cqw 6cqw;
+    background:
+      radial-gradient(ellipse at 18% -6%, color-mix(in srgb, var(--q-tint) 16%, transparent) 0%, transparent 58%),
+      linear-gradient(168deg, #121820 0%, #0a0e13 78%);
+    box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 0 0 1px color-mix(in srgb, var(--q-tint) 34%, transparent);
+    color:var(--q-tint); overflow:hidden;
+    /* alles hierbinnen is in cqw uitgedrukt (container = .card-show-face / .cards-zoom-face),
+       zodat dezelfde kaart klopt in de vitrine (~190px breed) én in het vergrootvenster
+       (~360px) — anders blijven icoon en tekst op hun vaste pixelmaat staan en zwemt de
+       vergrote kaart in de leegte */
+  }
+  .quest-card::before{                       /* accentstreepje bovenaan, als op het ontwerp */
+    content:''; position:absolute; top:0; left:38%; width:24cqw; height:1.6cqw; background:var(--q-tint);
+  }
+  .quest-card-top{display:flex; align-items:center; justify-content:space-between; gap:4cqw;}
+  .quest-card-badge{
+    flex:none; width:19.8cqw; height:19.8cqw; border-radius:50%;
+    border:.8cqw solid var(--q-tint); display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:7.8cqw; color:var(--q-tint);
+  }
+  .quest-card-kicker{
+    font-family:var(--font-mono); font-size:3.9cqw; letter-spacing:.32em; color:var(--q-tint);
+  }
+  /* eigen regel over de volle breedte, anders botst een lange titel als
+     BEVEILIGINGSRONDE tegen de nummerbadge aan */
+  .quest-card-title{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:7.5cqw; line-height:1.05; color:#eef3f8;
+    text-align:right; margin-top:4cqw; overflow-wrap:anywhere;
+  }
+  .quest-card-icon{width:34cqw; height:34cqw; margin:auto; display:block;}
+  .quest-card-rule{height:1px; background:var(--q-tint); opacity:.3; margin:0 0 4.5cqw;}
+  .quest-card-foot{display:flex; flex-direction:column; gap:1.5cqw;}
+  .quest-card-foot .quest-card-kicker{color:var(--text-dim); letter-spacing:.28em;}
+  .quest-card-room{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:7.3cqw; line-height:1; color:var(--q-tint);
+  }
+
+  /* vergroten: kaart in het midden, klik waar dan ook om te sluiten */
+  .cards-zoom{
+    position:fixed; inset:0; background:rgba(4,7,10,.88); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; padding:24px; z-index:120;
+    cursor:zoom-out;
+  }
+  .cards-zoom[hidden]{display:none;}
+  .cards-zoom-inner{display:flex; flex-direction:column; align-items:center; gap:12px; max-width:100%;}
+  .cards-zoom-face{width:min(360px, 74vw, calc((100vh - 190px) * 63 / 88)); container-type:inline-size;}
+  .cards-zoom-face img{width:100%; aspect-ratio:63/88; object-fit:cover; border-radius:12px; display:block;}
+  .cards-zoom-cap{
+    margin:0; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;
+  }
+  .cards-zoom-cap b{
+    font-family:var(--font-display); font-size:19px; font-weight:700; color:#eef3f8;
+    text-transform:uppercase; letter-spacing:.05em;
+  }
+  .cards-zoom-cap span{font-family:var(--font-mono); font-size:11px; color:var(--text-dim);}
+  .cards-zoom .hint{margin:0;}
+
+  .card-overlay{
+    position:fixed; inset:0; background:rgba(4,7,10,.86); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; padding:18px; z-index:110;
+  }
+  .card-overlay[hidden]{display:none;}
+  .card-panel{
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line); border-radius:8px; padding:18px;
+    max-width:860px; width:100%; max-height:92vh; overflow:auto;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .card-panel-head{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .card-panel-head h2{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--text-dim); margin:0;
+  }
+  .card-grid{
+    display:flex; gap:16px; flex-wrap:wrap; justify-content:center; padding:6px 0 2px;
+  }
+  /* elke kaart draagt zijn eigen accentkleur via --card-tint (zie de action-card--*-klassen
+     die de kaarten hergebruiken), zodat gloed en selectierand vanzelf bij het ontwerp passen */
+  /* De knop is de kaart PLUS een strook eronder voor de reden waarom hij niet speelbaar is.
+     Die strook staat bewust ONDER de kaart en niet eroverheen: de kaart vertelt zelf wat hij
+     doet, en dat wil je juist kunnen lezen op het moment dat je 'm nog niet mag spelen. */
+  .card-pick{
+    position:relative; padding:0; background:none; border:none; cursor:pointer;
+    border-radius:10px; display:flex; flex-direction:column; align-items:stretch; gap:7px;
+    width:230px; max-width:42vw;
+    transition:transform .13s, box-shadow .13s;
+  }
+  .card-pick img{
+    width:100%; aspect-ratio:63/88; object-fit:cover;
+    border-radius:10px; display:block;
+    box-shadow:0 4px 14px rgba(0,0,0,.55);
+  }
+  .card-pick:hover{
+    transform:translateY(-4px);
+    box-shadow:0 0 0 2px var(--card-tint), 0 0 26px var(--card-glow), 0 10px 22px rgba(0,0,0,.5);
+  }
+  .card-pick.is-selected{
+    transform:translateY(-4px);
+    box-shadow:0 0 0 3px var(--card-tint), 0 0 34px var(--card-glow), 0 10px 22px rgba(0,0,0,.5);
+  }
+  /* Niet speelbaar: licht gedempt, zodat je nog goed kunt lezen wat de kaart doet. Wél gewoon
+     aanklikbaar — afleggen kan met elke kaart in je hand, ook met eentje die je nu niet mag
+     spelen. */
+  .card-pick.is-locked img{opacity:.72;}
+  .card-pick-reason{
+    font-family:var(--font-mono); font-size:10px; line-height:1.35; text-align:center;
+    color:var(--text-dim); background:var(--hull); border:1px solid var(--line-dim);
+    border-radius:4px; padding:5px 7px;
+  }
+
+  /* Kaart zonder fotokaart: dezelfde indeling nagetekend met het inline SVG-icoon, zodat het
+     venster ook werkt voor kaarten waarvoor nog geen Canva-ontwerp bestaat. */
+  .card-drawn{
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    width:100%; aspect-ratio:63/88; border-radius:10px; padding:14px 12px 12px;
+    background:linear-gradient(168deg, var(--panel-2) 0%, var(--hull) 78%);
+    box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 0 0 1px var(--card-tint);
+    color:var(--card-tint); text-align:center; overflow:hidden;
+  }
+  .card-drawn::before{                       /* accentstreepje bovenaan, als op de fotokaarten */
+    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:52px; height:3px; background:var(--card-tint);
+  }
+  .card-drawn-kicker{
+    font-family:var(--font-mono); font-size:8px; letter-spacing:.34em; color:var(--text-dim);
+  }
+  .card-drawn-title{
+    font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+    font-size:16px; line-height:1.1; color:#eef3f8; margin-top:3px;
+  }
+  .card-drawn-icon{width:64px; height:64px; margin:auto 0;}
+  .card-drawn-rule{width:70%; height:1px; background:var(--card-tint); opacity:.35; margin-bottom:9px;}
+  .card-drawn-text{
+    font-family:var(--font-display); font-size:12.5px; line-height:1.25; color:var(--text);
+    margin-bottom:6px;
+  }
+  .card-drawn-cat{
+    align-self:flex-end; font-family:var(--font-mono); font-size:7px; letter-spacing:.14em;
+    color:var(--card-tint); border:1px solid var(--card-tint); border-radius:3px; padding:4px 5px;
+  }
+  /* miniatuur in de kluis voor een kaart zonder fotokaart */
+  .walk-card-vault-blank{
+    width:26px; height:36px; border-radius:3px; margin-left:-9px; flex:none;
+    background:linear-gradient(168deg, var(--panel-2), var(--hull));
+    border:1px solid var(--card-tint); box-shadow:0 1px 4px rgba(0,0,0,.5);
+  }
+  /* duidelijk vinkje op de gekozen kaart, zodat selectie niet te verwarren is met hover */
+  .card-pick.is-selected::after{
+    content:'✓'; position:absolute; top:9px; left:9px; z-index:2;
+    width:24px; height:24px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:700; color:var(--hull);
+    background:var(--card-tint); box-shadow:0 2px 8px rgba(0,0,0,.6);
+  }
+  .card-panel-actions{
+    display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
+    border-top:1px solid var(--line-dim); padding-top:14px; margin-top:2px;
+  }
+
   .editor-overlay{
     position:fixed; inset:0; background:rgba(4,7,10,.82); backdrop-filter:blur(3px);
     display:flex; align-items:center; justify-content:center; padding:18px; z-index:100;
@@ -391,10 +1227,13 @@
     font-family:var(--font-mono); font-size:14px; padding:9px 10px; border-radius:4px;
   }
   .tile-thumb{position:relative;}
+  /* De knop loopt mee in de kopregel (#id · letter · ✎). Stond hij absoluut rechtsboven, dan
+     dekte hij de positieletter helemaal af en liep de kamernaam op de regel eronder deels
+     achter hem langs — zichtbaar bij Cafetaria, Serverruimte, Ziekenboeg, Kernreactor. */
   .edit-btn{
-    position:absolute; top:4px; right:4px; width:24px; height:24px; min-height:0;
+    flex:none; width:20px; height:20px; min-height:0;
     display:flex; align-items:center; justify-content:center; padding:0;
-    font-size:13px; line-height:1; border-radius:4px;
+    font-size:12px; line-height:1; border-radius:4px;
     background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
   }
   .edit-btn:hover{border-color:var(--amber); color:var(--amber);}
@@ -420,13 +1259,28 @@
   .letter-badge.inner{background:var(--start); color:#04150b;}
   #board.hide-letters .letter-badge{display:none;}
 
+  /* De naam stond onderaan zijn tegel en dus pal naast de positieletter van de tegel
+     erónder — "Motor 1" leek daardoor bij badge I te horen terwijl hij bij D hoort. Nu staat
+     hij bovenaan, op dezelfde regel als zijn eigen letterbadge, met genoeg linkermarge om
+     die badge (18px) vrij te laten. */
   .room-label{
-    position:absolute; left:0; z-index:1;
-    top:calc(var(--cell) * 5 + 5px);
-    width:calc(var(--cell) * 8 + 7px); height:calc(var(--cell) * 3 + 2px);
-    display:flex; align-items:flex-end; justify-content:flex-start; padding-left:4px; padding-bottom:3px;
+    position:absolute; left:0; z-index:3;
+    top:0;
+    width:calc(var(--cell) * 8 + 7px); height:20px;
+    display:flex; align-items:center; justify-content:flex-start; padding-left:20px;
     font-family:var(--font-mono); font-size:9px; letter-spacing:.05em;
-    color:#fff; opacity:.32; mix-blend-mode:overlay;
+    /* Eerder `mix-blend-mode:overlay` met wit op 32%: over een leeg (donker) vakje las dat
+       prima, maar zodra de naam een gevuld vakje kruiste blendde de letter volledig weg —
+       "Kernreactor" verloor zo zijn laatste letters. De leesbaarheid komt nu uit een donkere
+       rand ROND de letters, niet uit een vlak eronder: een balkje achter de naam legde een
+       zwart blok over de tegels heen en dat hoort niet op het bord. */
+    color:#e8eff6;
+    text-shadow:
+      0 0 3px rgba(4,7,11,.95),
+      0 1px 2px rgba(4,7,11,.95),
+      1px 0 2px rgba(4,7,11,.9),
+      -1px 0 2px rgba(4,7,11,.9),
+      0 -1px 2px rgba(4,7,11,.9);
     text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     pointer-events:none; user-select:none;
   }
@@ -477,8 +1331,9 @@
   .tile-thumb.active{border-color:var(--amber); box-shadow:0 0 10px rgba(255,181,69,.3);}
   .tile-thumb .id{
     font-family:var(--font-mono); font-size:10px; color:var(--text-dim); margin-bottom:5px;
-    display:flex; justify-content:space-between;
+    display:flex; align-items:center; gap:5px; min-height:20px;
   }
+  .tile-thumb .id-num{margin-right:auto;}
   .tile-thumb .id b{color:var(--amber);}
   .room-tag{
     font-family:var(--font-mono); font-size:9.5px; margin-bottom:5px; letter-spacing:.02em;
@@ -514,7 +1369,16 @@
     .panel{padding:14px;}
     .panel h2{font-size:11.5px;}
 
-    .tab-btn{padding:11px 14px; font-size:11px; min-height:44px;}
+    .tab-bar{
+      overflow-x:auto; overflow-y:hidden; flex-wrap:nowrap;
+      scrollbar-width:none; -webkit-overflow-scrolling:touch;
+      /* vervaagt de rechterrand zodra er nog een tabblad buiten beeld staat, anders lijkt de
+         balk gewoon af te lopen bij "Stap voor stap" en zoek je "Kaarten" nooit */
+      -webkit-mask-image:linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+      mask-image:linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+    }
+    .tab-bar::-webkit-scrollbar{display:none;}
+    .tab-btn{padding:11px 11px; font-size:11px; letter-spacing:.08em; min-height:44px; flex:none;}
 
     input[type=text]{font-size:16px; padding:11px 10px;}
     button{font-size:15px; padding:12px 14px; min-height:44px;}
@@ -529,29 +1393,58 @@
     .selected-tile-box{font-size:13.5px; padding:10px 12px;}
     .tag{font-size:10.5px; padding:3px 7px;}
 
-    #board{ --cell: 18px; }
-    #walkBoard{ --cell: 16px; }
+    /* Het bord is 40 vakjes breed en past van zichzelf niet op een telefoon. In plaats van
+       een vaste --cell + horizontaal scrollen (wat op mobiel altijd een beetje onhandig
+       aanvoelt), rekenen we de celgrootte hier uit de beschikbare breedte: 40 cellen + 39
+       tussenruimtes van 1px moeten passen binnen (100vw - chrome). Chrome = 20px body-
+       marge + 28px paneel-marge (zie hierboven in dit blok), plus een marge van 8px omdat
+       we liever een fractie te klein zitten dan alsnog moeten scrollen.
+       Boven de 640px-grens (waar dit blok niet geldt) gelden de vaste desktopwaarden. */
+    #board{ --cell: clamp(5px, calc((100vw - 95px) / 40), 18px); }
+    #walkBoard{ --cell: clamp(5px, calc((100vw - 95px) / 40), 16px); }
     .walk-controls{gap:12px;}
     .walk-controls .field{min-width:0; flex:1 1 100%;}
-    .sim-heat-grid{ --hcell: 7px; }
-    .letter-badge{width:15px; height:15px; font-size:9.5px;}
-    .room-label{font-size:7.5px; padding-left:3px;}
-    .board-outer{
-      margin:0 -14px; padding-left:14px; padding-right:14px;
-      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-              mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    .sim-heat-grid{ --hcell: clamp(3.5px, calc((100vw - 95px) / 40), 7px); }
+    /* schaalt mee met --cell in plaats van een vaste px-waarde, anders past een badge van
+       15px niet meer op een cel die op een smalle telefoon nog maar 6-8px breed is */
+    .letter-badge{
+      width:calc(var(--cell) * 0.85); height:calc(var(--cell) * 0.85);
+      font-size:calc(var(--cell) * 0.5); border-radius:1px 4px 1px 1px;
     }
-    .scroll-hint{display:block;}
+    .room-label{font-size:calc(var(--cell) * 0.5); padding-left:3px;}
 
     #palette{grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:9px;}
     .tile-thumb{padding:8px;}
     .tile-thumb .id{font-size:11.5px;}
-    .room-tag{font-size:11px;}
+    /* 11px maakte "Serverruimte" net 3px te breed voor een kaartje van 88px */
+    .room-tag{font-size:10px;}
+
+    /* smallere kolom: kleinere titel en minder ruimte voor het pijltje, zodat de kaartnamen
+       op één of twee hele woorden passen in plaats van middenin af te breken */
+    .card-show-cap{padding:9px; min-height:88px;}
+    .card-show-cap::after{right:8px; bottom:10px;}
+    .card-show-cap b{letter-spacing:0;}
+    .card-show-cap span{font-size:9px; padding-right:14px;}
 
     footer{font-size:10.5px; padding:0 8px;}
   }
 
+  /* Op een telefoon wordt het bord tot 40 vakjes breed teruggerekend en houd je vakjes van
+     ~7px over: je ziet de vorm van de indeling wel, maar leest de opdracht- en startvakjes
+     nauwelijks. Passend maken blijft daarom de standaard (je wilt het geheel zien), maar met
+     deze knop schakel je naar een leesbare celgrootte en schuif je horizontaal. Op desktop is
+     de knop overbodig en dus verborgen — de mediaquery hieronder zet hem pas aan. */
+  .board-tools{display:none; align-items:center; gap:10px; margin-bottom:8px;}
+  .board-zoom{white-space:nowrap; flex:none;}
   .scroll-hint{
-    display:none; text-align:center; font-family:var(--font-mono); font-size:10.5px;
-    color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px;
+    display:none; text-align:left; font-family:var(--font-mono); font-size:10.5px;
+    color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin:0;
   }
+  @media (max-width: 640px){
+    .board-tools{display:flex;}
+    .board-zoom-wrap.is-zoomed #board,
+    .board-zoom-wrap.is-zoomed #walkBoard{ --cell: 20px; }
+    .board-zoom-wrap.is-zoomed .scroll-hint{display:block;}
+  }
+
+

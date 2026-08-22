@@ -68,3 +68,5 @@ document.addEventListener('pointercancel', ()=>{
   boardEl.classList.remove('dragging');
   renderBoard();
 });
+
+

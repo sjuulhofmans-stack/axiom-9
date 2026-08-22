@@ -96,3 +96,5 @@ function computeConnectivity(){
   }
   return { seams, openCount, brokenCount, groups: Object.values(groups) };
 }
+
+

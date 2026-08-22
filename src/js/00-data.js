@@ -14,3 +14,5 @@ const defaultLayout = Array.from({length:20}, (_,i)=>i+1); // slot index 0..19 -
 let layout = defaultLayout.slice();
 let selectedSlot = null;
 let highlightTile = null;
+
+
